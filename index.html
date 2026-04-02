@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <link rel="icon" href="images/icon.ico" type="image/x-icon">
+  <title>🤖 AI Assistant (Local)</title>
+  <link rel="stylesheet" href="css/style.css">
+
+
+  <script type="application/javascript" src="./scripts/marked.min.js"></script>
+  <script type="application/javascript" src="./scripts/config.js"></script>
+  <script type="application/javascript" src="./scripts/utils.js"></script>
+  <script type="application/javascript" src="./scripts/speech.js"></script>
+  <script type="application/javascript" src="./scripts/chat.js"></script>
+  <script type="application/javascript" src="./scripts/api.js"></script>
+  <script type="application/javascript" src="./scripts/main.js"></script>
+</head>
+
+<body>
+  <div class="chat-container">
+    <div class="chat-header">
+      🤖 AI Assistant
+      <div style="float: right; margin-top: -5px;">
+        <button class="save-chat" onclick="saveChat()">💾 Save</button>
+        <button class="save-chat" onclick="openChat()">📂 Open</button>
+        <button class="clear-chat" onclick="clearChat()">🗑️ Clear</button>
+        <button class="close-window" onclick="closeWindow()">✖️ Close</button>
+      </div>
+    </div>
+    <div class="system-prompt-container">
+      <label for="systemPromptSelect">System Prompt:</label>
+      <select id="systemPromptSelect" onchange="updateSystemPrompt()">
+        <option value="default">Default Assistant</option>
+        <option value="quickwrite" selected>Proof Reader</option>
+        <option value="helpful">Helpful & Concise</option>
+        <option value="transcriptai">Transcript-Based Assistant</option>
+        <option value="creative">Creative Writer</option>
+        <option value="technical">Technical Expert</option>
+        <option value="teacher">Patient Teacher</option>
+        <option value="casual">Casual Friend</option>
+        <option value="professional">Professional Consultant</option>
+        <option value="legal">Legal Assistant</option>
+        <option value="medical">Medical Expert</option>
+      </select>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <!-- Chat messages will appear here -->
+    </div>
+    <input type="file" id="openInput" accept="application/json,.json" style="display:none"
+      onchange="handleOpenFile(event)">
+    <div class="chat-input">
+      <div class="voice-controls">
+        <button class="voice-btn" id="micBtn" onclick="toggleSpeechRecognition()"
+          title="Toggle Continuous Speech Recognition - Pauses while AI speaks to avoid echo. Say 'stop listening' or click to stop.">
+          🎤
+        </button>
+        <button class="voice-btn" id="speakerBtn" onclick="stopSpeaking()" title="Stop Speaking" style="display: none;">
+          🔇
+        </button>
+      </div>
+      <input type="text" placeholder="Type or use voice (say 'stop listening' to end)..." id="userInput">
+      <label class="tts-toggle">
+        <input type="checkbox" id="autoTTS">
+        Auto-speak responses
+      </label>
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+
+</body>
+
+</html>
