@@ -10,6 +10,15 @@ let accumulatedTranscript = '';
 let currentUtterance = null;
 let isSpeaking = false;
 let availableVoices = [];
+let activeSpeakBtn = null;
+
+function resetActiveSpeakBtn() {
+  if (activeSpeakBtn) {
+    activeSpeakBtn.textContent = '🔊 Speak';
+    activeSpeakBtn.classList.remove('speaking');
+    activeSpeakBtn = null;
+  }
+}
 
 // Initialize speech recognition
 if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -158,13 +167,20 @@ function toggleSpeechRecognition() {
 }
 
 // Text to Speech function
-function speakText(text) {
+function speakText(text, sourceBtn) {
   if (!('speechSynthesis' in window)) {
     return;
   }
 
-  // Stop any ongoing speech
+  // Stop any ongoing speech (also resets the previous activeSpeakBtn)
   stopSpeaking();
+
+  // Wire the per-message button that triggered this call
+  activeSpeakBtn = sourceBtn || null;
+  if (activeSpeakBtn) {
+    activeSpeakBtn.textContent = '⏹ Stop';
+    activeSpeakBtn.classList.add('speaking');
+  }
 
   // Set speaking flag BEFORE stopping recognition to prevent auto-restart
   isSpeaking = true;
@@ -205,6 +221,7 @@ function speakText(text) {
 
   currentUtterance.onend = () => {
     isSpeaking = false;
+    resetActiveSpeakBtn();
     document.getElementById('speakerBtn').style.display = 'none';
     document.getElementById('speakerBtn').classList.remove('speaking');
     currentUtterance = null;
@@ -223,6 +240,7 @@ function speakText(text) {
 
   currentUtterance.onerror = () => {
     isSpeaking = false;
+    resetActiveSpeakBtn();
     document.getElementById('speakerBtn').style.display = 'none';
     document.getElementById('speakerBtn').classList.remove('speaking');
     currentUtterance = null;
@@ -244,6 +262,7 @@ function speakText(text) {
 
 // Stop speaking function
 function stopSpeaking() {
+  resetActiveSpeakBtn();
   if (speechSynthesis.speaking) {
     speechSynthesis.cancel();
 

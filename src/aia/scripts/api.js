@@ -100,6 +100,8 @@ async function streamOllamaResponse(userMessage, messageDiv) {
 
     const copyBtn = messageDiv.querySelector('.copy-btn');
     if (copyBtn) copyBtn.dataset.content = fullResponse;
+    const speakBtn = messageDiv.querySelector('.speak-btn');
+    if (speakBtn) speakBtn.dataset.content = fullResponse;
 
     if (document.getElementById('autoTTS').checked) {
       speakText(fullResponse);
@@ -120,6 +122,8 @@ async function streamOllamaResponse(userMessage, messageDiv) {
         '<p class="status-stopped">[response stopped]</p>';
       const copyBtn = messageDiv.querySelector('.copy-btn');
       if (copyBtn) copyBtn.dataset.content = fullResponse;
+      const speakBtn = messageDiv.querySelector('.speak-btn');
+      if (speakBtn) speakBtn.dataset.content = fullResponse;
     } else {
       // Nothing useful generated — roll back the user message entirely.
       conversationHistory.pop();

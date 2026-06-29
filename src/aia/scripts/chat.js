@@ -1,5 +1,25 @@
 // chat.js - Chat message handling functions
 
+function createSpeakButton(content) {
+  if (!('speechSynthesis' in window)) return null;
+  const btn = document.createElement('button');
+  btn.className = 'speak-btn';
+  btn.title = 'Speak this response';
+  btn.textContent = '🔊 Speak';
+  if (content) btn.dataset.content = content;
+  btn.addEventListener('click', () => toggleMessageSpeak(btn));
+  return btn;
+}
+
+function toggleMessageSpeak(button) {
+  if (button.classList.contains('speaking')) {
+    stopSpeaking();
+  } else {
+    const content = button.dataset.content;
+    if (content) speakText(content, button);
+  }
+}
+
 function createCopyButton(content) {
   const btn = document.createElement('button');
   btn.className = 'copy-btn';
@@ -66,6 +86,8 @@ function addAIMessagePlaceholder() {
   const actionsDiv = document.createElement('div');
   actionsDiv.className = 'message-actions';
   actionsDiv.appendChild(createCopyButton(''));
+  const speakBtn = createSpeakButton('');
+  if (speakBtn) actionsDiv.appendChild(speakBtn);
   messageDiv.appendChild(actionsDiv);
   messagesDiv.appendChild(messageDiv);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -247,6 +269,8 @@ function renderConversationHistory() {
       const actionsDiv = document.createElement('div');
       actionsDiv.className = 'message-actions';
       actionsDiv.appendChild(createCopyButton(msg.content));
+      const speakBtnH = createSpeakButton(msg.content);
+      if (speakBtnH) actionsDiv.appendChild(speakBtnH);
       messageDiv.appendChild(actionsDiv);
     }
 
