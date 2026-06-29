@@ -31,8 +31,8 @@ docker inspect --format='{{.State.Health.Status}}' vpal-nginx
 ```
 Browser → HTTPS (port 443) / HTTP (port 80 → redirects to HTTPS)
        → Nginx (Docker, cgr.dev/chainguard/nginx, uid=65532)
-           ├── Serves static files from src/aia/
-           └── /ollama/* → reverse proxy → host.docker.internal:11434 (Ollama API)
+           ├── GET/HEAD /* → serves static files from src/aia/
+           └── POST /ollama/api/chat (exact match) → reverse proxy → host.docker.internal:11434/api/chat
 ```
 
 Nginx handles TLS termination, HTTP→HTTPS redirect, and security headers (HSTS, CSP, X-Frame-Options). The container runs as a non-root user (uid=65532), read-only filesystem, with capabilities restricted to `NET_BIND_SERVICE` only.
@@ -60,15 +60,17 @@ Scripts are loaded in dependency order in `index.html`:
 | `speech.js` | Web Speech API: continuous recognition with 3-second silence detection, TTS with voice preference ("Microsoft Catherine") |
 | `chat.js` | `conversationHistory[]` (global state), message rendering, chat save/load |
 | `api.js` | `streamOllamaResponse()` — streaming fetch, real-time markdown rendering, abort via `streamAbortController` |
-| `main.js` | `DOMContentLoaded` wiring, event listeners, initialises default persona from the HTML `selected` attribute |
+| `main.js` | `DOMContentLoaded` wiring — wires ALL button/input event listeners via `addEventListener` (no inline HTML handlers); initialises default persona from the HTML `selected` attribute |
 
 **Global state lives in `chat.js`** (`conversationHistory`, `currentSystemPrompt`) and is shared across modules via the window scope — there is no module bundler.
 
 ## Security Invariants
 
-- All AI response content passes through `DOMPurify.sanitize(marked.parse(...))` before being set as `innerHTML` — in `api.js` (streaming), `chat.js` (`addAIMessage`, `renderConversationHistory`).
+- All AI response content passes through `DOMPurify.sanitize(marked.parse(...))` before being set as `innerHTML` — in `api.js` (streaming) and `chat.js` (`renderConversationHistory`).
 - User-supplied text uses `escapeHtml()` before insertion into `innerHTML` (`addUserMessage`, `renderConversationHistory`).
-- The streaming fetch in `api.js` is wired to a module-level `streamAbortController`; call `stopStreaming()` to cancel mid-stream. The user message is rolled back from `conversationHistory` on abort or error.
+- CSP has no `unsafe-inline` in either `script-src` or `style-src`. All event handlers are wired via `addEventListener` in `main.js`; all element visibility is controlled by CSS classes or `element.style.display` (programmatic — not subject to CSP).
+- The streaming fetch in `api.js` is wired to a module-level `streamAbortController`; call `stopStreaming()` to cancel mid-stream. If tokens were received before abort, the partial response is saved to `conversationHistory`; the user message is only rolled back when nothing was generated.
+- User input is capped at `maxlength="4000"` in the HTML; Nginx enforces `client_max_body_size 1m` on the proxy endpoint.
 
 ## Key Configuration
 
@@ -83,7 +85,11 @@ To add a new persona: add a key to the system prompts object in `config.js` and 
 
 ## Nginx Proxy
 
-The `/ollama/` location block in [deploy/nginx/nginx.conf](deploy/nginx/nginx.conf) strips the prefix via a trailing slash on `proxy_pass` and forwards to `http://host.docker.internal:11434`. `proxy_buffering off` and `proxy_read_timeout 300s` are set to support streaming responses. If Ollama changes port or the model changes, update `deploy/nginx/nginx.conf` and `config.js` respectively, then restart the container.
+The proxy in [deploy/nginx/nginx.conf](deploy/nginx/nginx.conf) uses an **exact-match** location (`location = /ollama/api/chat`) that accepts `POST` only — all other methods and all other Ollama paths (e.g. `/api/tags`, `/api/delete`) are denied at the nginx layer. The rate limit zone allows 5 requests/min with a burst of 5 (`limit_req_zone`). `proxy_buffering off` and `proxy_read_timeout 300s` support streaming responses.
+
+Security headers set on every response: `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy` (no `unsafe-inline`), `Referrer-Policy: no-referrer`, `Permissions-Policy`.
+
+If Ollama changes port or the model changes, update `deploy/nginx/nginx.conf` and `config.js` respectively, then restart the container.
 
 ## SSL Certificates
 
