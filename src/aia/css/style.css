@@ -537,6 +537,33 @@ body {
   border-bottom: 1px dashed #ccc;
 }
 
+/* Copy-to-clipboard button beneath AI responses */
+.message-actions {
+  margin-top: 8px;
+}
+
+.copy-btn {
+  padding: 3px 10px;
+  background: transparent;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #718096;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.copy-btn:hover {
+  background: #f7fafc;
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.copy-btn.copied {
+  color: #48bb78;
+  border-color: #48bb78;
+}
+
 /* Initially hidden dynamic controls — JS shows/hides via element.style.display */
 #speakerBtn,
 #stopBtn,

@@ -98,6 +98,9 @@ async function streamOllamaResponse(userMessage, messageDiv) {
     const tsElem = messageDiv.querySelector('.message-timestamp');
     if (tsElem) tsElem.textContent = assistantTsFmt;
 
+    const copyBtn = messageDiv.querySelector('.copy-btn');
+    if (copyBtn) copyBtn.dataset.content = fullResponse;
+
     if (document.getElementById('autoTTS').checked) {
       speakText(fullResponse);
     }
@@ -115,6 +118,8 @@ async function streamOllamaResponse(userMessage, messageDiv) {
       contentDiv.innerHTML =
         DOMPurify.sanitize(marked.parse(fullResponse)) +
         '<p class="status-stopped">[response stopped]</p>';
+      const copyBtn = messageDiv.querySelector('.copy-btn');
+      if (copyBtn) copyBtn.dataset.content = fullResponse;
     } else {
       // Nothing useful generated — roll back the user message entirely.
       conversationHistory.pop();
@@ -125,6 +130,8 @@ async function streamOllamaResponse(userMessage, messageDiv) {
       } else {
         contentDiv.innerHTML = `<p class="status-error">${escapeHtml(error.message)}</p>`;
       }
+      const actionsDiv = messageDiv.querySelector('.message-actions');
+      if (actionsDiv) actionsDiv.style.display = 'none';
     }
     updateSystemPromptState();
   } finally {

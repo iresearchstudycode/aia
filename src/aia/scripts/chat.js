@@ -1,5 +1,30 @@
 // chat.js - Chat message handling functions
 
+function createCopyButton(content) {
+  const btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.title = 'Copy response to clipboard';
+  btn.textContent = '📋 Copy';
+  if (content) btn.dataset.content = content;
+  btn.addEventListener('click', () => copyMessageToClipboard(btn));
+  return btn;
+}
+
+function copyMessageToClipboard(button) {
+  const content = button.dataset.content;
+  if (!content) return;
+  navigator.clipboard.writeText(content).then(() => {
+    button.textContent = '✓ Copied!';
+    button.classList.add('copied');
+    setTimeout(() => {
+      button.textContent = '📋 Copy';
+      button.classList.remove('copied');
+    }, 2000);
+  }).catch(() => {
+    alert('Copy failed — please select and copy the text manually.');
+  });
+}
+
 function updateSystemPromptState() {
   const select = document.getElementById('systemPromptSelect');
   if (conversationHistory.length > 0) {
@@ -38,6 +63,10 @@ function addAIMessagePlaceholder() {
       </div>
       <div class="message-timestamp">${escapeHtml(timestamp)}</div>
     `;
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'message-actions';
+  actionsDiv.appendChild(createCopyButton(''));
+  messageDiv.appendChild(actionsDiv);
   messagesDiv.appendChild(messageDiv);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
@@ -215,6 +244,10 @@ function renderConversationHistory() {
         <div class="message-content">${DOMPurify.sanitize(marked.parse(msg.content))}</div>
         <div class="message-timestamp">${escapeHtml(formatted)}</div>
       `;
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'message-actions';
+      actionsDiv.appendChild(createCopyButton(msg.content));
+      messageDiv.appendChild(actionsDiv);
     }
 
     messagesDiv.appendChild(messageDiv);
