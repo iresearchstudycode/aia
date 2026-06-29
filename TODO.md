@@ -16,6 +16,14 @@
 - [x] Nginx rate limiting on `/auth/login` — 20 req/min per IP, burst 5, returns 429; complements the in-process per-username lockout
 - [x] Graceful session-expiry handling in `api.js` — `redirect: 'manual'` detects the nginx 302→login redirect; shows "Session expired — sign in again" with a link rather than silently failing
 
+## Testing
+
+- [x] Pytest test suite for `auth/main.py` — 57 tests covering all route handlers, brute-force lockout, TOTP replay protection, CSRF token derivation, session validation, and security edge cases (`auth/tests/test_main.py`)
+
+## Build
+
+- [x] `.dockerignore` for auth build context — excludes `tests/`, `__pycache__/`, `.env`, `*.pyc`, and editor artefacts from the Docker build context (`auth/.dockerignore`)
+
 ## Features / UX
 
 - [x] Make speech recognition language configurable — `SPEECH_RECOGNITION_LANG` in `config.js`
