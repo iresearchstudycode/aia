@@ -20,7 +20,7 @@ function addUserMessage(text) {
       <div class="message-content">
         <p>${escapeHtml(text)}</p>
       </div>
-      <div class="message-timestamp">${timestamp}</div>
+      <div class="message-timestamp">${escapeHtml(timestamp)}</div>
     `;
   messagesDiv.appendChild(messageDiv);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -36,7 +36,7 @@ function addAIMessagePlaceholder() {
       <div class="message-content">
         <p class="status-muted">Thinking...</p>
       </div>
-      <div class="message-timestamp">${timestamp}</div>
+      <div class="message-timestamp">${escapeHtml(timestamp)}</div>
     `;
   messagesDiv.appendChild(messageDiv);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -207,13 +207,13 @@ function renderConversationHistory() {
       messageDiv.innerHTML = `
         <div class="message-label">${label}</div>
         <div class="message-content"><p>${escapeHtml(msg.content)}</p></div>
-        <div class="message-timestamp">${formatted}</div>
+        <div class="message-timestamp">${escapeHtml(formatted)}</div>
       `;
     } else {
       messageDiv.innerHTML = `
         <div class="message-label">${label}</div>
         <div class="message-content">${DOMPurify.sanitize(marked.parse(msg.content))}</div>
-        <div class="message-timestamp">${formatted}</div>
+        <div class="message-timestamp">${escapeHtml(formatted)}</div>
       `;
     }
 
@@ -252,11 +252,15 @@ function handleOpenFile(event) {
           throw new Error(`Entry ${index}: content must be a non-empty string`);
         }
         const ts = item.timestamp || new Date().toISOString();
+        const tsDate = new Date(ts);
+        if (isNaN(tsDate.getTime())) {
+          throw new Error(`Entry ${index}: invalid timestamp "${item.timestamp}"`);
+        }
         return {
           role: item.role,
           content: item.content,
           timestamp: ts,
-          formattedTimestamp: formatTimestamp(new Date(ts))
+          formattedTimestamp: formatTimestamp(tsDate)
         };
       });
 
