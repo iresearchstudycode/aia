@@ -11,8 +11,9 @@
 - [x] Add file size validation in `handleOpenFile()` — 5 MB cap before `FileReader.readAsText()`
 - [x] Pin vendored libraries to SRI hashes in `index.html` (`marked.min.js`, `dompurify.min.js`)
 - [x] TOTP authentication — session-cookie auth via FastAPI + pyotp, gated by Nginx auth_request
-- [ ] TOTP replay protection — track used codes per-user to prevent reuse within the 90-second window
-- [ ] Logout CSRF protection — add a signed anti-CSRF token to the logout form
+- [x] TOTP replay protection — (username, code) pairs tracked in memory for 90 s; replayed codes rejected even within the valid TOTP window
+- [x] Logout CSRF protection — HMAC-derived `vpal_csrf` cookie (non-HttpOnly); injected into logout form by `main.js`; verified server-side via double-submit cookie pattern
+- [x] Nginx rate limiting on `/auth/login` — 20 req/min per IP, burst 5, returns 429; complements the in-process per-username lockout
 - [ ] Graceful session-expiry handling in `api.js` — detect 302→login redirect on streaming fetch and show a "Session expired — please refresh" message instead of a silent JSON parse error
 
 ## Features / UX

@@ -1,6 +1,23 @@
 // main.js - Initialization and event handlers
 
+function _getCookie(name) {
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
 document.addEventListener('DOMContentLoaded', function () {
+  // Inject the CSRF token into the logout form (double-submit cookie pattern).
+  // vpal_csrf is non-HttpOnly so JS can read it; the server verifies it matches
+  // the HMAC-derived value tied to the session token.
+  const logoutForm = document.getElementById('logoutForm');
+  if (logoutForm) {
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = 'csrf_token';
+    csrfInput.value = _getCookie('vpal_csrf');
+    logoutForm.appendChild(csrfInput);
+  }
+
   loadVoices();
 
   // Sync JS state with whichever option is marked selected in the HTML

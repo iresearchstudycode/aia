@@ -5,6 +5,8 @@ stored in environment variables.  Designed to sit behind Nginx auth_request so
 no unauthenticated request ever reaches the static application or Ollama proxy.
 """
 
+import hashlib
+import hmac
 import io
 import os
 import time
@@ -77,16 +79,65 @@ def _clear_failures(username: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# TOTP replay protection — reject a code that was already accepted within the
+# 90-second validity window (valid_window=1 covers t-1, t, t+1 intervals).
+# ---------------------------------------------------------------------------
+
+_REPLAY_WINDOW_SECONDS = 90
+
+# (username, code) -> monotonic timestamp when the code was first accepted
+_used_totp_codes: dict[tuple[str, str], float] = {}
+
+
+def _is_code_replay(username: str, code: str) -> bool:
+    """Return True if this (username, code) pair was already accepted recently."""
+    now = time.monotonic()
+    # Prune entries older than the replay window
+    expired = [k for k, t in _used_totp_codes.items() if now - t > _REPLAY_WINDOW_SECONDS]
+    for k in expired:
+        del _used_totp_codes[k]
+    return (username, code) in _used_totp_codes
+
+
+def _mark_code_used(username: str, code: str) -> None:
+    _used_totp_codes[(username, code)] = time.monotonic()
+
+
+# ---------------------------------------------------------------------------
 # Session helpers
 # ---------------------------------------------------------------------------
 
 
+def _make_csrf_token(session_token: str) -> str:
+    """Derive a CSRF token from the session token using HMAC-SHA256.
+
+    Binding the CSRF token to the session token means it is automatically
+    invalidated when the session changes, with no extra storage required.
+    """
+    return hmac.new(
+        _SECRET_KEY.encode(),
+        (session_token + ":csrf").encode(),
+        hashlib.sha256,
+    ).hexdigest()[:32]
+
+
 def _set_session_cookie(response: Response, username: str) -> None:
     token: str = _signer.sign(username).decode()
+    csrf_token: str = _make_csrf_token(token)
     response.set_cookie(
         "vpal_session",
         token,
         httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=_SESSION_TTL_SECONDS,
+    )
+    # vpal_csrf is intentionally NOT HttpOnly so JS can read it and inject
+    # it into the logout form as a hidden field (double-submit cookie pattern).
+    response.set_cookie(
+        "vpal_csrf",
+        csrf_token,
+        httponly=False,
         secure=True,
         samesite="strict",
         max_age=_SESSION_TTL_SECONDS,
@@ -164,7 +215,7 @@ def _setup_html(users: dict[str, str]) -> str:
       <div class="qr">{svg}</div>
       <p class="uri-label">Or copy the setup URI:</p>
       <code class="uri">{uri}</code>
-      <p class="secret-label">TOTP Secret (keep private): <code>{secret}</code></p>
+      <p class="secret-label">TOTP Secret (keep private): <code>{secret}</code></p>
     </div>"""
         )
     cards_html = "\n".join(cards)
@@ -255,21 +306,50 @@ async def login(
     candidate = secret if secret else pyotp.random_base32()
     valid = pyotp.TOTP(candidate).verify(code, valid_window=1)
 
-    if not secret or locked or not valid:
+    # Reject replayed codes even when the TOTP window still considers them valid.
+    replay = bool(secret) and valid and _is_code_replay(username, code)
+
+    if not secret or locked or not valid or replay:
         if secret and not locked and not valid:
             _record_failure(username)
         return HTMLResponse(_login_html(_ERROR_MSG), status_code=401)
 
     _clear_failures(username)
+    _mark_code_used(username, code)
     resp: Response = RedirectResponse(url="/", status_code=302)
     _set_session_cookie(resp, username)
     return resp
 
 
 @app.post("/auth/logout")
-async def logout() -> Response:
+async def logout(
+    request: Request,
+    csrf_token: Annotated[str, Form()] = "",
+) -> Response:
+    """Sign the user out.
+
+    Requires a CSRF token submitted as a hidden form field (double-submit
+    cookie pattern).  The expected value is derived from the session token
+    via HMAC so no server-side CSRF state is needed.
+    """
+    session_token = request.cookies.get("vpal_session", "")
+    csrf_cookie = request.cookies.get("vpal_csrf", "")
+    expected = _make_csrf_token(session_token) if session_token else ""
+
+    # Both the submitted field and the cookie must match the expected HMAC.
+    # hmac.compare_digest prevents timing-based attacks on the comparison.
+    token_ok = bool(
+        expected
+        and hmac.compare_digest(csrf_token, expected)
+        and hmac.compare_digest(csrf_cookie, expected)
+    )
+
+    if not token_ok:
+        return Response(status_code=403)
+
     resp: Response = RedirectResponse(url="/auth/login", status_code=302)
     resp.delete_cookie("vpal_session", httponly=True, secure=True, samesite="strict")
+    resp.delete_cookie("vpal_csrf", secure=True, samesite="strict")
     return resp
 
 
