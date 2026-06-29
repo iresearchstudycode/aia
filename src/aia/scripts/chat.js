@@ -111,6 +111,7 @@ async function sendMessageAndContinueListening() {
     // Clear the accumulated transcript for next input, but keep listening
     accumulatedTranscript = '';
     input.value = '';
+    input.dispatchEvent(new Event('input'));
 
     addUserMessage(message);
 
@@ -145,6 +146,7 @@ async function sendMessage() {
 
     addUserMessage(message);
     input.value = '';
+    input.dispatchEvent(new Event('input'));
 
     // Add a placeholder for AI response
     const aiMessageDiv = addAIMessagePlaceholder();

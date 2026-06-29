@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Chat input
   const userInput = document.getElementById('userInput');
+  userInput.maxLength = MAX_INPUT_LENGTH;
   userInput.addEventListener('keypress', function (e) {
     if (e.key === 'Enter') sendMessage();
   });
@@ -24,7 +25,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // Character counter — appears below 500 chars remaining, warns at 200, danger at 50
   const charCounter = document.getElementById('charCounter');
   userInput.addEventListener('input', function () {
-    const remaining = 4000 - this.value.length;
+    const remaining = MAX_INPUT_LENGTH - this.value.length;
     const show = remaining <= 500;
     charCounter.textContent = show ? `${remaining}` : '';
     charCounter.classList.toggle('visible', show);

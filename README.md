@@ -130,7 +130,7 @@ vpal/
 ### Voice Settings
 - **Recognition**: Continuous speech-to-text
 - **Synthesis**: Text-to-speech with voice selection
-- **Languages**: Browser-dependent
+- **Language**: Configurable via `SPEECH_RECOGNITION_LANG` in `config.js` (BCP 47, default: `en-US`)
 
 ## 🛡️ Security
 
