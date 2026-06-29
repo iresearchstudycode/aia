@@ -1,5 +1,6 @@
 # Stage 1 — build: install dependencies using the dev image (has pip)
-FROM cgr.dev/chainguard/python:latest-dev AS builder
+# Digest-pinned for reproducibility — update with: docker pull cgr.dev/chainguard/python:latest-dev
+FROM cgr.dev/chainguard/python:latest-dev@sha256:d22879bdbaba0c4f5f20ab73f60408fa4b3924a46fdb9c2dd63a40ba63754e28 AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -12,7 +13,8 @@ RUN pip install --no-cache-dir --target=/app/packages -r requirements.txt
 # Stage 2 — runtime: distroless, no shell, no pip, non-root (uid=65532)
 # ENTRYPOINT is /usr/bin/python (baked into the Chainguard image).
 # CMD provides only the arguments that follow the python executable.
-FROM cgr.dev/chainguard/python:latest
+# Digest-pinned for reproducibility — update with: docker pull cgr.dev/chainguard/python:latest
+FROM cgr.dev/chainguard/python:latest@sha256:5d24c87a044aa2597e12d2788751f138460653fe88a638eb456dd6b9b6a5499e
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/packages
