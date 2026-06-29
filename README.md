@@ -139,11 +139,13 @@ vpal/
 | Layer | Controls |
 |---|---|
 | **Transport** | HTTPS only (TLS 1.2/1.3), HSTS, HTTP→HTTPS redirect |
-| **Browser** | CSP (`default-src 'self'`, explicit `connect-src`, `script-src`, `style-src`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` |
-| **XSS prevention** | All AI response content sanitized with DOMPurify before rendering; user input escaped with `escapeHtml` before DOM insertion |
-| **Container** | Read-only filesystem, non-root user (uid=65532), `cap_drop: ALL` + `NET_BIND_SERVICE` only, `no-new-privileges` |
+| **Browser** | CSP with no `unsafe-inline` in any directive (`script-src 'self'`, `style-src 'self'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy` |
+| **XSS prevention** | All AI response content sanitized with DOMPurify (SRI-pinned) before rendering; user input escaped with `escapeHtml` before DOM insertion |
+| **Proxy** | Ollama API locked to exact-match `POST /ollama/api/chat` only — all other paths and methods denied; rate-limited to 5 req/min with burst of 5 |
+| **Container** | Read-only filesystem, non-root user (uid=65532), `cap_drop: ALL` + `NET_BIND_SERVICE` only, `no-new-privileges`, `restart: unless-stopped` |
 | **Network** | Loopback-only binding (`127.0.0.1`) — not accessible from LAN |
-| **Context** | Conversation history capped at 40 messages to prevent unbounded memory and context-window overflow |
+| **Input** | User messages capped at 4,000 characters; Nginx enforces 1 MB request body limit; uploaded chat files capped at 5 MB |
+| **Supply chain** | `marked.min.js` and `dompurify.min.js` pinned with SHA-256 SRI hashes — browser refuses to load either if tampered |
 
 ### Scope Limitation
 
@@ -152,9 +154,11 @@ This application is designed for **single-user local use only**. It has no authe
 ## 🎯 Features
 
 - **Voice Input/Output**: Full speech recognition and synthesis
-- **Real-time Streaming**: Live AI response streaming
+- **Real-time Streaming**: Live AI response streaming with stop control
 - **Multiple Personas**: 13 pre-configured AI personalities
-- **Chat History**: Save/load conversation history
+- **Chat History**: Save/load conversation history as JSON
+- **Character Counter**: Remaining character count shown as you approach the 4,000-character limit
+- **Auto-Speak Persistence**: Auto-speak preference saved across browser sessions
 - **Responsive Design**: Mobile-friendly interface
 - **Markdown Support**: Rich text formatting in responses
 - **Local AI**: No external API dependencies
@@ -175,7 +179,7 @@ This application is designed for **single-user local use only**. It has no authe
 - **Slow responses**: Consider using smaller models or upgrading hardware
 
 ### Debug Mode
-Enable browser developer tools (F12) to view console logs for debugging API connections and voice features.
+Open browser developer tools (F12) and check the **Console** tab. Errors from the Ollama API, speech recognition, and TTS are written with `console.error`. For deeper debugging, add temporary `console.log` calls to the relevant module in `src/aia/scripts/` and reload the page.
 
 ## 🤝 Contributing
 

@@ -242,8 +242,14 @@ function handleOpenFile(event) {
       const data = JSON.parse(e.target.result);
       if (!Array.isArray(data)) throw new Error('Invalid file format: expected an array');
 
-      // Normalize entries: ensure timestamp exists and add formattedTimestamp
-      conversationHistory = data.map(item => {
+      // Validate and normalize entries
+      conversationHistory = data.map((item, index) => {
+        if (!['user', 'assistant'].includes(item.role)) {
+          throw new Error(`Entry ${index}: invalid role "${item.role}"`);
+        }
+        if (typeof item.content !== 'string' || item.content.length === 0) {
+          throw new Error(`Entry ${index}: content must be a non-empty string`);
+        }
         const ts = item.timestamp || new Date().toISOString();
         return {
           role: item.role,

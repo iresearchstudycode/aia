@@ -79,6 +79,7 @@ All runtime configuration is in [src/aia/scripts/config.js](src/aia/scripts/conf
 - `MODEL_NAME` — Ollama model to use (default: `gemma4:e4b`)
 - `OLLAMA_API_URL` — proxied endpoint (default: `https://localhost/ollama/api/chat`)
 - `MAX_HISTORY_MESSAGES` — maximum entries in `conversationHistory` before oldest pairs are trimmed (default: `40`, i.e. 20 exchanges). Tune this when switching to a model with a smaller or larger context window.
+- `SPEECH_RECOGNITION_LANG` — BCP 47 language tag for the Web Speech API (default: `'en-US'`). Change to `'en-AU'`, `'fr-FR'`, etc. to match your locale.
 - System prompts object — keys map to `<option value>` in the persona selector dropdown
 
 To add a new persona: add a key to the system prompts object in `config.js` and a matching `<option>` in the `#systemPromptSelect` dropdown in `index.html`. The default selected persona is controlled by the `selected` attribute in `index.html` — `main.js` reads it on load and sets `currentSystemPrompt` accordingly.
@@ -94,3 +95,14 @@ If Ollama changes port or the model changes, update `deploy/nginx/nginx.conf` an
 ## SSL Certificates
 
 Self-signed certs are in `deploy/certs/` (generated via mkcert). Nginx is configured for TLS 1.2+. Regenerate with mkcert targeting `localhost` if they expire.
+
+## Updating Vendored Libraries
+
+`marked.min.js` and `dompurify.min.js` are pinned with SHA-256 SRI hashes in `index.html`. When upgrading either file, recompute the hash and update the `integrity=` attribute:
+
+```powershell
+$bytes = [IO.File]::ReadAllBytes('src\aia\scripts\<filename>.js')
+"sha256-" + [Convert]::ToBase64String([Security.Cryptography.SHA256]::Create().ComputeHash($bytes))
+```
+
+Paste the output into the matching `integrity="..."` attribute in `index.html`. The browser will refuse to load the script if the hash does not match.
