@@ -8,10 +8,30 @@ document.addEventListener('DOMContentLoaded', function () {
   currentSystemPrompt = systemPrompts[select.value];
   updateSystemPromptState();
 
+  // Restore autoTTS preference across sessions
+  const autoTTS = document.getElementById('autoTTS');
+  autoTTS.checked = localStorage.getItem('autoTTS') === 'true';
+  autoTTS.addEventListener('change', function () {
+    localStorage.setItem('autoTTS', this.checked);
+  });
+
   // Chat input
-  document.getElementById('userInput').addEventListener('keypress', function (e) {
+  const userInput = document.getElementById('userInput');
+  userInput.addEventListener('keypress', function (e) {
     if (e.key === 'Enter') sendMessage();
   });
+
+  // Character counter — appears below 500 chars remaining, warns at 200, danger at 50
+  const charCounter = document.getElementById('charCounter');
+  userInput.addEventListener('input', function () {
+    const remaining = 4000 - this.value.length;
+    const show = remaining <= 500;
+    charCounter.textContent = show ? `${remaining}` : '';
+    charCounter.classList.toggle('visible', show);
+    charCounter.classList.toggle('warning', remaining <= 200 && remaining > 50);
+    charCounter.classList.toggle('danger', remaining <= 50);
+  });
+
   document.getElementById('sendBtn').addEventListener('click', sendMessage);
   document.getElementById('stopBtn').addEventListener('click', stopStreaming);
 

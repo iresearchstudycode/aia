@@ -13,6 +13,6 @@
 
 ## Features / UX
 
-- [ ] Make speech recognition language (`recognition.lang`) configurable via `config.js` — currently hardcoded to `en-US`
-- [ ] Surface a character counter near the input field to reflect the `maxlength="4000"` cap
-- [ ] Consider persisting `autoTTS` checkbox state to `localStorage` across sessions
+- [x] Make speech recognition language configurable — `SPEECH_RECOGNITION_LANG` in `config.js`
+- [x] Character counter on input field — appears when ≤ 500 chars remaining, warns at 200, red at 50
+- [x] Persist `autoTTS` checkbox state to `localStorage` across sessions

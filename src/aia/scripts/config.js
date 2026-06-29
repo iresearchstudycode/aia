@@ -2,6 +2,7 @@
 const MODEL_NAME = 'gemma4:e4b';
 const OLLAMA_API_URL = 'https://localhost/ollama/api/chat';
 const MAX_HISTORY_MESSAGES = 40; // 20 user/assistant exchanges
+const SPEECH_RECOGNITION_LANG = 'en-US'; // BCP 47 tag — e.g. 'en-AU', 'fr-FR'
 
 // System prompts
 const systemPrompts = {

@@ -65,7 +65,10 @@
           🔇
         </button>
       </div>
-      <input type="text" placeholder="Type or use voice (say 'stop listening' to end)..." id="userInput" maxlength="4000">
+      <div class="input-wrapper">
+        <input type="text" placeholder="Type or use voice (say 'stop listening' to end)..." id="userInput" maxlength="4000">
+        <span id="charCounter" class="char-counter"></span>
+      </div>
       <label class="tts-toggle">
         <input type="checkbox" id="autoTTS">
         Auto-speak responses

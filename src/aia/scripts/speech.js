@@ -17,7 +17,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
   recognition = new SpeechRecognition();
   recognition.continuous = true; // Keep listening continuously
   recognition.interimResults = true; // Get interim results to detect pauses
-  recognition.lang = 'en-US';
+  recognition.lang = SPEECH_RECOGNITION_LANG;
 
   recognition.onresult = (event) => {
     // Clear the silence timer since we received speech
