@@ -103,17 +103,30 @@ async function streamOllamaResponse(userMessage, messageDiv) {
     }
 
   } catch (error) {
-    // Roll back the user message — no complete exchange to keep in history
-    conversationHistory.pop();
-    updateSystemPromptState();
-
-    if (error.name === 'AbortError') {
-      contentDiv.innerHTML = '<p style="opacity: 0.5;">Response stopped.</p>';
-    } else if (error.message.includes('Failed to fetch')) {
-      contentDiv.innerHTML = `<p style="color: #e53e3e;">Cannot reach Ollama — run: <code>ollama serve</code></p>`;
+    if (error.name === 'AbortError' && fullResponse) {
+      // Partial content received before stop — save it so the conversation remains coherent.
+      // The user message is already in history; add the truncated assistant reply.
+      conversationHistory.push({
+        role: 'assistant',
+        content: fullResponse,
+        timestamp: new Date().toISOString(),
+        formattedTimestamp: formatTimestamp(new Date())
+      });
+      contentDiv.innerHTML =
+        DOMPurify.sanitize(marked.parse(fullResponse)) +
+        '<p style="opacity: 0.5; font-size: 0.85em; margin-top: 4px;">[response stopped]</p>';
     } else {
-      contentDiv.innerHTML = `<p style="color: #e53e3e;">${escapeHtml(error.message)}</p>`;
+      // Nothing useful generated — roll back the user message entirely.
+      conversationHistory.pop();
+      if (error.name === 'AbortError') {
+        contentDiv.innerHTML = '<p style="opacity: 0.5;">Response stopped.</p>';
+      } else if (error.message.includes('Failed to fetch')) {
+        contentDiv.innerHTML = `<p style="color: #e53e3e;">Cannot reach Ollama — run: <code>ollama serve</code></p>`;
+      } else {
+        contentDiv.innerHTML = `<p style="color: #e53e3e;">${escapeHtml(error.message)}</p>`;
+      }
     }
+    updateSystemPromptState();
   } finally {
     streamAbortController = null;
     setStreamingUI(false);

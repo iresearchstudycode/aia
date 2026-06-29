@@ -106,21 +106,23 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
   console.warn('Speech recognition not supported in this browser');
 }
 
-// Check for speech synthesis support
-if (!('speechSynthesis' in window)) {
-  console.warn('Text-to-speech not supported in this browser');
-  document.getElementById('autoTTS').checked = false;
-  document.getElementById('autoTTS').disabled = true;
-}
-
-// Load available voices
+// Load available voices — guarded so it is safe to call even when TTS is absent
 function loadVoices() {
+  if (!('speechSynthesis' in window)) return;
   availableVoices = window.speechSynthesis.getVoices();
-  // console.log('Available voices:', availableVoices);
 }
 
-// Load voices when they change
-window.speechSynthesis.onvoiceschanged = loadVoices;
+// Wire onvoiceschanged only when TTS is present; otherwise disable the UI control
+// once the DOM is ready (this code runs at parse time, before <body> exists).
+if ('speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+} else {
+  console.warn('Text-to-speech not supported in this browser');
+  document.addEventListener('DOMContentLoaded', function () {
+    const el = document.getElementById('autoTTS');
+    if (el) { el.checked = false; el.disabled = true; }
+  });
+}
 
 // Speech to Text function
 function toggleSpeechRecognition() {
