@@ -55,14 +55,14 @@ Scripts are loaded in dependency order in `index.html`:
 |---|---|
 | `marked.min.js` | Markdown parser (vendored, third-party) |
 | `dompurify.min.js` | HTML sanitizer (vendored, v3.4.11) — applied at every AI content → innerHTML boundary |
-| `config.js` | `MODEL_NAME`, `OLLAMA_API_URL`, and the 13 system prompt objects |
+| `config.js` | `MODEL_NAME`, `OLLAMA_API_URL`, the 13 system prompt objects, and global mutable state (`conversationHistory[]`, `currentSystemPrompt`) |
 | `utils.js` | `formatTimestamp()`, `escapeHtml()` — pure helpers |
 | `speech.js` | Web Speech API: continuous recognition with 3-second silence detection, TTS with voice preference ("Microsoft Catherine") |
-| `chat.js` | `conversationHistory[]` (global state), message rendering, chat save/load |
+| `chat.js` | Message rendering, chat save/load, system prompt state management |
 | `api.js` | `streamOllamaResponse()` — streaming fetch, real-time markdown rendering, abort via `streamAbortController` |
 | `main.js` | `DOMContentLoaded` wiring — wires ALL button/input event listeners via `addEventListener` (no inline HTML handlers); initialises default persona from the HTML `selected` attribute |
 
-**Global state lives in `chat.js`** (`conversationHistory`, `currentSystemPrompt`) and is shared across modules via the window scope — there is no module bundler.
+**Global state lives in `config.js`** (`conversationHistory`, `currentSystemPrompt`) and is shared across modules via the window scope — there is no module bundler.
 
 ## Security Invariants
 
@@ -70,7 +70,7 @@ Scripts are loaded in dependency order in `index.html`:
 - User-supplied text uses `escapeHtml()` before insertion into `innerHTML` (`addUserMessage`, `renderConversationHistory`).
 - CSP has no `unsafe-inline` in either `script-src` or `style-src`. All event handlers are wired via `addEventListener` in `main.js`; all element visibility is controlled by CSS classes or `element.style.display` (programmatic — not subject to CSP).
 - The streaming fetch in `api.js` is wired to a module-level `streamAbortController`; call `stopStreaming()` to cancel mid-stream. If tokens were received before abort, the partial response is saved to `conversationHistory`; the user message is only rolled back when nothing was generated.
-- User input is capped at `maxlength="4000"` in the HTML; Nginx enforces `client_max_body_size 1m` on the proxy endpoint.
+- User input is capped at `MAX_INPUT_LENGTH` (4000) set programmatically on `#userInput` in `main.js`; Nginx enforces `client_max_body_size 1m` on the proxy endpoint.
 
 ## Key Configuration
 
