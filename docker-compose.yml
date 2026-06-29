@@ -4,7 +4,7 @@ services:
   web-server:
     image: cgr.dev/chainguard/nginx
     container_name: vpal-nginx
-    restart: "no"
+    restart: unless-stopped
 
     healthcheck:
       test: ["CMD", "/usr/sbin/nginx", "-t"]
