@@ -495,3 +495,20 @@ body {
   opacity: 1;
   transform: translateY(0);
 }
+
+/* Header button group — replaces inline style="float:right;margin-top:-5px" */
+.header-actions {
+  float: right;
+  margin-top: -5px;
+}
+
+/* Status messages rendered by api.js and chat.js — replaces inline style attributes */
+.status-muted { opacity: 0.5; }
+.status-stopped { opacity: 0.5; font-size: 0.85em; margin-top: 4px; }
+.status-error { color: #e53e3e; }
+
+/* Initially hidden dynamic controls — JS shows/hides via element.style.display */
+#speakerBtn,
+#stopBtn {
+  display: none;
+}

@@ -114,16 +114,16 @@ async function streamOllamaResponse(userMessage, messageDiv) {
       });
       contentDiv.innerHTML =
         DOMPurify.sanitize(marked.parse(fullResponse)) +
-        '<p style="opacity: 0.5; font-size: 0.85em; margin-top: 4px;">[response stopped]</p>';
+        '<p class="status-stopped">[response stopped]</p>';
     } else {
       // Nothing useful generated — roll back the user message entirely.
       conversationHistory.pop();
       if (error.name === 'AbortError') {
-        contentDiv.innerHTML = '<p style="opacity: 0.5;">Response stopped.</p>';
+        contentDiv.innerHTML = '<p class="status-muted">Response stopped.</p>';
       } else if (error.message.includes('Failed to fetch')) {
-        contentDiv.innerHTML = `<p style="color: #e53e3e;">Cannot reach Ollama — run: <code>ollama serve</code></p>`;
+        contentDiv.innerHTML = `<p class="status-error">Cannot reach Ollama — run: <code>ollama serve</code></p>`;
       } else {
-        contentDiv.innerHTML = `<p style="color: #e53e3e;">${escapeHtml(error.message)}</p>`;
+        contentDiv.innerHTML = `<p class="status-error">${escapeHtml(error.message)}</p>`;
       }
     }
     updateSystemPromptState();
