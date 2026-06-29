@@ -190,8 +190,6 @@ function speakText(text) {
   const aussieVoice = availableVoices.find(voice =>
     voice.name.includes('Microsoft Catherine')
   );
-  // console.log('Using voice:', aussieVoice ? aussieVoice.name : aussieVoice[0].name);
-
   currentUtterance = new SpeechSynthesisUtterance(cleanText);
   currentUtterance.rate = 1.5;
   currentUtterance.pitch = 1.0;

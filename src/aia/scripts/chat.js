@@ -48,7 +48,7 @@ function addAIMessagePlaceholder() {
 function addContextTrimNotice() {
   const messagesDiv = document.getElementById('chatMessages');
   const notice = document.createElement('div');
-  notice.style.cssText = 'text-align:center;color:#888;font-size:0.75rem;padding:4px 0;margin:4px 0;border-top:1px dashed #ccc;border-bottom:1px dashed #ccc;';
+  notice.className = 'context-trim-notice';
   notice.textContent = 'Earlier messages removed from context window';
   messagesDiv.appendChild(notice);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -61,7 +61,6 @@ function clearChat() {
     conversationHistory = [];
     document.getElementById('chatMessages').innerHTML = '';
     updateSystemPromptState(); // Re-enable system prompt selector
-    console.log('Chat history cleared');
   }
 }
 
@@ -182,7 +181,6 @@ function saveChat() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 
-  console.log('Chat saved as JSON successfully');
 }
 
 // Trigger file chooser for opening JSON chat
@@ -250,7 +248,6 @@ function handleOpenFile(event) {
 
       renderConversationHistory();
       // updateSystemPromptState() is now called inside renderConversationHistory()
-      console.log('Chat opened successfully');
     } catch (err) {
       alert('Failed to open chat: ' + err.message);
       console.error(err);

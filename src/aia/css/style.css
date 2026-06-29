@@ -507,6 +507,17 @@ body {
 .status-stopped { opacity: 0.5; font-size: 0.85em; margin-top: 4px; }
 .status-error { color: #e53e3e; }
 
+/* Context trim divider rendered by addContextTrimNotice() in chat.js */
+.context-trim-notice {
+  text-align: center;
+  color: #888;
+  font-size: 0.75rem;
+  padding: 4px 0;
+  margin: 4px 0;
+  border-top: 1px dashed #ccc;
+  border-bottom: 1px dashed #ccc;
+}
+
 /* Initially hidden dynamic controls — JS shows/hides via element.style.display */
 #speakerBtn,
 #stopBtn,

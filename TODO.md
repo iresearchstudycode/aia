@@ -2,9 +2,9 @@
 
 ## Code Hygiene
 
-- [ ] Replace `notice.style.cssText` in `addContextTrimNotice()` (`chat.js:51`) with a CSS class — currently programmatic so not a CSP issue, but inconsistent with the CSS-class approach used everywhere else
-- [ ] Remove commented-out debug log `// console.log('Using voice:', ...)` in `speakText()` (`speech.js:193`)
-- [ ] Remove informational `console.log` calls in `chat.js` (`clearChat`, `saveChat`, `handleOpenFile`) or replace with a configurable debug flag
+- [x] Replace `notice.style.cssText` in `addContextTrimNotice()` with CSS class `.context-trim-notice`
+- [x] Remove commented-out debug log in `speakText()` (`speech.js`)
+- [x] Remove informational `console.log` calls in `chat.js` (`clearChat`, `saveChat`, `handleOpenFile`)
 
 ## Security Improvements
 
