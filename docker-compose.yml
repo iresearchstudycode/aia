@@ -1,10 +1,51 @@
 name: vpal
 
 services:
+  auth:
+    build:
+      context: ./auth
+      dockerfile: Dockerfile
+    container_name: vpal-auth
+    restart: unless-stopped
+    env_file: .env
+
+    # Security: non-root (uid 1001), read-only root, no capabilities
+    read_only: true
+    tmpfs:
+      - /tmp:uid=1001,gid=0,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+          pids: 30
+
+    # Port exposed only within the Docker network — never published to the host
+    expose:
+      - "9000"
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   web-server:
     image: cgr.dev/chainguard/nginx
     container_name: vpal-nginx
     restart: unless-stopped
+
+    # Nginx starts only after the auth service is healthy
+    depends_on:
+      auth:
+        condition: service_healthy
 
     healthcheck:
       test: ["CMD", "/usr/sbin/nginx", "-t"]
@@ -17,7 +58,7 @@ services:
     ports:
       - "127.0.0.1:80:80"
       - "127.0.0.1:443:443"
-      
+
     # Connects the container to your Windows host network gateway for Ollama resolution
     extra_hosts:
       - "host.docker.internal:host-gateway"

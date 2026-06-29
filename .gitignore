@@ -1,2 +1,5 @@
 # TLS certificates — contain private key material, never commit
 deploy/certs/
+
+# Auth secrets — TOTP secrets and session signing key, never commit
+.env
