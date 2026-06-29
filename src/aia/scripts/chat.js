@@ -105,16 +105,6 @@ function addContextTrimNotice() {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-// Clear chat function
-function clearChat() {
-  if (confirm('Are you sure you want to clear the chat history?')) {
-    stopSpeaking(); // Stop any ongoing speech (this will resume recognition if needed)
-    conversationHistory = [];
-    document.getElementById('chatMessages').innerHTML = '';
-    updateSystemPromptState(); // Re-enable system prompt selector
-  }
-}
-
 // Close window function
 function closeWindow() {
   if (confirm('Are you sure you want to close this window?')) {
@@ -142,10 +132,8 @@ function updateSystemPrompt() {
 
   // If conversation has started, warn user
   if (conversationHistory.length > 0) {
-    if (confirm('Changing the system prompt will reset the conversation. Continue?')) {
-      conversationHistory = [];
-      document.getElementById('chatMessages').innerHTML = '';
-      updateSystemPromptState(); // Update state after clearing
+    if (confirm('Changing the persona will start a new conversation. Continue?')) {
+      startNewConversation();
     } else {
       // Revert selection
       select.value = Object.keys(systemPrompts).find(key => systemPrompts[key] === currentSystemPrompt);
@@ -207,10 +195,10 @@ async function sendMessage() {
   }
 }
 
-// Save chat function
-function saveChat() {
+// Export current conversation as a JSON file
+function exportChat() {
   if (conversationHistory.length === 0) {
-    alert('No conversation to save!');
+    alert('No conversation to export.');
     return;
   }
 
@@ -246,7 +234,7 @@ function renderConversationHistory() {
   const messagesDiv = document.getElementById('chatMessages');
   messagesDiv.innerHTML = '';
 
-  conversationHistory.forEach(msg => {
+  conversationHistory.forEach((msg, index) => {
     const roleClass = msg.role === 'user' ? 'user-message' : 'ai-message';
     const label = msg.role === 'user' ? 'You' : 'AI Assistant';
     const formatted = msg.formattedTimestamp || formatTimestamp(new Date(msg.timestamp || Date.now()));
@@ -273,6 +261,24 @@ function renderConversationHistory() {
       if (speakBtnH) actionsDiv.appendChild(speakBtnH);
       messageDiv.appendChild(actionsDiv);
     }
+
+    // Per-message delete button (visible on hover)
+    const delBtn = document.createElement('button');
+    delBtn.className = 'msg-delete-btn';
+    delBtn.title = 'Delete this message';
+    delBtn.textContent = '✕';
+    delBtn.addEventListener('click', async () => {
+      if (!confirm('Delete this message?')) return;
+      conversationHistory.splice(index, 1);
+      if (currentConversationId) {
+        try {
+          await dbUpdateMessages(currentConversationId, conversationHistory);
+          renderSidebar();
+        } catch (err) { console.error('Delete message failed:', err); }
+      }
+      renderConversationHistory();
+    });
+    messageDiv.appendChild(delBtn);
 
     messagesDiv.appendChild(messageDiv);
   });
@@ -322,7 +328,16 @@ function handleOpenFile(event) {
       });
 
       renderConversationHistory();
-      // updateSystemPromptState() is now called inside renderConversationHistory()
+
+      // Save imported chat as a new conversation in IndexedDB
+      const personaKey = document.getElementById('systemPromptSelect').value;
+      try {
+        currentConversationId = await dbCreateConversation(
+          personaKey, getPersonaLabel(personaKey), conversationHistory
+        );
+        renderSidebar();
+      } catch (dbErr) { console.error('Failed to save imported chat:', dbErr); }
+
     } catch (err) {
       alert('Failed to open chat: ' + err.message);
       console.error(err);

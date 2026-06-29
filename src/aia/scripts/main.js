@@ -33,13 +33,16 @@ document.addEventListener('DOMContentLoaded', function () {
     charCounter.classList.toggle('danger', remaining <= CHAR_COUNTER_DANGER_THRESHOLD);
   });
 
+  // Send / Stop
   document.getElementById('sendBtn').addEventListener('click', sendMessage);
   document.getElementById('stopBtn').addEventListener('click', stopStreaming);
 
-  // Header controls
-  document.getElementById('saveBtn').addEventListener('click', saveChat);
-  document.getElementById('openBtn').addEventListener('click', openChat);
-  document.getElementById('clearBtn').addEventListener('click', clearChat);
+  // Sidebar actions
+  document.getElementById('newChatBtn').addEventListener('click', startNewConversation);
+  document.getElementById('exportBtn').addEventListener('click', exportChat);
+  document.getElementById('importBtn').addEventListener('click', openChat);
+
+  // Header
   document.getElementById('closeBtn').addEventListener('click', closeWindow);
 
   // System prompt selector
@@ -49,6 +52,9 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('micBtn').addEventListener('click', toggleSpeechRecognition);
   document.getElementById('speakerBtn').addEventListener('click', stopSpeaking);
 
-  // File open
+  // File open (import)
   document.getElementById('openInput').addEventListener('change', handleOpenFile);
+
+  // Load sidebar from IndexedDB
+  renderSidebar().catch(e => console.error('Sidebar init failed:', e));
 });
