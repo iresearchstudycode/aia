@@ -9,10 +9,10 @@ services:
     restart: unless-stopped
     env_file: .env
 
-    # Security: non-root (uid 1001), read-only root, no capabilities
+    # Security: non-root (uid 65532, Chainguard default), read-only root, no capabilities
     read_only: true
     tmpfs:
-      - /tmp:uid=1001,gid=0,mode=0700
+      - /tmp:uid=65532,gid=65532,mode=0700
     cap_drop:
       - ALL
     security_opt:

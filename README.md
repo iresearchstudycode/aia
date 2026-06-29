@@ -20,8 +20,8 @@ This web application provides a chat interface with voice input/output capabilit
 │      ▼ │                                                                                                                     │
 │  ┌──────────┐  HTTPS (127.0.0.1:443)  ┌──────────────────────────────────┐  auth_request    ┌──────────────────────────────┐ │
 │  │          ├────────────────────────►│       Docker: vpal-nginx         ├─────────────────►│    Docker: vpal-auth         │ │
-│  │ Browser  │                         │  cgr.dev/chainguard/nginx        │    HTTP/REST     │    python:3.12-slim          │ │
-│  │          │◄────────────────────────│  uid=65532  ·  read-only FS      │  (Docker net)    │    uid=1001                  │ │
+│  │ Browser  │                         │  cgr.dev/chainguard/nginx        │    HTTP/REST     │    cgr.dev/chainguard/python │ │
+│  │          │◄────────────────────────│  uid=65532  ·  read-only FS      │  (Docker net)    │    uid=65532                 │ │
 │  └──────────┘                         │                                  │                  │    FastAPI + pyotp           │ │
 │                                       │  GET/HEAD /*  →  static files    │                  │                              │ │
 │                                       │  POST /ollama/api/chat           │                  │    /auth/verify              │ │
@@ -57,7 +57,7 @@ Every request to Nginx triggers an internal sub-request to the auth service (`au
 | Markdown | Marked.js (vendored, SRI-pinned) |
 | HTML sanitisation | DOMPurify v3.4.11 (vendored, SRI-pinned) |
 | Web server | Nginx (`cgr.dev/chainguard/nginx`, distroless, uid=65532) |
-| Auth service | FastAPI + pyotp + itsdangerous (`python:3.12-slim`, uid=1001) |
+| Auth service | FastAPI + pyotp + itsdangerous (`cgr.dev/chainguard/python:3.12`, uid=65532) |
 | Session | HMAC-signed cookie (`itsdangerous.TimestampSigner`), 8-hour TTL |
 | TOTP | RFC 6238 via `pyotp`, compatible with Google Authenticator |
 | Container | Docker, read-only filesystems, minimal capability sets |
