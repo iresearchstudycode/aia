@@ -229,6 +229,13 @@ function handleOpenFile(event) {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
 
+  const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB — well above any realistic chat history
+  if (file.size > MAX_FILE_BYTES) {
+    alert(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 5 MB.`);
+    event.target.value = '';
+    return;
+  }
+
   const reader = new FileReader();
   reader.onload = (e) => {
     try {

@@ -8,8 +8,8 @@
 
 ## Security Improvements
 
-- [ ] Add file size validation in `handleOpenFile()` before `FileReader.readAsText()` — currently no cap on loaded JSON file size
-- [ ] Evaluate pinning vendored library versions (`marked.min.js`, `dompurify.min.js`) to a subresource integrity (SRI) hash in `index.html`
+- [x] Add file size validation in `handleOpenFile()` — 5 MB cap before `FileReader.readAsText()`
+- [x] Pin vendored libraries to SRI hashes in `index.html` (`marked.min.js`, `dompurify.min.js`)
 
 ## Features / UX
 
