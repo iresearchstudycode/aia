@@ -70,7 +70,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         if (accumulatedTranscript.trim()) {
           sendMessageAndContinueListening();
         }
-      }, 3000);
+      }, SILENCE_TIMEOUT_MS);
     }
   };
 

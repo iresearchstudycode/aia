@@ -96,7 +96,7 @@ async function streamOllamaResponse(userMessage, messageDiv) {
     });
 
     const tsElem = messageDiv.querySelector('.message-timestamp');
-    if (tsElem) tsElem.innerText = assistantTsFmt;
+    if (tsElem) tsElem.textContent = assistantTsFmt;
 
     if (document.getElementById('autoTTS').checked) {
       speakText(fullResponse);

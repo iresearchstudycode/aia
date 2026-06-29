@@ -26,11 +26,11 @@ document.addEventListener('DOMContentLoaded', function () {
   const charCounter = document.getElementById('charCounter');
   userInput.addEventListener('input', function () {
     const remaining = MAX_INPUT_LENGTH - this.value.length;
-    const show = remaining <= 500;
+    const show = remaining <= CHAR_COUNTER_SHOW_THRESHOLD;
     charCounter.textContent = show ? `${remaining}` : '';
     charCounter.classList.toggle('visible', show);
-    charCounter.classList.toggle('warning', remaining <= 200 && remaining > 50);
-    charCounter.classList.toggle('danger', remaining <= 50);
+    charCounter.classList.toggle('warning', remaining <= CHAR_COUNTER_WARNING_THRESHOLD && remaining > CHAR_COUNTER_DANGER_THRESHOLD);
+    charCounter.classList.toggle('danger', remaining <= CHAR_COUNTER_DANGER_THRESHOLD);
   });
 
   document.getElementById('sendBtn').addEventListener('click', sendMessage);

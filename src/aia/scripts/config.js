@@ -3,6 +3,11 @@ const MODEL_NAME = 'gemma4:e4b';
 const OLLAMA_API_URL = 'https://localhost/ollama/api/chat';
 const MAX_HISTORY_MESSAGES = 40; // 20 user/assistant exchanges
 const MAX_INPUT_LENGTH = 4000;
+const MAX_UPLOAD_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
+const SILENCE_TIMEOUT_MS = 3000;
+const CHAR_COUNTER_SHOW_THRESHOLD = 500;
+const CHAR_COUNTER_WARNING_THRESHOLD = 200;
+const CHAR_COUNTER_DANGER_THRESHOLD = 50;
 const SPEECH_RECOGNITION_LANG = 'en-US'; // BCP 47 tag — e.g. 'en-AU', 'fr-FR'
 
 // System prompts
