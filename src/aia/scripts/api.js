@@ -50,8 +50,15 @@ async function streamOllamaResponse(userMessage, messageDiv) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: MODEL_NAME, messages, stream: true }),
-      signal: streamAbortController.signal
+      signal: streamAbortController.signal,
+      redirect: 'manual'
     });
+
+    // An opaque redirect means nginx intercepted the request and redirected
+    // to /auth/login because the session has expired or the cookie is missing.
+    if (response.type === 'opaqueredirect') {
+      throw new Error('session-expired');
+    }
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -129,6 +136,8 @@ async function streamOllamaResponse(userMessage, messageDiv) {
       conversationHistory.pop();
       if (error.name === 'AbortError') {
         contentDiv.innerHTML = '<p class="status-muted">Response stopped.</p>';
+      } else if (error.message === 'session-expired') {
+        contentDiv.innerHTML = '<p class="status-error">Session expired — please <a href="/auth/login">sign in again</a>.</p>';
       } else if (error.message.includes('Failed to fetch')) {
         contentDiv.innerHTML = `<p class="status-error">Cannot reach Ollama — run: <code>ollama serve</code></p>`;
       } else {
