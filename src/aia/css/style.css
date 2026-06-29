@@ -509,6 +509,7 @@ body {
 
 /* Initially hidden dynamic controls — JS shows/hides via element.style.display */
 #speakerBtn,
-#stopBtn {
+#stopBtn,
+#openInput {
   display: none;
 }
