@@ -9,6 +9,7 @@
   <title>🤖 AI Assistant (Local)</title>
   <link rel="stylesheet" href="css/style.css">
 
+
   <script type="application/javascript" src="./scripts/marked.min.js"
     integrity="sha256-4Pc7cD47oE980D7DghoNwV643QQ3juFvHEx9nl+MuEw="></script>
   <script type="application/javascript" src="./scripts/dompurify.min.js"
@@ -16,86 +17,68 @@
   <script type="application/javascript" src="./scripts/config.js"></script>
   <script type="application/javascript" src="./scripts/utils.js"></script>
   <script type="application/javascript" src="./scripts/speech.js"></script>
-  <script type="application/javascript" src="./scripts/db.js"></script>
   <script type="application/javascript" src="./scripts/chat.js"></script>
-  <script type="application/javascript" src="./scripts/sidebar.js"></script>
   <script type="application/javascript" src="./scripts/api.js"></script>
   <script type="application/javascript" src="./scripts/main.js"></script>
 </head>
 
 <body>
-  <div class="app-layout">
-
-    <!-- Left sidebar -->
-    <aside class="sidebar">
-      <button id="newChatBtn" class="new-chat-btn">+ New Chat</button>
-      <div id="conversationList" class="sidebar-conversations"></div>
-      <div class="sidebar-footer">
-        <button id="exportBtn" class="sidebar-footer-btn">📤 Export Chat</button>
-        <button id="importBtn" class="sidebar-footer-btn">📥 Import Chat</button>
+  <div class="chat-container">
+    <div class="chat-header">
+      🤖 AI Assistant
+      <div class="header-actions">
+        <button id="saveBtn" class="save-chat">💾 Save</button>
+        <button id="openBtn" class="save-chat">📂 Open</button>
+        <button id="clearBtn" class="clear-chat">🗑️ Clear</button>
+        <button id="closeBtn" class="close-window">✖️ Close</button>
       </div>
-    </aside>
-
-    <!-- Main chat area -->
-    <main class="chat-main">
-      <div class="chat-container">
-
-        <div class="chat-header">
-          🤖 AI Assistant
-          <div class="header-actions">
-            <button id="closeBtn" class="close-window">✖ Close</button>
-          </div>
-        </div>
-
-        <div class="system-prompt-container">
-          <label for="systemPromptSelect">Persona:</label>
-          <select id="systemPromptSelect">
-            <option value="default">Default Assistant</option>
-            <option value="claudePromptCompressor">Claude Prompt Compressor</option>
-            <option value="auEnglishEditor" selected>Australian English Editor</option>
-            <option value="quickwrite">Quick Write</option>
-            <option value="helpful">Helpful & Concise</option>
-            <option value="transcriptai">Transcript-Based Assistant</option>
-            <option value="creative">Creative Writer</option>
-            <option value="technical">Technical Expert</option>
-            <option value="teacher">Patient Teacher</option>
-            <option value="casual">Casual Friend</option>
-            <option value="professional">Professional Consultant</option>
-            <option value="legal">Legal Assistant</option>
-            <option value="medical">Medical Expert</option>
-          </select>
-        </div>
-
-        <div class="chat-messages" id="chatMessages"></div>
-
-        <input type="file" id="openInput" accept="application/json,.json">
-
-        <div class="chat-input">
-          <div class="voice-controls">
-            <button class="voice-btn" id="micBtn"
-              title="Toggle Continuous Speech Recognition — say 'stop listening' or click to stop.">
-              🎤
-            </button>
-            <button class="voice-btn" id="speakerBtn" title="Stop Speaking">
-              🔇
-            </button>
-          </div>
-          <div class="input-wrapper">
-            <input type="text" placeholder="Type or use voice (say 'stop listening' to end)..." id="userInput">
-            <span id="charCounter" class="char-counter"></span>
-          </div>
-          <label class="tts-toggle">
-            <input type="checkbox" id="autoTTS">
-            Auto-speak
-          </label>
-          <button id="sendBtn">Send</button>
-          <button id="stopBtn">Stop</button>
-        </div>
-
+    </div>
+    <div class="system-prompt-container">
+      <label for="systemPromptSelect">System Prompt:</label>
+      <select id="systemPromptSelect">
+        <option value="default">Default Assistant</option>
+        <option value="claudePromptCompressor">Claude Prompt Compressor</option>
+        <option value="auEnglishEditor" selected>Australian English Editor</option>
+        <option value="quickwrite">Quick Write</option>
+        <option value="helpful">Helpful & Concise</option>
+        <option value="transcriptai">Transcript-Based Assistant</option>
+        <option value="creative">Creative Writer</option>
+        <option value="technical">Technical Expert</option>
+        <option value="teacher">Patient Teacher</option>
+        <option value="casual">Casual Friend</option>
+        <option value="professional">Professional Consultant</option>
+        <option value="legal">Legal Assistant</option>
+        <option value="medical">Medical Expert</option>
+      </select>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <!-- Chat messages will appear here -->
+    </div>
+    <input type="file" id="openInput" accept="application/json,.json">
+    <div class="chat-input">
+      <div class="voice-controls">
+        <button class="voice-btn" id="micBtn"
+          title="Toggle Continuous Speech Recognition - Pauses while AI speaks to avoid echo. Say 'stop listening' or click to stop.">
+          🎤
+        </button>
+        <button class="voice-btn" id="speakerBtn" title="Stop Speaking">
+          🔇
+        </button>
       </div>
-    </main>
-
+      <div class="input-wrapper">
+        <input type="text" placeholder="Type or use voice (say 'stop listening' to end)..." id="userInput">
+        <span id="charCounter" class="char-counter"></span>
+      </div>
+      <label class="tts-toggle">
+        <input type="checkbox" id="autoTTS">
+        Auto-speak responses
+      </label>
+      <button id="sendBtn">Send</button>
+      <button id="stopBtn">Stop</button>
+    </div>
   </div>
+
+
 </body>
 
 </html>

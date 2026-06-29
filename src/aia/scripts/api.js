@@ -98,19 +98,10 @@ async function streamOllamaResponse(userMessage, messageDiv) {
     const tsElem = messageDiv.querySelector('.message-timestamp');
     if (tsElem) tsElem.textContent = assistantTsFmt;
 
-    // Persist and re-render with delete buttons
-    try {
-      const personaKey = document.getElementById('systemPromptSelect').value;
-      if (currentConversationId) {
-        await dbUpdateConversation(currentConversationId, conversationHistory);
-      } else {
-        currentConversationId = await dbCreateConversation(
-          personaKey, getPersonaLabel(personaKey), conversationHistory
-        );
-      }
-      renderSidebar();
-      renderConversationHistory();
-    } catch (dbErr) { console.error('Failed to persist conversation:', dbErr); }
+    const copyBtn = messageDiv.querySelector('.copy-btn');
+    if (copyBtn) copyBtn.dataset.content = fullResponse;
+    const speakBtn = messageDiv.querySelector('.speak-btn');
+    if (speakBtn) speakBtn.dataset.content = fullResponse;
 
     if (document.getElementById('autoTTS').checked) {
       speakText(fullResponse);
@@ -119,6 +110,7 @@ async function streamOllamaResponse(userMessage, messageDiv) {
   } catch (error) {
     if (error.name === 'AbortError' && fullResponse) {
       // Partial content received before stop — save it so the conversation remains coherent.
+      // The user message is already in history; add the truncated assistant reply.
       conversationHistory.push({
         role: 'assistant',
         content: fullResponse,
@@ -132,18 +124,6 @@ async function streamOllamaResponse(userMessage, messageDiv) {
       if (copyBtn) copyBtn.dataset.content = fullResponse;
       const speakBtn = messageDiv.querySelector('.speak-btn');
       if (speakBtn) speakBtn.dataset.content = fullResponse;
-      // Persist partial response
-      try {
-        const personaKey = document.getElementById('systemPromptSelect').value;
-        if (currentConversationId) {
-          await dbUpdateConversation(currentConversationId, conversationHistory);
-        } else {
-          currentConversationId = await dbCreateConversation(
-            personaKey, getPersonaLabel(personaKey), conversationHistory
-          );
-        }
-        renderSidebar();
-      } catch (dbErr) { console.error('Failed to persist partial response:', dbErr); }
     } else {
       // Nothing useful generated — roll back the user message entirely.
       conversationHistory.pop();
