@@ -36,17 +36,17 @@ The application runs entirely locally on the user's machine with three main comp
 │                                             HTTP/REST   │  streaming       │
 │                                       host.docker.internal:11434           │
 │                                                         ▼                  │
-│                                         ┌───────────────────────────┐      │
-│                                         │       Ollama API          │      │
-│                                         │    localhost:11434        │      │
-│                                         └──────────────┬────────────┘      │
+│                                           ┌───────────────────────────┐    │
+│                                           │       Ollama API          │    │
+│                                           │    localhost:11434        │    │
+│                                           └──────────────┬────────────┘    │
 │                                                        │                   │
 │                                               internal │  inference        │
 │                                                        ▼                   │
-│                                         ┌───────────────────────────┐      │
-│                                         │     Local AI Models       │      │
-│                                         │  gemma4, llama, mistral…  │      │
-│                                         └───────────────────────────┘      │
+│                                           ┌───────────────────────────┐    │
+│                                           │     Local AI Models       │    │
+│                                           │  gemma4, llama, mistral…  │    │
+│                                           └───────────────────────────┘    │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
