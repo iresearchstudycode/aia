@@ -45,7 +45,18 @@ cd auth && pytest tests/ -v -k TestLogout
 cd auth && pytest tests/test_main.py::TestBruteForce::test_locks_at_threshold -v
 ```
 
-CI runs the same three steps automatically on every push and PR to `master` (`.github/workflows/ci.yml`).
+```bash
+# Frontend JS lint (ESLint — run from repo root)
+npm run lint:js
+
+# Frontend HTML lint (HTMLHint — validates src/aia/index.html)
+npm run lint:html
+```
+
+CI runs three jobs automatically on every push and PR to `master` (`.github/workflows/ci.yml`):
+- `auth-lint-test` — black + flake8 + pytest
+- `frontend-lint` — ESLint (`src/aia/scripts/*.js`) + HTMLHint (`src/aia/index.html`)
+- `nginx-config-check` — generates dummy TLS certs, mounts `nginx.conf` into `nginx:1-alpine`, runs `nginx -t`
 
 ## Architecture
 
@@ -84,7 +95,7 @@ Scripts are loaded in dependency order in `index.html`:
 | `marked.min.js` | Markdown parser (vendored, third-party) |
 | `dompurify.min.js` | HTML sanitizer (vendored, v3.4.11) — applied at every AI content → innerHTML boundary |
 | `config.js` | `MODEL_NAME`, `OLLAMA_API_URL`, the 13 system prompt objects, and global mutable state (`conversationHistory[]`, `currentSystemPrompt`) |
-| `utils.js` | `formatTimestamp()`, `escapeHtml()` — pure helpers |
+| `utils.js` | `formatTimestamp()`, `escapeHtml()`, `showToast()` — pure helpers |
 | `speech.js` | Web Speech API: continuous recognition with 3-second silence detection, TTS with voice preference ("Microsoft Catherine") |
 | `chat.js` | Message rendering, chat save/load, system prompt state management |
 | `api.js` | `streamOllamaResponse()` — streaming fetch, real-time markdown rendering, abort via `streamAbortController` |
@@ -141,6 +152,8 @@ The proxy in [deploy/nginx/nginx.conf](deploy/nginx/nginx.conf) uses an **exact-
 Security headers set on every response: `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy` (no `unsafe-inline`), `Referrer-Policy: no-referrer`, `Permissions-Policy`.
 
 If Ollama changes port or the model changes, update `deploy/nginx/nginx.conf` and `config.js` respectively, then restart the container.
+
+Changes to `nginx.conf` are syntax-validated in CI via the `nginx-config-check` job (`nginx -t` inside `nginx:1-alpine`). To validate locally without Docker, reload the running container: `docker exec vpal-nginx /usr/sbin/nginx -s reload`.
 
 ## SSL Certificates
 

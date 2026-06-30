@@ -198,6 +198,7 @@ vpal/
 │       └── localhost-key.pem
 ├── .env                            # Runtime secrets — gitignored, never commit
 ├── .env.example                    # Template for .env
+├── .htmlhintrc                     # HTMLHint rules for index.html linting
 ├── docker-compose.yml
 └── README.md
 ```
@@ -258,9 +259,9 @@ All auth settings live in `.env`:
 - **Real-time Streaming**: Live AI response streaming with stop control
 - **Multiple Personas**: 13 pre-configured AI personalities
 - **Per-message Actions**: Copy to clipboard and speak buttons appear on successful AI responses only
-- **Chat History**: Save/load conversation history as JSON
+- **Chat History**: Save/load conversation history as JSON; saved files use the format `YYYYMMDD-HHMMss-vpal-<Topic>.json` where `<Topic>` is a 2–3 word summary derived from the first user message
 - **Character Counter**: Remaining character count shown as you approach the 4,000-character limit
-- **Auto-Speak Persistence**: Auto-speak preference saved across browser sessions
+- **Auto-Speak**: 🔊 toolbar icon toggles automatic text-to-speech after each AI response; preference saved across browser sessions via `localStorage`
 - **Markdown Support**: Rich text formatting in AI responses
 
 ## 🔍 System Requirements
