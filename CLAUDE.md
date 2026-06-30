@@ -25,12 +25,39 @@ docker inspect --format='{{.State.Health.Status}}' vpal-nginx
 **Prerequisites:**
 - Docker Desktop running
 - Ollama running on the Windows host at `localhost:11434` with the `gemma4:e4b` model pulled
+- `.env` file in the project root with `SECRET_KEY`, `USER_1`, `TOTP_SECRET_1` (see `auth/main.py` for all supported vars)
+
+## Testing
+
+The auth service has a pytest suite. Run it from the `auth/` directory — `conftest.py` sets the required env vars and adjusts `sys.path` automatically.
+
+```bash
+# Install test dependencies (one-time)
+pip install -r auth/requirements.txt -r auth/requirements-test.txt
+
+# Run the full quality gate (mirrors CI exactly)
+black auth/main.py auth/tests/ --check --line-length=99
+flake8 auth/main.py auth/tests/ --max-line-length=99
+cd auth && pytest tests/ -v
+
+# Run a single test class or test
+cd auth && pytest tests/ -v -k TestLogout
+cd auth && pytest tests/test_main.py::TestBruteForce::test_locks_at_threshold -v
+```
+
+CI runs the same three steps automatically on every push and PR to `master` (`.github/workflows/ci.yml`).
 
 ## Architecture
 
 ```
 Browser → HTTPS (port 443) / HTTP (port 80 → redirects to HTTPS)
        → Nginx (Docker, cgr.dev/chainguard/nginx, uid=65532)
+           ├── /auth/* → FastAPI auth service (cgr.dev/chainguard/python, uid=65532)
+           │              POST /auth/login  — validates username + TOTP code, issues session cookie
+           │              POST /auth/logout — CSRF-verified, clears session
+           │              GET  /auth/verify — sub-request endpoint called by auth_request
+           │              GET  /auth/setup  — one-time QR setup (requires SETUP_TOKEN env var)
+           ├── auth_request /auth/verify (session gate applied to all routes below)
            ├── GET/HEAD /* → serves static files from src/aia/
            └── POST /ollama/api/chat (exact match) → reverse proxy → host.docker.internal:11434/api/chat
 ```
@@ -83,6 +110,28 @@ All runtime configuration is in [src/aia/scripts/config.js](src/aia/scripts/conf
 - System prompts object — keys map to `<option value>` in the persona selector dropdown
 
 To add a new persona: add a key to the system prompts object in `config.js` and a matching `<option>` in the `#systemPromptSelect` dropdown in `index.html`. The default selected persona is controlled by the `selected` attribute in `index.html` — `main.js` reads it on load and sets `currentSystemPrompt` accordingly.
+
+## Auth Service
+
+The FastAPI authentication service lives in `auth/`. Key files:
+
+| File | Purpose |
+|---|---|
+| `auth/main.py` | All route handlers, TOTP logic, session/CSRF helpers |
+| `auth/Dockerfile` | Multi-stage Chainguard build (digest-pinned) |
+| `auth/requirements.txt` | Production dependencies |
+| `auth/requirements-test.txt` | Test dependencies (`pytest`, `httpx2`, `flake8`, `black`) |
+| `auth/tests/test_main.py` | 57 pytest tests covering all routes and security logic |
+| `auth/static/login.css` | Login page stylesheet |
+
+**Updating Chainguard base image digests** — the `FROM` lines in `auth/Dockerfile` are pinned to SHA256 digests. To update them after Chainguard releases a new image:
+
+```powershell
+docker pull cgr.dev/chainguard/python:latest-dev
+docker pull cgr.dev/chainguard/python:latest
+# Copy the "Digest: sha256:..." lines from the output and update both FROM lines in auth/Dockerfile.
+# Then rebuild: docker-compose build auth
+```
 
 ## Nginx Proxy
 
