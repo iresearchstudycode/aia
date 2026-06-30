@@ -233,9 +233,39 @@ function saveChat() {
   const a = document.createElement('a');
   a.href = url;
 
-  // Generate filename with ISO timestamp
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-  a.download = `ollama-chat-${timestamp}.json`;
+  // Generate filename: YYYYMMDD-HHMMss-ollama-chat-<Topic>
+  // Topic: first 2-3 meaningful words from the opening user message.
+  function _chatTopic() {
+    const stopwords = new Set([
+      'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+      'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+      'should', 'may', 'might', 'shall', 'can', 'to', 'of', 'in', 'on',
+      'at', 'by', 'for', 'with', 'about', 'from', 'and', 'but', 'or', 'nor',
+      'so', 'yet', 'i', 'me', 'my', 'we', 'our', 'you', 'your', 'it', 'its',
+      'this', 'that', 'what', 'which', 'who', 'how', 'when', 'where', 'why',
+      'not', 'no', 'if', 'as', 'just', 'please', 'help', 'tell', 'make',
+      'write', 'explain', 'give', 'show', 'get', 'use', 'need', 'want',
+    ]);
+    const firstUser = conversationHistory.find(m => m.role === 'user');
+    if (!firstUser) return 'Chat';
+    const words = firstUser.content
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !stopwords.has(w));
+    const topic = words.slice(0, 3)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join('-');
+    return topic || 'Chat';
+  }
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mo = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mi = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  a.download = `${yyyy}${mo}${dd}-${hh}${mi}${ss}-ollama-chat-${_chatTopic()}.json`;
 
   document.body.appendChild(a);
   a.click();
