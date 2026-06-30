@@ -68,6 +68,11 @@ body {
   box-shadow: none;
 }
 
+.persona-toggle-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
 .current-persona-label {
   font-size: 13px;
   font-weight: 400;
@@ -453,6 +458,11 @@ body {
   transform: scale(0.95);
 }
 
+.voice-btn:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
+}
+
 .voice-btn.recording {
   background: #fed7d7;
   border-color: #e53e3e;
@@ -564,6 +574,11 @@ body {
   color: #374151;
 }
 
+.action-btn:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
+}
+
 .action-btn svg {
   width: 15px;
   height: 15px;
@@ -612,6 +627,11 @@ body {
   border-color: rgba(255, 255, 255, 0.8);
 }
 
+.profile-trigger:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
 /* Dropdown panel — position: fixed so it escapes the container's overflow: hidden */
 .profile-dropdown {
   display: none;
@@ -650,6 +670,12 @@ body {
   color: #667eea;
   transform: none;
   box-shadow: none;
+}
+
+.profile-dropdown button:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: -2px;
+  background: #f0f4ff;
 }
 
 .profile-dropdown form {
@@ -719,6 +745,11 @@ body {
   cursor: not-allowed;
 }
 
+.send-btn:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
+}
+
 .send-btn svg {
   width: 15px;
   height: 15px;
@@ -744,6 +775,11 @@ body {
 
 .stop-streaming-btn:hover {
   background: #2d3748;
+}
+
+.stop-streaming-btn:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
 }
 
 .stop-streaming-btn svg {

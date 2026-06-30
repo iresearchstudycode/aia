@@ -6,5 +6,6 @@
   "doctype-first": true,
   "id-unique": true,
   "src-not-empty": true,
-  "title-require": true
+  "title-require": true,
+  "tag-pair": true
 }

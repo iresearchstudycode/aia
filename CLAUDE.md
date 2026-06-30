@@ -56,7 +56,7 @@ npm run lint:html
 CI runs three jobs automatically on every push and PR to `master` (`.github/workflows/ci.yml`):
 - `auth-lint-test` — black + flake8 + pytest
 - `frontend-lint` — ESLint (`src/aia/scripts/*.js`) + HTMLHint (`src/aia/index.html`)
-- `nginx-config-check` — generates dummy TLS certs, mounts `nginx.conf` into `nginx:1-alpine`, runs `nginx -t`
+- `nginx-config-check` — generates dummy TLS certs, mounts `nginx.conf` into `nginx:1.27-alpine`, runs `nginx -t`
 
 ## Architecture
 
@@ -97,7 +97,7 @@ Scripts are loaded in dependency order in `index.html`:
 | `config.js` | `MODEL_NAME`, `OLLAMA_API_URL`, the 13 system prompt objects, and global mutable state (`conversationHistory[]`, `currentSystemPrompt`) |
 | `utils.js` | `formatTimestamp()`, `escapeHtml()`, `showToast()` — pure helpers |
 | `speech.js` | Web Speech API: continuous recognition with 3-second silence detection, TTS with voice preference ("Microsoft Catherine") |
-| `chat.js` | Message rendering, chat save/load, system prompt state management |
+| `chat.js` | Message rendering, chat save/load, system prompt state management; also defines `COPY_ICON`, `CHECK_ICON`, `SPEAK_ICON`, `STOP_ICON` as top-level SVG string constants — `speech.js` reads `SPEAK_ICON`/`STOP_ICON` to toggle per-message button state; all four are declared in `eslint.config.js` crossModuleGlobals |
 | `api.js` | `streamOllamaResponse()` — streaming fetch, real-time markdown rendering, abort via `streamAbortController` |
 | `main.js` | `DOMContentLoaded` wiring — wires ALL button/input event listeners via `addEventListener` (no inline HTML handlers); initialises default persona from the HTML `selected` attribute |
 

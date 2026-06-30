@@ -57,6 +57,23 @@
 - [x] User input upgraded to auto-growing `<textarea>` — expands up to 200 px as content grows; Shift+Enter inserts a newline, Enter sends; placeholder text communicates the Shift+Enter convention; voice dictation dispatches `input` events so the textarea resizes for speech too
 - [x] `aria-pressed` on `micBtn` — updated in all five code paths that change recording state across `speech.js` and `chat.js`; initial `aria-pressed="false"` set in HTML
 - [x] `saveChat` success toast — brief "Chat saved" notification shown after download via `showToast()` in `utils.js` (reuses existing `.toast` CSS class)
+- [x] Save filename format changed to `YYYYMMDD-HHMMss-vpal-<Topic>.json` — `_chatTopic()` helper in `saveChat()` strips punctuation, filters ~45 English stopwords, takes the first 2–3 meaningful words from the opening user message, title-cases them, and joins with hyphens; falls back to `'Chat'` when no qualifying words are found
+- [x] Copy and Speak action buttons redesigned to ChatGPT-style icon-only toggles — SVG icons (`COPY_ICON`, `CHECK_ICON`, `SPEAK_ICON`, `STOP_ICON`) defined as top-level constants in `chat.js`; `SPEAK_ICON`/`STOP_ICON` shared with `speech.js` for per-message button state updates; `.action-btn` base class with `.copy-btn`/`.speak-btn` secondary classes preserve `api.js` querySelector compatibility; all four icons declared in `eslint.config.js` crossModuleGlobals
+- [x] `type="button"` added to all non-submit buttons in `index.html` — prevents implicit `type="submit"` default on toolbar, send, stop, and dropdown menu buttons
+- [x] `:focus-visible` outlines added to all interactive controls — `.action-btn`, `.voice-btn`, `.toolbar-icon-btn`, `.send-btn`, `.stop-streaming-btn`, `.persona-toggle-btn`, `.profile-trigger`, and `.profile-dropdown button` now show keyboard focus indicators (white outline on dark header, purple on light backgrounds)
+- [x] Version bumped to 1.5.2
+- [x] `#chatMessages` annotated with `role="log"`, `aria-label="Chat messages"`, and explicit `aria-live="polite"` — screen readers now identify the chat transcript and announce new messages as they arrive
+- [x] `#userInput` textarea given `aria-label="Message"` — replaces placeholder-only labelling, which is not a substitute for an accessible label
+- [x] HTMLHint `tag-pair` rule enabled in `.htmlhintrc` — passes cleanly (SVG self-closing elements do not trigger false positives); now catches unclosed HTML structural tags
+- [x] CI `nginx-config-check` job pinned from `nginx:1-alpine` to `nginx:1.27-alpine` — eliminates silent breakage risk from a future 1.x minor-version config-syntax change
+- [x] `showToast` timer moved from DOM node property (`toast._timer`) to module-level variable (`_toastTimer`) in `utils.js`
+- [x] Version bumped to 1.5.3
+- [x] `role="menu"` and `role="menuitem"` removed from profile dropdown — the ARIA menu role requires arrow-key navigation and forbids intermediate `<form>` wrappers; plain buttons are semantically correct and keyboard-navigable via Tab
+- [x] `#systemPromptSelect` given `aria-labelledby="personaPanelHeader"` — programmatically associates the "Persona" heading with the select element; `id="personaPanelHeader"` added to the heading div
+- [x] Persona panel focus management — `openPersonaPanel()` moves focus to the select when it is not disabled; `closePersonaPanel()` returns focus to `personaToggleBtn` when the active element is inside the panel at close time
+- [x] CLAUDE.md CI section updated from `nginx:1-alpine` to `nginx:1.27-alpine` to match the actual CI job
+- [x] `.github/dependabot.yml` added — monthly Dependabot updates for both `npm` devDependencies and GitHub Actions workflow steps
+- [x] Version bumped to 1.5.4
 
 ## Known Limitations (Accepted Trade-offs)
 

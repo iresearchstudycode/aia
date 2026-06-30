@@ -25,6 +25,8 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+var _toastTimer = null;
+
 function showToast(message, durationMs) {
   var toast = document.getElementById('toast');
   if (!toast) {
@@ -35,6 +37,6 @@ function showToast(message, durationMs) {
   }
   toast.textContent = message;
   toast.classList.add('show');
-  clearTimeout(toast._timer);
-  toast._timer = setTimeout(function () { toast.classList.remove('show'); }, durationMs || 2000);
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function () { toast.classList.remove('show'); }, durationMs || 2000);
 }

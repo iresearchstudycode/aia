@@ -28,49 +28,49 @@
       <div class="header-title">
         <div class="title-main">
           🤖 AI Assistant
-          <button id="personaToggleBtn" class="persona-toggle-btn" aria-haspopup="true" aria-expanded="false"
+          <button type="button" id="personaToggleBtn" class="persona-toggle-btn" aria-haspopup="true" aria-expanded="false"
             title="Choose persona">▾</button>
         </div>
         <div id="currentPersonaLabel" class="current-persona-label"></div>
       </div>
       <div class="header-actions">
         <div class="profile-menu" id="profileMenu">
-          <button class="profile-trigger" id="profileTrigger" aria-haspopup="true" aria-expanded="false">
+          <button type="button" class="profile-trigger" id="profileTrigger" aria-haspopup="true" aria-expanded="false">
             👤 <span id="profileName"></span>
           </button>
-          <div class="profile-dropdown" id="profileDropdown" role="menu">
-            <button id="saveBtn" role="menuitem">💾 Save</button>
-            <button id="openBtn" role="menuitem">📂 Open</button>
-            <button id="clearBtn" role="menuitem">🗑️ Clear</button>
-            <button id="closeBtn" role="menuitem">✖️ Close</button>
+          <div class="profile-dropdown" id="profileDropdown">
+            <button type="button" id="saveBtn">💾 Save</button>
+            <button type="button" id="openBtn">📂 Open</button>
+            <button type="button" id="clearBtn">🗑️ Clear</button>
+            <button type="button" id="closeBtn">✖️ Close</button>
             <hr class="dropdown-divider">
             <form id="logoutForm" method="post" action="/auth/logout">
-              <button type="submit" role="menuitem">🔒 Sign out</button>
+              <button type="submit">🔒 Sign out</button>
             </form>
           </div>
         </div>
       </div>
     </div>
-    <div class="chat-messages" id="chatMessages">
+    <div class="chat-messages" id="chatMessages" role="log" aria-label="Chat messages" aria-live="polite">
       <!-- Chat messages will appear here -->
     </div>
     <input type="file" id="openInput" accept="application/json,.json">
     <div class="chat-input">
       <div class="chat-input-container">
-        <textarea id="userInput" rows="1" placeholder="Message AI Assistant — Shift+Enter for new line..."></textarea>
+        <textarea id="userInput" rows="1" aria-label="Message" placeholder="Message AI Assistant — Shift+Enter for new line..."></textarea>
         <div class="chat-input-toolbar">
           <div class="toolbar-left">
-            <button class="voice-btn toolbar-icon-btn" id="micBtn"
+            <button type="button" class="voice-btn toolbar-icon-btn" id="micBtn"
               aria-label="Toggle voice input"
               aria-pressed="false"
               title="Toggle Continuous Speech Recognition - Pauses while AI speaks to avoid echo. Say 'stop listening' or click to stop.">
               🎤
             </button>
-            <button class="voice-btn toolbar-icon-btn" id="speakerBtn"
+            <button type="button" class="voice-btn toolbar-icon-btn" id="speakerBtn"
               aria-label="Stop speaking" title="Stop Speaking">
               🔇
             </button>
-            <button class="voice-btn toolbar-icon-btn" id="autoTTSBtn"
+            <button type="button" class="voice-btn toolbar-icon-btn" id="autoTTSBtn"
               aria-label="Toggle auto-speak"
               aria-pressed="false"
               title="Toggle Auto-speak — automatically reads AI responses aloud after each message">
@@ -79,13 +79,13 @@
           </div>
           <div class="toolbar-right">
             <span id="charCounter" class="char-counter"></span>
-            <button class="send-btn" id="sendBtn" title="Send message" aria-label="Send message" disabled>
+            <button type="button" class="send-btn" id="sendBtn" title="Send message" aria-label="Send message" disabled>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 19V5M5 12l7-7 7 7" />
               </svg>
             </button>
-            <button class="stop-streaming-btn" id="stopBtn" title="Stop response" aria-label="Stop response">
+            <button type="button" class="stop-streaming-btn" id="stopBtn" title="Stop response" aria-label="Stop response">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                 <rect x="5" y="5" width="14" height="14" rx="2" />
               </svg>
@@ -98,9 +98,9 @@
 
   <!-- Persona panel — position:fixed, outside .chat-container to escape overflow:hidden -->
   <div id="personaPanel" class="persona-panel">
-    <div class="persona-panel-header">Persona</div>
+    <div class="persona-panel-header" id="personaPanelHeader">Persona</div>
     <div id="personaPanelNotice" class="persona-panel-notice">Clear the conversation to switch persona</div>
-    <select id="systemPromptSelect">
+    <select id="systemPromptSelect" aria-labelledby="personaPanelHeader">
       <option value="auEnglishEditor" selected>Australian English Editor</option>
       <option value="casual">Casual Friend</option>
       <option value="claudePromptCompressor">Claude Prompt Compressor</option>

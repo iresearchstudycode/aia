@@ -243,7 +243,7 @@ function saveChat() {
   const a = document.createElement('a');
   a.href = url;
 
-  // Generate filename: YYYYMMDD-HHMMss-ollama-chat-<Topic>
+  // Generate filename: YYYYMMDD-HHMMss-vpal-<Topic>
   // Topic: first 2-3 meaningful words from the opening user message.
   function _chatTopic() {
     const stopwords = new Set([

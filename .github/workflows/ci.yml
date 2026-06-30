@@ -76,4 +76,4 @@ jobs:
             -v "${{ github.workspace }}/deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
             -v "${{ github.workspace }}/deploy/certs/localhost.pem:/etc/nginx/ssl/localhost.pem:ro" \
             -v "${{ github.workspace }}/deploy/certs/localhost-key.pem:/etc/nginx/ssl/localhost-key.pem:ro" \
-            nginx:1-alpine nginx -t
+            nginx:1.27-alpine nginx -t

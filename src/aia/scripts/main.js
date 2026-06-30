@@ -54,9 +54,14 @@ document.addEventListener('DOMContentLoaded', function () {
     personaPanel.style.left = rect.left + 'px';
     personaPanel.classList.add('open');
     personaToggleBtn.setAttribute('aria-expanded', 'true');
+    var sel = document.getElementById('systemPromptSelect');
+    if (!sel.disabled) sel.focus();
   }
 
   function closePersonaPanel() {
+    if (personaPanel.contains(document.activeElement)) {
+      personaToggleBtn.focus();
+    }
     personaPanel.classList.remove('open');
     personaToggleBtn.setAttribute('aria-expanded', 'false');
   }
