@@ -1,11 +1,20 @@
 // chat.js - Chat message handling functions
 
+// SVG icons for action buttons — defined here so speech.js can reference them
+// when toggling the speak button between idle and active states.
+const COPY_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const CHECK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const SPEAK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
+const STOP_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>';
+
 function createSpeakButton(content) {
   if (!('speechSynthesis' in window)) return null;
   const btn = document.createElement('button');
-  btn.className = 'speak-btn';
+  btn.className = 'action-btn speak-btn';
   btn.title = 'Speak this response';
-  btn.textContent = '🔊 Speak';
+  btn.setAttribute('aria-label', 'Speak this response');
+  btn.setAttribute('aria-pressed', 'false');
+  btn.innerHTML = SPEAK_ICON;
   if (content) btn.dataset.content = content;
   btn.addEventListener('click', () => toggleMessageSpeak(btn));
   return btn;
@@ -22,9 +31,10 @@ function toggleMessageSpeak(button) {
 
 function createCopyButton(content) {
   const btn = document.createElement('button');
-  btn.className = 'copy-btn';
+  btn.className = 'action-btn copy-btn';
   btn.title = 'Copy response to clipboard';
-  btn.textContent = '📋 Copy';
+  btn.setAttribute('aria-label', 'Copy response to clipboard');
+  btn.innerHTML = COPY_ICON;
   if (content) btn.dataset.content = content;
   btn.addEventListener('click', () => copyMessageToClipboard(btn));
   return btn;
@@ -34,10 +44,10 @@ function copyMessageToClipboard(button) {
   const content = button.dataset.content;
   if (!content) return;
   navigator.clipboard.writeText(content).then(() => {
-    button.textContent = '✓ Copied!';
+    button.innerHTML = CHECK_ICON;
     button.classList.add('copied');
     setTimeout(() => {
-      button.textContent = '📋 Copy';
+      button.innerHTML = COPY_ICON;
       button.classList.remove('copied');
     }, 2000);
   }).catch(() => {

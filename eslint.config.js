@@ -34,7 +34,12 @@ const crossModuleGlobals = {
   silenceTimer: 'writable',
   accumulatedTranscript: 'writable',
   isSpeaking: 'writable',
-  // chat.js
+  // chat.js — SVG icon strings referenced by speech.js button state updates
+  COPY_ICON: 'readonly',
+  CHECK_ICON: 'readonly',
+  SPEAK_ICON: 'readonly',
+  STOP_ICON: 'readonly',
+  // chat.js — functions
   updateSystemPromptState: 'readonly',
   addUserMessage: 'readonly',
   addAIMessagePlaceholder: 'readonly',

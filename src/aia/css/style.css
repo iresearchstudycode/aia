@@ -536,39 +536,47 @@ body {
   border-bottom: 1px dashed #ccc;
 }
 
-/* Copy-to-clipboard button beneath AI responses */
+/* Copy and Speak action buttons beneath AI responses — ChatGPT-style icon-only */
 .message-actions {
-  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 4px;
 }
 
-.copy-btn,
-.speak-btn {
-  padding: 3px 10px;
+.action-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
   background: transparent;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #718096;
+  border: none;
+  border-radius: 6px;
+  color: #9ca3af;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
 }
 
-.copy-btn:hover,
-.speak-btn:hover {
-  background: #f7fafc;
-  border-color: #667eea;
-  color: #667eea;
+.action-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #374151;
+}
+
+.action-btn svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
 }
 
 .copy-btn.copied {
-  color: #48bb78;
-  border-color: #48bb78;
+  color: #10b981;
 }
 
 .speak-btn.speaking {
   color: #764ba2;
-  border-color: #764ba2;
-  background: #f7f0ff;
+  background: rgba(118, 75, 162, 0.08);
 }
 
 /* Initially hidden dynamic controls — JS shows/hides via element.style.display */

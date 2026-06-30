@@ -14,7 +14,10 @@ let activeSpeakBtn = null;
 
 function resetActiveSpeakBtn() {
   if (activeSpeakBtn) {
-    activeSpeakBtn.textContent = '🔊 Speak';
+    activeSpeakBtn.innerHTML = SPEAK_ICON;
+    activeSpeakBtn.title = 'Speak this response';
+    activeSpeakBtn.setAttribute('aria-label', 'Speak this response');
+    activeSpeakBtn.setAttribute('aria-pressed', 'false');
     activeSpeakBtn.classList.remove('speaking');
     activeSpeakBtn = null;
   }
@@ -188,7 +191,10 @@ function speakText(text, sourceBtn) {
   // Wire the per-message button that triggered this call
   activeSpeakBtn = sourceBtn || null;
   if (activeSpeakBtn) {
-    activeSpeakBtn.textContent = '⏹ Stop';
+    activeSpeakBtn.innerHTML = STOP_ICON;
+    activeSpeakBtn.title = 'Stop speaking';
+    activeSpeakBtn.setAttribute('aria-label', 'Stop speaking');
+    activeSpeakBtn.setAttribute('aria-pressed', 'true');
     activeSpeakBtn.classList.add('speaking');
   }
 
