@@ -153,7 +153,7 @@ TOTP_SECRET_1=<base32 secret>
 1. Visit `https://localhost/` — unauthenticated requests redirect to `/auth/login`.
 2. Enter your username and the current 6-digit code from Google Authenticator.
 3. On success, a signed session cookie is set (8-hour TTL by default).
-4. Click **🔒 Sign out** in the header to end the session.
+4. Click the 👤 profile menu in the header, then **🔒 Sign out** to end the session.
 
 ### Setup page security
 
@@ -171,7 +171,7 @@ vpal/
 │   ├── pytest.ini
 │   ├── tests/
 │   │   ├── conftest.py             # Env setup, shared fixtures
-│   │   └── test_main.py            # 57 pytest tests
+│   │   └── test_main.py            # 65 pytest tests
 │   └── static/
 │       └── login.css               # Login page styles
 ├── src/
@@ -251,10 +251,13 @@ All auth settings live in `.env`:
 ## 🎯 Features
 
 - **TOTP Authentication**: Google Authenticator login for up to five users
+- **Profile Menu**: 👤 header widget displays the logged-in username; dropdown contains Save, Open, Clear, Close, and Sign out
+- **Persona Selector**: ▾ button next to the heading opens a panel to switch AI personas; selected persona shown as a subtitle beneath the heading
+- **Chat Input**: Auto-growing textarea (up to 6 lines); Enter sends, Shift+Enter inserts a newline; circular send button activates only when text is present and reverts to grey when empty
 - **Voice Input/Output**: Continuous speech recognition and text-to-speech synthesis
 - **Real-time Streaming**: Live AI response streaming with stop control
 - **Multiple Personas**: 13 pre-configured AI personalities
-- **Per-message Actions**: Copy to clipboard and speak buttons on every AI response
+- **Per-message Actions**: Copy to clipboard and speak buttons appear on successful AI responses only
 - **Chat History**: Save/load conversation history as JSON
 - **Character Counter**: Remaining character count shown as you approach the 4,000-character limit
 - **Auto-Speak Persistence**: Auto-speak preference saved across browser sessions

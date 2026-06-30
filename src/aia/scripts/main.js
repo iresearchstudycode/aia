@@ -18,6 +18,110 @@ document.addEventListener('DOMContentLoaded', function () {
     logoutForm.appendChild(csrfInput);
   }
 
+  // Profile widget: try the vpal_user cookie first (set on fresh logins),
+  // fall back to /auth/me for existing sessions that pre-date the cookie.
+  function _applyProfileName(name) {
+    document.getElementById('profileName').textContent = name
+      .split(' ')
+      .map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); })
+      .join(' ');
+  }
+  var rawUsername = _getCookie('vpal_user');
+  if (rawUsername) {
+    _applyProfileName(rawUsername);
+  } else {
+    fetch('/auth/me')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { if (data && data.username) _applyProfileName(data.username); })
+      .catch(function () {});
+  }
+
+  // Persona panel — shows #systemPromptSelect in a fixed overlay below the ▾ button.
+  // _applyCurrentPersonaLabel() reads the selected option text and writes it under
+  // the "AI Assistant" heading; called on init and after every selection change.
+  function _applyCurrentPersonaLabel() {
+    var sel = document.getElementById('systemPromptSelect');
+    document.getElementById('currentPersonaLabel').textContent =
+      sel.options[sel.selectedIndex].text;
+  }
+
+  var personaToggleBtn = document.getElementById('personaToggleBtn');
+  var personaPanel = document.getElementById('personaPanel');
+
+  function openPersonaPanel() {
+    var rect = personaToggleBtn.getBoundingClientRect();
+    personaPanel.style.top = (rect.bottom + 8) + 'px';
+    personaPanel.style.left = rect.left + 'px';
+    personaPanel.classList.add('open');
+    personaToggleBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  function closePersonaPanel() {
+    personaPanel.classList.remove('open');
+    personaToggleBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  personaToggleBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    personaPanel.classList.contains('open') ? closePersonaPanel() : openPersonaPanel();
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!personaPanel.contains(e.target)) closePersonaPanel();
+  });
+
+  // Initialise the label from the HTML selected attribute.
+  _applyCurrentPersonaLabel();
+
+  // Profile dropdown toggle — uses position:fixed positioned via JS so the
+  // dropdown escapes the chat-container's overflow:hidden boundary.
+  const profileTrigger = document.getElementById('profileTrigger');
+  const profileDropdown = document.getElementById('profileDropdown');
+  const profileMenu = document.getElementById('profileMenu');
+
+  function openProfileDropdown() {
+    const rect = profileTrigger.getBoundingClientRect();
+    profileDropdown.style.top = (rect.bottom + 8) + 'px';
+    profileDropdown.style.right = (window.innerWidth - rect.right) + 'px';
+    profileDropdown.classList.add('open');
+    profileTrigger.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeProfileDropdown() {
+    profileDropdown.classList.remove('open');
+    profileTrigger.setAttribute('aria-expanded', 'false');
+  }
+
+  profileTrigger.addEventListener('click', function (e) {
+    e.stopPropagation();
+    profileDropdown.classList.contains('open') ? closeProfileDropdown() : openProfileDropdown();
+  });
+
+  // Close when clicking outside the menu.
+  document.addEventListener('click', function (e) {
+    if (!profileMenu.contains(e.target)) closeProfileDropdown();
+  });
+
+  // Close both panels on Escape.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      closeProfileDropdown();
+      closePersonaPanel();
+    }
+  });
+
+  // Close open panels on resize — their fixed positions were calculated at open
+  // time and become stale as soon as the viewport dimensions change.
+  window.addEventListener('resize', function () {
+    if (personaPanel.classList.contains('open')) closePersonaPanel();
+    if (profileDropdown.classList.contains('open')) closeProfileDropdown();
+  });
+
+  // Close the dropdown after each menu-item action (before any confirm dialogs).
+  ['saveBtn', 'openBtn', 'clearBtn', 'closeBtn'].forEach(function (id) {
+    document.getElementById(id).addEventListener('click', closeProfileDropdown);
+  });
+
   loadVoices();
 
   // Sync JS state with whichever option is marked selected in the HTML
@@ -35,13 +139,20 @@ document.addEventListener('DOMContentLoaded', function () {
   // Chat input
   const userInput = document.getElementById('userInput');
   userInput.maxLength = MAX_INPUT_LENGTH;
-  userInput.addEventListener('keypress', function (e) {
-    if (e.key === 'Enter') sendMessage();
+  // Enter sends; Shift+Enter inserts a newline (textarea default behaviour).
+  userInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   });
 
   // Character counter — appears below 500 chars remaining, warns at 200, danger at 50
   const charCounter = document.getElementById('charCounter');
   userInput.addEventListener('input', function () {
+    this.style.height = 'auto';
+    this.style.height = this.scrollHeight + 'px';
+    document.getElementById('sendBtn').disabled = this.value.trim().length === 0;
     const remaining = MAX_INPUT_LENGTH - this.value.length;
     const show = remaining <= CHAR_COUNTER_SHOW_THRESHOLD;
     charCounter.textContent = show ? `${remaining}` : '';
@@ -53,14 +164,19 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('sendBtn').addEventListener('click', sendMessage);
   document.getElementById('stopBtn').addEventListener('click', stopStreaming);
 
-  // Header controls
+  // Header controls (now inside the profile dropdown)
   document.getElementById('saveBtn').addEventListener('click', saveChat);
   document.getElementById('openBtn').addEventListener('click', openChat);
   document.getElementById('clearBtn').addEventListener('click', clearChat);
   document.getElementById('closeBtn').addEventListener('click', closeWindow);
 
-  // System prompt selector
+  // Persona selector: run existing logic first (may revert selection on cancel),
+  // then update the header label and close the panel with the final value.
   document.getElementById('systemPromptSelect').addEventListener('change', updateSystemPrompt);
+  document.getElementById('systemPromptSelect').addEventListener('change', function () {
+    _applyCurrentPersonaLabel();
+    closePersonaPanel();
+  });
 
   // Voice controls
   document.getElementById('micBtn').addEventListener('click', toggleSpeechRecognition);

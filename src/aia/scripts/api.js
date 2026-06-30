@@ -7,8 +7,13 @@ function stopStreaming() {
 }
 
 function setStreamingUI(isStreaming) {
-  document.getElementById('sendBtn').disabled = isStreaming;
-  document.getElementById('stopBtn').style.display = isStreaming ? 'inline-block' : 'none';
+  const sendBtn = document.getElementById('sendBtn');
+  if (isStreaming) {
+    sendBtn.disabled = true;
+  } else {
+    sendBtn.disabled = document.getElementById('userInput').value.trim().length === 0;
+  }
+  document.getElementById('stopBtn').style.display = isStreaming ? 'flex' : 'none';
 }
 
 async function streamOllamaResponse(userMessage, messageDiv) {
@@ -109,6 +114,8 @@ async function streamOllamaResponse(userMessage, messageDiv) {
     if (copyBtn) copyBtn.dataset.content = fullResponse;
     const speakBtn = messageDiv.querySelector('.speak-btn');
     if (speakBtn) speakBtn.dataset.content = fullResponse;
+    const actionsDiv = messageDiv.querySelector('.message-actions');
+    if (actionsDiv) actionsDiv.style.display = '';
 
     if (document.getElementById('autoTTS').checked) {
       speakText(fullResponse);

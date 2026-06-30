@@ -34,3 +34,21 @@ jobs:
       - name: Test (pytest)
         working-directory: auth
         run: pytest tests/ -v
+
+  frontend-lint:
+    name: Frontend — ESLint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-fund
+
+      - name: Lint (eslint)
+        run: npm run lint:js

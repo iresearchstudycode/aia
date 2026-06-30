@@ -308,6 +308,37 @@ class TestVerify:
 
 
 # ---------------------------------------------------------------------------
+# GET /auth/me
+# ---------------------------------------------------------------------------
+
+
+class TestMe:
+    def test_no_session_returns_401(self, client: TestClient) -> None:
+        resp = client.get("/auth/me")
+        assert resp.status_code == 401
+
+    def test_valid_session_returns_200(self, client: TestClient) -> None:
+        client.cookies.set("vpal_session", _signed_session())
+        resp = client.get("/auth/me")
+        assert resp.status_code == 200
+
+    def test_valid_session_returns_username(self, client: TestClient) -> None:
+        client.cookies.set("vpal_session", _signed_session())
+        resp = client.get("/auth/me")
+        assert resp.json() == {"username": _TEST_USER}
+
+    def test_tampered_session_returns_401(self, client: TestClient) -> None:
+        client.cookies.set("vpal_session", "bad.token.data")
+        resp = client.get("/auth/me")
+        assert resp.status_code == 401
+
+    def test_empty_session_returns_401(self, client: TestClient) -> None:
+        client.cookies.set("vpal_session", "")
+        resp = client.get("/auth/me")
+        assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
 # GET /auth/login
 # ---------------------------------------------------------------------------
 
@@ -368,6 +399,22 @@ class TestLoginPost:
             follow_redirects=False,
         )
         assert "vpal_csrf" in resp.cookies
+
+    def test_valid_login_sets_user_cookie(self, client: TestClient) -> None:
+        resp = client.post(
+            "/auth/login",
+            data={"username": _TEST_USER, "code": _valid_code()},
+            follow_redirects=False,
+        )
+        assert "vpal_user" in resp.cookies
+
+    def test_user_cookie_value_matches_username(self, client: TestClient) -> None:
+        resp = client.post(
+            "/auth/login",
+            data={"username": _TEST_USER, "code": _valid_code()},
+            follow_redirects=False,
+        )
+        assert resp.cookies["vpal_user"] == _TEST_USER
 
     def test_wrong_username_returns_401(self, client: TestClient) -> None:
         resp = client.post(
@@ -472,6 +519,18 @@ class TestLogout:
         wrong_csrf = _make_csrf_token("different-session-token")
         resp = client.post("/auth/logout", data={"csrf_token": wrong_csrf}, follow_redirects=False)
         assert resp.status_code == 403
+
+    def test_valid_logout_clears_user_cookie(self, client: TestClient) -> None:
+        _, csrf = self._login(client)
+        resp = client.post("/auth/logout", data={"csrf_token": csrf}, follow_redirects=False)
+        assert resp.status_code == 302
+        # httpx does not populate resp.cookies for Max-Age=0 deletion headers,
+        # so inspect the raw Set-Cookie headers directly.
+        set_cookie_headers = [v for k, v in resp.headers.items() if k.lower() == "set-cookie"]
+        user_cleared = any(
+            "vpal_user=" in h and "max-age=0" in h.lower() for h in set_cookie_headers
+        )
+        assert user_cleared, "vpal_user cookie must be cleared (Max-Age=0) on logout"
 
 
 # ---------------------------------------------------------------------------

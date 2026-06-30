@@ -9,3 +9,6 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+
+# Node.js — ESLint devDependencies; never commit the dependency tree
+node_modules/

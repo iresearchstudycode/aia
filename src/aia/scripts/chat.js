@@ -46,12 +46,18 @@ function copyMessageToClipboard(button) {
 }
 
 function updateSystemPromptState() {
-  const select = document.getElementById('systemPromptSelect');
-  if (conversationHistory.length > 0) {
-    select.disabled = true;
-  } else {
-    select.disabled = false;
+  const locked = conversationHistory.length > 0;
+
+  document.getElementById('systemPromptSelect').disabled = locked;
+
+  const toggleBtn = document.getElementById('personaToggleBtn');
+  if (toggleBtn) {
+    toggleBtn.classList.toggle('locked', locked);
+    toggleBtn.title = locked ? 'Clear the conversation to switch persona' : 'Choose persona';
   }
+
+  const notice = document.getElementById('personaPanelNotice');
+  if (notice) notice.style.display = locked ? '' : 'none';
 }
 
 // Function to add messages
@@ -85,6 +91,7 @@ function addAIMessagePlaceholder() {
     `;
   const actionsDiv = document.createElement('div');
   actionsDiv.className = 'message-actions';
+  actionsDiv.style.display = 'none';
   actionsDiv.appendChild(createCopyButton(''));
   const speakBtn = createSpeakButton('');
   if (speakBtn) actionsDiv.appendChild(speakBtn);

@@ -65,12 +65,16 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         silenceTimer = null;
       }
       accumulatedTranscript = '';
-      document.getElementById('userInput').value = '';
+      const stopInput = document.getElementById('userInput');
+      stopInput.value = '';
+      stopInput.dispatchEvent(new Event('input'));
       return;
     }
 
     // Show current transcript in input field (accumulated + interim)
-    document.getElementById('userInput').value = (accumulatedTranscript + interimTranscript).trim();
+    const userInput = document.getElementById('userInput');
+    userInput.value = (accumulatedTranscript + interimTranscript).trim();
+    userInput.dispatchEvent(new Event('input'));
 
     // Start 3-second silence timer after receiving speech
     if (isRecording) {
@@ -158,7 +162,9 @@ function toggleSpeechRecognition() {
   } else {
     // Start continuous listening
     accumulatedTranscript = '';
-    document.getElementById('userInput').value = '';
+    const startInput = document.getElementById('userInput');
+    startInput.value = '';
+    startInput.dispatchEvent(new Event('input'));
     recognition.start();
     isRecording = true;
     document.getElementById('micBtn').classList.add('recording');

@@ -1,0 +1,72 @@
+name: Chainguard Digest Check
+
+on:
+  schedule:
+    # 09:00 UTC on the 1st of every month
+    - cron: '0 9 1 * *'
+  workflow_dispatch:
+
+jobs:
+  check-digests:
+    name: Compare pinned vs current Chainguard digests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull images and compare digests
+        run: |
+          # Extract the SHA256 digests currently pinned in auth/Dockerfile
+          PINNED_DEV=$(grep 'python:latest-dev@sha256:' auth/Dockerfile | grep -oP 'sha256:[a-f0-9]+')
+          PINNED_PROD=$(grep 'python:latest@sha256:'     auth/Dockerfile | grep -oP 'sha256:[a-f0-9]+')
+
+          echo "Pinned  python:latest-dev  →  $PINNED_DEV"
+          echo "Pinned  python:latest      →  $PINNED_PROD"
+          echo ""
+
+          # Pull both images and read back their registry digests
+          docker pull --quiet cgr.dev/chainguard/python:latest-dev
+          docker pull --quiet cgr.dev/chainguard/python:latest
+
+          CURRENT_DEV=$(docker inspect \
+            --format='{{index .RepoDigests 0}}' \
+            cgr.dev/chainguard/python:latest-dev \
+            | grep -oP 'sha256:[a-f0-9]+')
+
+          CURRENT_PROD=$(docker inspect \
+            --format='{{index .RepoDigests 0}}' \
+            cgr.dev/chainguard/python:latest \
+            | grep -oP 'sha256:[a-f0-9]+')
+
+          echo "Current python:latest-dev  →  $CURRENT_DEV"
+          echo "Current python:latest      →  $CURRENT_PROD"
+          echo ""
+
+          STALE=0
+
+          if [ "$PINNED_DEV" != "$CURRENT_DEV" ]; then
+            echo "::warning::python:latest-dev digest is stale."
+            echo "  Pinned:  $PINNED_DEV"
+            echo "  Current: $CURRENT_DEV"
+            STALE=1
+          fi
+
+          if [ "$PINNED_PROD" != "$CURRENT_PROD" ]; then
+            echo "::warning::python:latest digest is stale."
+            echo "  Pinned:  $PINNED_PROD"
+            echo "  Current: $CURRENT_PROD"
+            STALE=1
+          fi
+
+          if [ "$STALE" -eq 1 ]; then
+            echo ""
+            echo "Update auth/Dockerfile by running locally:"
+            echo "  docker pull cgr.dev/chainguard/python:latest-dev"
+            echo "  docker pull cgr.dev/chainguard/python:latest"
+            echo "Copy the 'Digest: sha256:...' line from each pull into the"
+            echo "matching FROM statement in auth/Dockerfile, then rebuild:"
+            echo "  docker-compose build auth"
+            exit 1
+          fi
+
+          echo "All Chainguard digests are up to date."

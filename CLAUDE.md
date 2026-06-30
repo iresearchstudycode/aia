@@ -53,10 +53,11 @@ CI runs the same three steps automatically on every push and PR to `master` (`.g
 Browser → HTTPS (port 443) / HTTP (port 80 → redirects to HTTPS)
        → Nginx (Docker, cgr.dev/chainguard/nginx, uid=65532)
            ├── /auth/* → FastAPI auth service (cgr.dev/chainguard/python, uid=65532)
-           │              POST /auth/login  — validates username + TOTP code, issues session cookie
-           │              POST /auth/logout — CSRF-verified, clears session
-           │              GET  /auth/verify — sub-request endpoint called by auth_request
-           │              GET  /auth/setup  — one-time QR setup (requires SETUP_TOKEN env var)
+           │              POST /auth/login   — validates username + TOTP code, issues session cookie
+           │              POST /auth/logout  — CSRF-verified, clears session
+           │              GET  /auth/verify  — sub-request endpoint called by auth_request
+           │              GET  /auth/setup   — one-time QR setup (requires SETUP_TOKEN env var)
+           │              GET  /auth/me      — returns {"username":"..."} for the profile widget
            ├── auth_request /auth/verify (session gate applied to all routes below)
            ├── GET/HEAD /* → serves static files from src/aia/
            └── POST /ollama/api/chat (exact match) → reverse proxy → host.docker.internal:11434/api/chat
@@ -121,7 +122,7 @@ The FastAPI authentication service lives in `auth/`. Key files:
 | `auth/Dockerfile` | Multi-stage Chainguard build (digest-pinned) |
 | `auth/requirements.txt` | Production dependencies |
 | `auth/requirements-test.txt` | Test dependencies (`pytest`, `httpx2`, `flake8`, `black`) |
-| `auth/tests/test_main.py` | 57 pytest tests covering all routes and security logic |
+| `auth/tests/test_main.py` | 65 pytest tests covering all routes, security logic, cookie lifecycle, and `/auth/me` |
 | `auth/static/login.css` | Login page stylesheet |
 
 **Updating Chainguard base image digests** — the `FROM` lines in `auth/Dockerfile` are pinned to SHA256 digests. To update them after Chainguard releases a new image:

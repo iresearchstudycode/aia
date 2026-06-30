@@ -17,7 +17,7 @@ from typing import Annotated, AsyncIterator
 import pyotp
 import segno
 from fastapi import FastAPI, Form, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from itsdangerous import BadSignature, SignatureExpired, TimestampSigner
 
@@ -137,6 +137,17 @@ def _set_session_cookie(response: Response, username: str) -> None:
     response.set_cookie(
         "vpal_csrf",
         csrf_token,
+        httponly=False,
+        secure=True,
+        samesite="strict",
+        max_age=_SESSION_TTL_SECONDS,
+    )
+    # vpal_user is NOT HttpOnly so JS can read the username for the profile
+    # widget without an extra fetch.  The username is not a secret; this cookie
+    # carries no authentication capability.
+    response.set_cookie(
+        "vpal_user",
+        username,
         httponly=False,
         secure=True,
         samesite="strict",
@@ -280,6 +291,22 @@ async def verify(request: Request) -> Response:
     return Response(status_code=401)
 
 
+@app.get("/auth/me")
+async def me(request: Request) -> Response:
+    """Return the authenticated user's username as JSON.
+
+    Used by the profile widget when the non-HttpOnly ``vpal_user`` cookie is
+    absent (e.g. sessions established before that cookie was introduced).
+    Returns 401 for unauthenticated requests.
+    """
+    token = request.cookies.get("vpal_session", "")
+    try:
+        username = _signer.unsign(token, max_age=_SESSION_TTL_SECONDS).decode()
+        return JSONResponse({"username": username})
+    except (BadSignature, SignatureExpired):
+        return Response(status_code=401)
+
+
 @app.get("/auth/login", response_class=HTMLResponse)
 async def login_page(request: Request) -> Response:
     if _validate_session(request):
@@ -350,6 +377,7 @@ async def logout(
     resp: Response = RedirectResponse(url="/auth/login", status_code=302)
     resp.delete_cookie("vpal_session", httponly=True, secure=True, samesite="strict")
     resp.delete_cookie("vpal_csrf", secure=True, samesite="strict")
+    resp.delete_cookie("vpal_user", secure=True, samesite="strict")
     return resp
 
 
