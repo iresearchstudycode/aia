@@ -57,7 +57,7 @@ Every request to Nginx triggers an internal sub-request to the auth service (`au
 | Markdown | Marked.js (vendored, SRI-pinned) |
 | HTML sanitisation | DOMPurify v3.4.11 (vendored, SRI-pinned) |
 | Web server | Nginx (`cgr.dev/chainguard/nginx`, distroless, uid=65532) |
-| Auth service | FastAPI + pyotp + itsdangerous (`cgr.dev/chainguard/python:3.12`, uid=65532) |
+| Auth service | FastAPI + pyotp + itsdangerous (`cgr.dev/chainguard/python:latest`, uid=65532) |
 | Session | HMAC-signed cookie (`itsdangerous.TimestampSigner`), 8-hour TTL |
 | TOTP | RFC 6238 via `pyotp`, compatible with Google Authenticator |
 | Container | Docker, read-only filesystems, minimal capability sets |
@@ -166,7 +166,12 @@ vpal/
 ├── auth/                           # TOTP authentication service
 │   ├── main.py                     # FastAPI app (verify, login, logout, setup)
 │   ├── requirements.txt
-│   ├── Dockerfile
+│   ├── requirements-test.txt       # pytest, flake8, black, httpx2
+│   ├── Dockerfile                  # Multi-stage Chainguard build (digest-pinned)
+│   ├── pytest.ini
+│   ├── tests/
+│   │   ├── conftest.py             # Env setup, shared fixtures
+│   │   └── test_main.py            # 57 pytest tests
 │   └── static/
 │       └── login.css               # Login page styles
 ├── src/
@@ -241,8 +246,7 @@ All auth settings live in `.env`:
 
 ### Known limitations
 
-- TOTP codes are valid for a 90-second window (current ± one 30-second interval) to tolerate clock skew. Replay protection within that window is not yet implemented — see `TODO.md`.
-- The logout form does not include a CSRF token. The risk on localhost is low (worst case: a forced logout), but it is tracked in `TODO.md`.
+- **In-memory auth state** — brute-force lockout counters and TOTP replay protection are stored in process memory. Restarting the `vpal-auth` container (`docker-compose restart auth`) clears this state, giving an attacker a fresh attempt window within the 90-second TOTP validity period. For a local-only, 1–5-user deployment this is an accepted trade-off; adding a persistent backing store (Redis, SQLite) would close the gap if the threat model requires it.
 
 ## 🎯 Features
 
