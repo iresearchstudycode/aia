@@ -195,6 +195,7 @@ async function sendMessage() {
       isRecording = false;
       document.getElementById('micBtn').classList.remove('recording');
       document.getElementById('micBtn').classList.remove('paused');
+      document.getElementById('micBtn').setAttribute('aria-pressed', 'false');
       if (silenceTimer) {
         clearTimeout(silenceTimer);
         silenceTimer = null;
@@ -240,7 +241,7 @@ function saveChat() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-
+  showToast('Chat saved');
 }
 
 // Trigger file chooser for opening JSON chat

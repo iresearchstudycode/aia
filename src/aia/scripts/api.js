@@ -117,7 +117,7 @@ async function streamOllamaResponse(userMessage, messageDiv) {
     const actionsDiv = messageDiv.querySelector('.message-actions');
     if (actionsDiv) actionsDiv.style.display = '';
 
-    if (document.getElementById('autoTTS').checked) {
+    if (document.getElementById('autoTTSBtn').classList.contains('tts-on')) {
       speakText(fullResponse);
     }
 

@@ -60,6 +60,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       isRecording = false;
       document.getElementById('micBtn').classList.remove('recording');
       document.getElementById('micBtn').classList.remove('paused');
+      document.getElementById('micBtn').setAttribute('aria-pressed', 'false');
       if (silenceTimer) {
         clearTimeout(silenceTimer);
         silenceTimer = null;
@@ -96,6 +97,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
       isRecording = false;
       document.getElementById('micBtn').classList.remove('recording');
+      document.getElementById('micBtn').setAttribute('aria-pressed', 'false');
       if (silenceTimer) {
         clearTimeout(silenceTimer);
         silenceTimer = null;
@@ -132,8 +134,8 @@ if ('speechSynthesis' in window) {
 } else {
   console.warn('Text-to-speech not supported in this browser');
   document.addEventListener('DOMContentLoaded', function () {
-    const el = document.getElementById('autoTTS');
-    if (el) { el.checked = false; el.disabled = true; }
+    const el = document.getElementById('autoTTSBtn');
+    if (el) { el.disabled = true; el.classList.remove('tts-on'); el.setAttribute('aria-pressed', 'false'); }
   });
 }
 
@@ -150,6 +152,7 @@ function toggleSpeechRecognition() {
     isRecording = false;
     document.getElementById('micBtn').classList.remove('recording');
     document.getElementById('micBtn').classList.remove('paused');
+    document.getElementById('micBtn').setAttribute('aria-pressed', 'false');
 
     // Clear silence timer
     if (silenceTimer) {
@@ -169,6 +172,7 @@ function toggleSpeechRecognition() {
     isRecording = true;
     document.getElementById('micBtn').classList.add('recording');
     document.getElementById('micBtn').classList.remove('paused');
+    document.getElementById('micBtn').setAttribute('aria-pressed', 'true');
   }
 }
 

@@ -7,6 +7,8 @@
 - [x] Remove informational `console.log` calls in `chat.js` (`clearChat`, `saveChat`, `handleOpenFile`)
 - [x] `__pycache__/`, `*.pyc`, `*.pyo`, `.pytest_cache/` added to `.gitignore`
 - [x] `httpx` → `httpx2` in `auth/requirements-test.txt`
+- [x] `white-space: pre-wrap` on `.user-message .message-content p` — Shift+Enter newlines now preserved in the displayed chat bubble
+- [x] Guard `autoTTSBtn` localStorage restore behind `'speechSynthesis' in window` — prevents the button appearing green/active on browsers without Web Speech API TTS
 
 ## Security Improvements
 
@@ -36,19 +38,25 @@
 - [x] nginx `auth_login` rate-limit zone renamed to `auth_api` — reflects that the zone covers both `/auth/login` (burst=5) and `/auth/me` (burst=10), not login alone
 - [x] Version bumped to 1.4.0
 - [x] ChatGPT-style input area redesign — flat flex row replaced with a rounded `.chat-input-container`; toolbar row holds mic/speaker icon buttons, Auto-speak toggle, char counter, and a circular send button (↑ arrow, dark when active, grey when empty) and stop-streaming button (■); `setStreamingUI` re-evaluates textarea content when streaming ends so send button state is always accurate; `aria-label` added to both icon-only buttons
+- [x] HTMLHint for `src/aia/index.html` — `htmlhint` devDependency added; `.htmlhintrc` config; `npm run lint:html` targets `index.html`; `lint:html` step added to the `frontend-lint` CI job
+- [x] Nginx config syntax check added to CI — `nginx-config-check` job generates dummy certs, mounts `nginx.conf` into `nginx:1-alpine`, and runs `nginx -t` on every push and PR to `master`
 - [x] Version bumped to 1.5.0
+- [x] Version bumped to 1.5.1
 
 ## Features / UX
 
 - [x] Make speech recognition language configurable — `SPEECH_RECOGNITION_LANG` in `config.js`
 - [x] Character counter on input field — appears when ≤ 500 chars remaining, warns at 200, red at 50
-- [x] Persist `autoTTS` checkbox state to `localStorage` across sessions
+- [x] Persist `autoTTS` preference to `localStorage` across sessions
+- [x] Auto-speak `<label>` checkbox replaced with a 🔊 icon toggle button (`autoTTSBtn`) — consistent toolbar style; `aria-pressed` tracks on/off state; `tts-on` CSS class shows green active state; localStorage key unchanged so existing preferences are preserved
 - [x] Profile menu widget in chat header — 👤 icon + logged-in username (title-cased from `vpal_user` cookie, with `/auth/me` fallback for existing sessions); dropdown contains Save, Open, Clear, Close, Sign out; replaces standalone header buttons
 - [x] `/auth/me` GET endpoint in auth service — validates session cookie, returns `{"username": "..."}` as JSON; used by profile widget when `vpal_user` cookie is absent
 - [x] Persona dropdown — ▾ button next to "🤖 AI Assistant" opens a fixed-position panel with the persona select; selected persona name displayed as a subtitle beneath the heading; renamed from "System Prompt" to "Persona"; replaces the always-visible System Prompt bar
 - [x] Persona toggle locked state — `personaToggleBtn` gains `.locked` class and updated tooltip when a conversation is active; panel shows an inline notice; `updateSystemPromptState()` owns all persona-widget visual state
 - [x] Profile dropdown and persona panel close on window resize — prevents stale `position:fixed` coordinates after viewport dimensions change
 - [x] User input upgraded to auto-growing `<textarea>` — expands up to 200 px as content grows; Shift+Enter inserts a newline, Enter sends; placeholder text communicates the Shift+Enter convention; voice dictation dispatches `input` events so the textarea resizes for speech too
+- [x] `aria-pressed` on `micBtn` — updated in all five code paths that change recording state across `speech.js` and `chat.js`; initial `aria-pressed="false"` set in HTML
+- [x] `saveChat` success toast — brief "Chat saved" notification shown after download via `showToast()` in `utils.js` (reuses existing `.toast` CSS class)
 
 ## Known Limitations (Accepted Trade-offs)
 

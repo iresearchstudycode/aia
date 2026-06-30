@@ -62,6 +62,7 @@
           <div class="toolbar-left">
             <button class="voice-btn toolbar-icon-btn" id="micBtn"
               aria-label="Toggle voice input"
+              aria-pressed="false"
               title="Toggle Continuous Speech Recognition - Pauses while AI speaks to avoid echo. Say 'stop listening' or click to stop.">
               🎤
             </button>
@@ -69,10 +70,12 @@
               aria-label="Stop speaking" title="Stop Speaking">
               🔇
             </button>
-            <label class="tts-toggle">
-              <input type="checkbox" id="autoTTS">
-              Auto-speak
-            </label>
+            <button class="voice-btn toolbar-icon-btn" id="autoTTSBtn"
+              aria-label="Toggle auto-speak"
+              aria-pressed="false"
+              title="Toggle Auto-speak — automatically reads AI responses aloud after each message">
+              🔊
+            </button>
           </div>
           <div class="toolbar-right">
             <span id="charCounter" class="char-counter"></span>

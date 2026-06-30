@@ -22,6 +22,7 @@ const crossModuleGlobals = {
   // utils.js
   formatTimestamp: 'readonly',
   escapeHtml: 'readonly',
+  showToast: 'readonly',
   // speech.js — functions
   loadVoices: 'readonly',
   toggleSpeechRecognition: 'readonly',

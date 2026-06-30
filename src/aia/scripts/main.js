@@ -130,10 +130,15 @@ document.addEventListener('DOMContentLoaded', function () {
   updateSystemPromptState();
 
   // Restore autoTTS preference across sessions
-  const autoTTS = document.getElementById('autoTTS');
-  autoTTS.checked = localStorage.getItem('autoTTS') === 'true';
-  autoTTS.addEventListener('change', function () {
-    localStorage.setItem('autoTTS', this.checked);
+  const autoTTSBtn = document.getElementById('autoTTSBtn');
+  if ('speechSynthesis' in window && localStorage.getItem('autoTTS') === 'true') {
+    autoTTSBtn.classList.add('tts-on');
+    autoTTSBtn.setAttribute('aria-pressed', 'true');
+  }
+  autoTTSBtn.addEventListener('click', function () {
+    const isOn = this.classList.toggle('tts-on');
+    this.setAttribute('aria-pressed', String(isOn));
+    localStorage.setItem('autoTTS', String(isOn));
   });
 
   // Chat input

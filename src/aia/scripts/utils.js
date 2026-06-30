@@ -24,3 +24,17 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
+
+function showToast(message, durationMs) {
+  var toast = document.getElementById('toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.className = 'toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(function () { toast.classList.remove('show'); }, durationMs || 2000);
+}
