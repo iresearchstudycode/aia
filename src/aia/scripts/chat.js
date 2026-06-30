@@ -265,7 +265,7 @@ function saveChat() {
   const hh = String(now.getHours()).padStart(2, '0');
   const mi = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
-  a.download = `${yyyy}${mo}${dd}-${hh}${mi}${ss}-ollama-chat-${_chatTopic()}.json`;
+  a.download = `${yyyy}${mo}${dd}-${hh}${mi}${ss}-vpal-${_chatTopic()}.json`;
 
   document.body.appendChild(a);
   a.click();
