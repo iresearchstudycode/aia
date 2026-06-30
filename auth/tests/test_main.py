@@ -9,7 +9,6 @@ Coverage:
 - Route handlers: /health, /auth/verify, /auth/login (GET+POST), /auth/logout, /auth/setup
 """
 
-import os
 import time
 
 import pyotp
@@ -139,9 +138,7 @@ class TestBruteForce:
     def test_login_locked_after_max_failures(self, client: TestClient) -> None:
         for _ in range(_LOCKOUT_ATTEMPTS):
             client.post("/auth/login", data={"username": _TEST_USER, "code": "000000"})
-        resp = client.post(
-            "/auth/login", data={"username": _TEST_USER, "code": _valid_code()}
-        )
+        resp = client.post("/auth/login", data={"username": _TEST_USER, "code": _valid_code()})
         assert resp.status_code == 401
 
 
@@ -266,9 +263,7 @@ class TestValidateSession:
             "method": "GET",
             "path": "/",
             "query_string": b"",
-            "headers": Headers(
-                raw=[(b"cookie", b"vpal_session=tampered.token.value")]
-            ).raw,
+            "headers": Headers(raw=[(b"cookie", b"vpal_session=tampered.token.value")]).raw,
         }
         request = StarletteRequest(scope)
         assert not _validate_session(request)
@@ -426,12 +421,8 @@ class TestLoginPost:
         assert "Invalid username, code, or too many attempts." in resp.text
 
     def test_error_page_does_not_reveal_username_existence(self, client: TestClient) -> None:
-        resp_known = client.post(
-            "/auth/login", data={"username": _TEST_USER, "code": "000000"}
-        )
-        resp_unknown = client.post(
-            "/auth/login", data={"username": "nobody", "code": "000000"}
-        )
+        resp_known = client.post("/auth/login", data={"username": _TEST_USER, "code": "000000"})
+        resp_unknown = client.post("/auth/login", data={"username": "nobody", "code": "000000"})
         assert resp_known.text == resp_unknown.text
 
 
@@ -453,16 +444,12 @@ class TestLogout:
 
     def test_valid_csrf_returns_302(self, client: TestClient) -> None:
         _, csrf = self._login(client)
-        resp = client.post(
-            "/auth/logout", data={"csrf_token": csrf}, follow_redirects=False
-        )
+        resp = client.post("/auth/logout", data={"csrf_token": csrf}, follow_redirects=False)
         assert resp.status_code == 302
 
     def test_valid_csrf_redirects_to_login(self, client: TestClient) -> None:
         _, csrf = self._login(client)
-        resp = client.post(
-            "/auth/logout", data={"csrf_token": csrf}, follow_redirects=False
-        )
+        resp = client.post("/auth/logout", data={"csrf_token": csrf}, follow_redirects=False)
         assert resp.headers["location"] == "/auth/login"
 
     def test_missing_csrf_returns_403(self, client: TestClient) -> None:
@@ -472,24 +459,18 @@ class TestLogout:
 
     def test_wrong_csrf_returns_403(self, client: TestClient) -> None:
         self._login(client)
-        resp = client.post(
-            "/auth/logout", data={"csrf_token": "a" * 32}, follow_redirects=False
-        )
+        resp = client.post("/auth/logout", data={"csrf_token": "a" * 32}, follow_redirects=False)
         assert resp.status_code == 403
 
     def test_no_session_cookie_returns_403(self, client: TestClient) -> None:
-        resp = client.post(
-            "/auth/logout", data={"csrf_token": "anything"}, follow_redirects=False
-        )
+        resp = client.post("/auth/logout", data={"csrf_token": "anything"}, follow_redirects=False)
         assert resp.status_code == 403
 
     def test_csrf_mismatch_returns_403(self, client: TestClient) -> None:
         session_token, _ = self._login(client)
         # Craft a CSRF token for a *different* session.
         wrong_csrf = _make_csrf_token("different-session-token")
-        resp = client.post(
-            "/auth/logout", data={"csrf_token": wrong_csrf}, follow_redirects=False
-        )
+        resp = client.post("/auth/logout", data={"csrf_token": wrong_csrf}, follow_redirects=False)
         assert resp.status_code == 403
 
 

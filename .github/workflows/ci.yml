@@ -8,7 +8,7 @@ on:
 
 jobs:
   auth-lint-test:
-    name: Auth service — flake8 + pytest
+    name: Auth service — format, lint & test
     runs-on: ubuntu-latest
 
     steps:
@@ -25,8 +25,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r auth/requirements.txt -r auth/requirements-test.txt
 
+      - name: Format (black --check)
+        run: black auth/main.py auth/tests/ --check --line-length=99
+
       - name: Lint (flake8)
-        run: flake8 auth/main.py --max-line-length=99
+        run: flake8 auth/main.py auth/tests/ --max-line-length=99
 
       - name: Test (pytest)
         working-directory: auth

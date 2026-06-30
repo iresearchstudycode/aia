@@ -10,6 +10,8 @@ invoked from.
 import os
 import sys
 
+import pytest
+
 # Change CWD to the auth/ package root so StaticFiles("static") resolves correctly.
 _auth_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(_auth_dir)
@@ -19,8 +21,6 @@ sys.path.insert(0, _auth_dir)
 os.environ.setdefault("SECRET_KEY", "a" * 32)
 os.environ.setdefault("USER_1", "testuser")
 os.environ.setdefault("TOTP_SECRET_1", "JBSWY3DPEHPK3PXP")
-
-import pytest
 
 from main import _failed_attempts, _used_totp_codes  # noqa: E402 — must follow env setup
 
