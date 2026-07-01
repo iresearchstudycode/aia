@@ -11,12 +11,12 @@ function setStreamingUI(isStreaming) {
   if (isStreaming) {
     sendBtn.disabled = true;
   } else {
-    sendBtn.disabled = document.getElementById('userInput').value.trim().length === 0;
+    sendBtn.disabled = document.getElementById('userInput').value.trim().length === 0 && !pendingImageBase64;
   }
   document.getElementById('stopBtn').style.display = isStreaming ? 'flex' : 'none';
 }
 
-async function streamOllamaResponse(userMessage, messageDiv) {
+async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null, imageDataUrl = null) {
   const contentDiv = messageDiv.querySelector('.message-content');
 
   // fullResponse  — accumulates message.content tokens (the answer in both modes)
@@ -33,12 +33,18 @@ async function streamOllamaResponse(userMessage, messageDiv) {
   // Add user message to conversation history (include timestamps)
   const userTsISO = new Date().toISOString();
   const userTsFmt = formatTimestamp(new Date());
-  conversationHistory.push({
+  const userHistoryEntry = {
     role: 'user',
     content: userMessage,
     timestamp: userTsISO,
     formattedTimestamp: userTsFmt
-  });
+  };
+  if (imageBase64) {
+    userHistoryEntry.imageBase64 = imageBase64;
+    userHistoryEntry.imageDataUrl = imageDataUrl;
+    userHistoryEntry.hasImage = true;
+  }
+  conversationHistory.push(userHistoryEntry);
 
   // Update system prompt state after adding to history
   updateSystemPromptState();
@@ -54,11 +60,15 @@ async function streamOllamaResponse(userMessage, messageDiv) {
   // CRITICAL: The <|think|> token triggers the reasoning process
   const thinkingToken = "<|think|>  ";
 
-  // Build messages array with system prompt — only send role+content to API
+  // Build messages array with system prompt — only send role+content (+ images) to API.
   // The assistant prefill primes Gemma 4 to enter reasoning mode before answering.
   const messages = [
     { role: 'system', content: currentSystemPrompt },
-    ...conversationHistory.map(m => ({ role: m.role, content: m.content })),
+    ...conversationHistory.map(m => {
+      const msg = { role: m.role, content: m.content };
+      if (m.imageBase64) msg.images = [m.imageBase64];
+      return msg;
+    }),
     { role: 'assistant', content: thinkingToken }
   ];
 

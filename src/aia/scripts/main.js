@@ -5,6 +5,19 @@ function _getCookie(name) {
   return match ? decodeURIComponent(match[1]) : '';
 }
 
+// Clears any pending image attachment — resets global state, hides the preview
+// strip, and re-evaluates the send button. Called by sendMessage/sendMessageAndContinueListening
+// in chat.js before dispatching the request, and by the remove-image button.
+function clearImagePreview() {
+  pendingImageDataUrl = null;
+  pendingImageBase64 = null;
+  document.getElementById('imagePreviewStrip').style.display = 'none';
+  document.getElementById('imagePreviewThumb').src = '';
+  document.getElementById('attachImageBtn').classList.remove('active');
+  const textarea = document.getElementById('userInput');
+  document.getElementById('sendBtn').disabled = textarea.value.trim().length === 0;
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   // Inject the CSRF token into the logout form (double-submit cookie pattern).
   // vpal_csrf is non-HttpOnly so JS can read it; the server verifies it matches
@@ -162,7 +175,8 @@ document.addEventListener('DOMContentLoaded', function () {
   userInput.addEventListener('input', function () {
     this.style.height = 'auto';
     this.style.height = this.scrollHeight + 'px';
-    document.getElementById('sendBtn').disabled = this.value.trim().length === 0;
+    // Enable send if there is text OR a pending image attachment
+    document.getElementById('sendBtn').disabled = this.value.trim().length === 0 && !pendingImageBase64;
     const remaining = MAX_INPUT_LENGTH - this.value.length;
     const show = remaining <= CHAR_COUNTER_SHOW_THRESHOLD;
     charCounter.textContent = show ? `${remaining}` : '';
@@ -194,4 +208,48 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // File open
   document.getElementById('openInput').addEventListener('change', handleOpenFile);
+
+  // Image attachment — validates size/type, reads as data URL, shows preview strip.
+  const attachImageBtn = document.getElementById('attachImageBtn');
+  const imageInput = document.getElementById('imageInput');
+  const imagePreviewStrip = document.getElementById('imagePreviewStrip');
+  const imagePreviewThumb = document.getElementById('imagePreviewThumb');
+
+  attachImageBtn.addEventListener('click', function () {
+    imageInput.click();
+  });
+
+  imageInput.addEventListener('change', function () {
+    const file = this.files && this.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file (JPEG, PNG, GIF, WebP, etc.).');
+      this.value = '';
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      alert(`Image too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 10 MB.`);
+      this.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const dataUrl = e.target.result;
+      pendingImageDataUrl = dataUrl;
+      // Strip the "data:<mime>;base64," prefix — Ollama expects raw base64.
+      pendingImageBase64 = dataUrl.split(',')[1];
+
+      imagePreviewThumb.src = dataUrl;
+      imagePreviewStrip.style.display = 'flex';
+      attachImageBtn.classList.add('active');
+      document.getElementById('sendBtn').disabled = false;
+    };
+    reader.readAsDataURL(file);
+    this.value = ''; // reset so the same file can be re-selected
+  });
+
+  document.getElementById('removeImageBtn').addEventListener('click', clearImagePreview);
 });

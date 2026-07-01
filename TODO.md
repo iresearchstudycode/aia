@@ -91,6 +91,9 @@
 - [x] `test_main.py` module docstring updated to list `/auth/me` in the route handlers coverage summary
 - [x] `.thinking-content` max-height increased from 280px to 400px — gives more room for long reasoning chains before the scrollbar kicks in
 - [x] Version bumped to 1.5.8
+- [x] Image attachment for multimodal prompts — 📎 toolbar button opens a file picker; selected image is read via FileReader.readAsDataURL, validated for type (image/*) and size (≤ 10 MB), shown as a thumbnail preview strip above the textarea (with ✕ remove), and sent in the Ollama API `images` field as raw base64; the full data URL is stored in conversationHistory for in-session thumbnail display; imageBase64/imageDataUrl are stripped from saved JSON files (hasImage flag preserved so loaded history shows a placeholder); send button enabled with image even when textarea is empty; messages with only an image and no text are supported
+- [x] clearImagePreview() defined as a top-level function in main.js so sendMessage/sendMessageAndContinueListening in chat.js can call it across script files
+- [x] Version bumped to 1.6.0
 
 ## Known Limitations (Accepted Trade-offs)
 

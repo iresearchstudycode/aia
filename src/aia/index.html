@@ -55,8 +55,13 @@
       <!-- Chat messages will appear here -->
     </div>
     <input type="file" id="openInput" accept="application/json,.json">
+  <input type="file" id="imageInput" accept="image/*">
     <div class="chat-input">
       <div class="chat-input-container">
+        <div class="image-preview-strip" id="imagePreviewStrip" style="display:none">
+          <img id="imagePreviewThumb" class="image-preview-thumb" src="" alt="Image to attach">
+          <button type="button" id="removeImageBtn" class="remove-image-btn" aria-label="Remove attached image">✕</button>
+        </div>
         <textarea id="userInput" rows="1" aria-label="Message" placeholder="Message AI Assistant — Shift+Enter for new line..."></textarea>
         <div class="chat-input-toolbar">
           <div class="toolbar-left">
@@ -75,6 +80,10 @@
             <button type="button" class="voice-btn toolbar-icon-btn" id="speakerBtn"
               aria-label="Stop speaking" title="Stop Speaking">
               🔇
+            </button>
+            <button type="button" class="voice-btn toolbar-icon-btn" id="attachImageBtn"
+              aria-label="Attach image" title="Attach an image for visual analysis">
+              📎
             </button>
           </div>
           <div class="toolbar-right">

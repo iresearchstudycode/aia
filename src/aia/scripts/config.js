@@ -4,6 +4,7 @@ const OLLAMA_API_URL = 'https://localhost/ollama/api/chat';
 const MAX_HISTORY_MESSAGES = 40; // 20 user/assistant exchanges
 const MAX_INPUT_LENGTH = 4000;
 const MAX_UPLOAD_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 const SILENCE_TIMEOUT_MS = 3000;
 const CHAR_COUNTER_SHOW_THRESHOLD = 500;
 const CHAR_COUNTER_WARNING_THRESHOLD = 200;
@@ -30,3 +31,5 @@ const systemPrompts = {
 // Current system prompt
 let currentSystemPrompt = systemPrompts.auEnglishEditor;
 let conversationHistory = [];
+let pendingImageDataUrl = null; // data: URL for in-chat thumbnail display
+let pendingImageBase64 = null;  // raw base64 for the Ollama API images field

@@ -10,6 +10,7 @@ const crossModuleGlobals = {
   MAX_HISTORY_MESSAGES: 'readonly',
   MAX_INPUT_LENGTH: 'readonly',
   MAX_UPLOAD_FILE_BYTES: 'readonly',
+  MAX_IMAGE_SIZE_BYTES: 'readonly',
   SILENCE_TIMEOUT_MS: 'readonly',
   CHAR_COUNTER_SHOW_THRESHOLD: 'readonly',
   CHAR_COUNTER_WARNING_THRESHOLD: 'readonly',
@@ -19,6 +20,8 @@ const crossModuleGlobals = {
   // config.js — mutable state
   conversationHistory: 'writable',
   currentSystemPrompt: 'writable',
+  pendingImageDataUrl: 'writable',
+  pendingImageBase64: 'writable',
   // utils.js
   formatTimestamp: 'readonly',
   escapeHtml: 'readonly',
@@ -54,6 +57,8 @@ const crossModuleGlobals = {
   openChat: 'readonly',
   renderConversationHistory: 'readonly',
   handleOpenFile: 'readonly',
+  // main.js
+  clearImagePreview: 'readonly',
   // api.js
   streamOllamaResponse: 'readonly',
   stopStreaming: 'readonly',

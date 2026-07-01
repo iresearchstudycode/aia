@@ -70,19 +70,40 @@ function updateSystemPromptState() {
   if (notice) notice.style.display = locked ? '' : 'none';
 }
 
-// Function to add messages
-function addUserMessage(text) {
+// Add a user message bubble. imageDataUrl is a data: URL from FileReader for display.
+function addUserMessage(text, imageDataUrl = null) {
   const messagesDiv = document.getElementById('chatMessages');
   const timestamp = formatTimestamp(new Date());
   const messageDiv = document.createElement('div');
   messageDiv.className = 'message user-message';
-  messageDiv.innerHTML = `
-      <div class="message-label">You</div>
-      <div class="message-content">
-        <p>${escapeHtml(text)}</p>
-      </div>
-      <div class="message-timestamp">${escapeHtml(timestamp)}</div>
-    `;
+
+  const labelDiv = document.createElement('div');
+  labelDiv.className = 'message-label';
+  labelDiv.textContent = 'You';
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'message-content';
+
+  if (imageDataUrl) {
+    const img = document.createElement('img');
+    img.className = 'user-message-image';
+    img.src = imageDataUrl;
+    img.alt = 'Attached image';
+    contentDiv.appendChild(img);
+  }
+  if (text) {
+    const p = document.createElement('p');
+    p.textContent = text;
+    contentDiv.appendChild(p);
+  }
+
+  const tsDiv = document.createElement('div');
+  tsDiv.className = 'message-timestamp';
+  tsDiv.textContent = timestamp;
+
+  messageDiv.appendChild(labelDiv);
+  messageDiv.appendChild(contentDiv);
+  messageDiv.appendChild(tsDiv);
   messagesDiv.appendChild(messageDiv);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
@@ -174,22 +195,22 @@ function updateSystemPrompt() {
 async function sendMessageAndContinueListening() {
   const input = document.getElementById('userInput');
   const message = input.value.trim();
+  const hasContent = message || pendingImageBase64;
 
-  if (message) {
-    // Clear the accumulated transcript for next input, but keep listening
+  if (hasContent) {
     accumulatedTranscript = '';
+
+    const imageDataUrl = pendingImageDataUrl;
+    const imageBase64 = pendingImageBase64;
+    clearImagePreview();
+
     input.value = '';
     input.dispatchEvent(new Event('input'));
 
-    addUserMessage(message);
+    addUserMessage(message, imageDataUrl);
 
-    // Add a placeholder for AI response
     const aiMessageDiv = addAIMessagePlaceholder();
-
-    // Call Ollama API (this will update conversationHistory and system prompt state)
-    await streamOllamaResponse(message, aiMessageDiv);
-
-    // Microphone stays active - user can continue speaking
+    await streamOllamaResponse(message, aiMessageDiv, imageBase64, imageDataUrl);
   }
 }
 
@@ -197,8 +218,9 @@ async function sendMessageAndContinueListening() {
 async function sendMessage() {
   const input = document.getElementById('userInput');
   const message = input.value.trim();
+  const hasContent = message || pendingImageBase64;
 
-  if (message) {
+  if (hasContent) {
     // If triggered manually (not by voice), stop recording if active
     if (isRecording) {
       recognition.stop();
@@ -213,15 +235,16 @@ async function sendMessage() {
       accumulatedTranscript = '';
     }
 
-    addUserMessage(message);
+    const imageDataUrl = pendingImageDataUrl;
+    const imageBase64 = pendingImageBase64;
+    clearImagePreview();
+
+    addUserMessage(message, imageDataUrl);
     input.value = '';
     input.dispatchEvent(new Event('input'));
 
-    // Add a placeholder for AI response
     const aiMessageDiv = addAIMessagePlaceholder();
-
-    // Call Ollama API (this will update conversationHistory and system prompt state)
-    await streamOllamaResponse(message, aiMessageDiv);
+    await streamOllamaResponse(message, aiMessageDiv, imageBase64, imageDataUrl);
   }
 }
 
@@ -232,10 +255,14 @@ function saveChat() {
     return;
   }
 
-  // Export conversationHistory as JSON so it can be re-imported
-  // into the `conversationHistory` variable in future releases.
-  // Only include the ISO `timestamp` field (omit `formattedTimestamp`).
-  const exportData = conversationHistory.map(({ role, content, timestamp }) => ({ role, content, timestamp }));
+  // Export conversationHistory as JSON — strip in-memory image data (imageBase64,
+  // imageDataUrl) to keep files small; preserve hasImage so loaded history can show
+  // a placeholder where an image was attached.
+  const exportData = conversationHistory.map(({ role, content, timestamp, hasImage }) => {
+    const entry = { role, content, timestamp };
+    if (hasImage) entry.hasImage = true;
+    return entry;
+  });
   const json = JSON.stringify(exportData, null, 2);
 
   const blob = new Blob([json], { type: 'application/json' });
@@ -257,7 +284,7 @@ function saveChat() {
       'write', 'explain', 'give', 'show', 'get', 'use', 'need', 'want',
     ]);
     const firstUser = conversationHistory.find(m => m.role === 'user');
-    if (!firstUser) return 'Chat';
+    if (!firstUser || !firstUser.content) return 'Chat';
     const words = firstUser.content
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, ' ')
@@ -303,11 +330,40 @@ function renderConversationHistory() {
     messageDiv.className = `message ${roleClass}`;
 
     if (msg.role === 'user') {
-      messageDiv.innerHTML = `
-        <div class="message-label">${label}</div>
-        <div class="message-content"><p>${escapeHtml(msg.content)}</p></div>
-        <div class="message-timestamp">${escapeHtml(formatted)}</div>
-      `;
+      const labelDiv = document.createElement('div');
+      labelDiv.className = 'message-label';
+      labelDiv.textContent = label;
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'message-content';
+
+      if (msg.imageDataUrl) {
+        // In-memory session: show the actual image thumbnail
+        const img = document.createElement('img');
+        img.className = 'user-message-image';
+        img.src = msg.imageDataUrl;
+        img.alt = 'Attached image';
+        contentDiv.appendChild(img);
+      } else if (msg.hasImage) {
+        // Loaded from saved file: image data not stored, show placeholder
+        const p = document.createElement('p');
+        p.className = 'image-placeholder';
+        p.textContent = '[Image — not stored in saved file]';
+        contentDiv.appendChild(p);
+      }
+      if (msg.content) {
+        const p = document.createElement('p');
+        p.textContent = msg.content;
+        contentDiv.appendChild(p);
+      }
+
+      const tsDiv = document.createElement('div');
+      tsDiv.className = 'message-timestamp';
+      tsDiv.textContent = formatted;
+
+      messageDiv.appendChild(labelDiv);
+      messageDiv.appendChild(contentDiv);
+      messageDiv.appendChild(tsDiv);
     } else {
       messageDiv.innerHTML = `
         <div class="message-label">${label}</div>
@@ -353,20 +409,25 @@ function handleOpenFile(event) {
         if (!['user', 'assistant'].includes(item.role)) {
           throw new Error(`Entry ${index}: invalid role "${item.role}"`);
         }
-        if (typeof item.content !== 'string' || item.content.length === 0) {
-          throw new Error(`Entry ${index}: content must be a non-empty string`);
+        if (typeof item.content !== 'string') {
+          throw new Error(`Entry ${index}: content must be a string`);
+        }
+        if (item.content.length === 0 && !item.hasImage) {
+          throw new Error(`Entry ${index}: content must be non-empty`);
         }
         const ts = item.timestamp || new Date().toISOString();
         const tsDate = new Date(ts);
         if (isNaN(tsDate.getTime())) {
           throw new Error(`Entry ${index}: invalid timestamp "${item.timestamp}"`);
         }
-        return {
+        const entry = {
           role: item.role,
           content: item.content,
           timestamp: ts,
           formattedTimestamp: formatTimestamp(tsDate)
         };
+        if (item.hasImage) entry.hasImage = true;
+        return entry;
       });
 
       renderConversationHistory();
