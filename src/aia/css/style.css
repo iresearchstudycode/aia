@@ -750,7 +750,8 @@ body {
 /* Initially hidden dynamic controls — JS shows/hides via element.style.display */
 #speakerBtn,
 #stopBtn,
-#openInput {
+#openInput,
+#imageInput {
   display: none;
 }
 

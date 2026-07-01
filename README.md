@@ -237,7 +237,7 @@ All auth settings live in `.env`:
 | **Authentication** | TOTP (RFC 6238) via Google Authenticator; signed session cookie (HMAC-SHA1, 8-hour TTL); brute-force lockout after 5 failed attempts per username (5-minute window) |
 | **Session** | `HttpOnly`, `Secure`, `SameSite=Strict` cookie; Nginx `auth_request` gates every route before serving content |
 | **Transport** | HTTPS only (TLS 1.2/1.3), HSTS, HTTP→HTTPS redirect |
-| **Browser** | CSP: `default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'self'`; `X-Frame-Options: DENY`; `X-Content-Type-Options: nosniff`; `Referrer-Policy: no-referrer`; `Permissions-Policy` |
+| **Browser** | CSP: `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'`; `X-Frame-Options: DENY`; `X-Content-Type-Options: nosniff`; `Referrer-Policy: no-referrer`; `Permissions-Policy` |
 | **XSS prevention** | All AI response content (final answer and thinking block content) sanitised with DOMPurify (SRI-pinned) before rendering; user input escaped with `escapeHtml` before DOM insertion |
 | **Proxy** | Ollama API locked to exact-match `POST /ollama/api/chat` only — all other paths and methods denied; rate-limited to 5 req/min with burst of 5 |
 | **Containers** | Both containers: read-only filesystem, non-root user, `cap_drop: ALL`, `no-new-privileges`; Nginx adds `NET_BIND_SERVICE` only |
