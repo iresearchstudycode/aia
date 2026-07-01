@@ -3,7 +3,7 @@ A secure, voice-enabled AI chat interface that runs entirely on your local machi
 
 ## 📋 Overview
 
-This web application provides a chat interface with voice input/output capabilities, connecting to locally-hosted AI models through Ollama's REST API. The application features a responsive design, real-time streaming responses, and multiple AI personas — protected by TOTP authentication for up to five users.
+This web application provides a chat interface with voice input/output capabilities, connecting to locally-hosted AI models through Ollama's REST API. The application features a responsive design, real-time streaming responses, a live reasoning display with collapsible thinking blocks, and multiple AI personas — protected by TOTP authentication for up to five users.
 
 ## 🏗️ Architecture
 
@@ -28,7 +28,8 @@ This web application provides a chat interface with voice input/output capabilit
 │                                       └────────────────┬─────────────────┘                  │    /auth/login               │ │
 │                                                        │                                    │    /auth/logout              │ │
 │                              HTTP/REST · streaming     │                                    │    /auth/setup               │ │
-│                            host.docker.internal:11434  │                                    └──────────────────────────────┘ │
+│                            host.docker.internal:11434  │                                    │    /auth/me                  │ │
+│                                                        │                                    └──────────────────────────────┘ │
 │                                                        ▼                                                                     │
 │                                       ┌──────────────────────────────────┐                                                   │
 │                                       │          Ollama API              │                                                   │
@@ -40,7 +41,7 @@ This web application provides a chat interface with voice input/output capabilit
 │                                                        ▼                                                                     │
 │                                       ┌──────────────────────────────────┐                                                   │
 │                                       │       Local AI Models            │                                                   │
-│                                       │           (gemma4)               │                                                   │
+│                                       │         (gemma4:e4b)             │                                                   │
 │                                       └──────────────────────────────────┘                                                   │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -237,7 +238,7 @@ All auth settings live in `.env`:
 | **Session** | `HttpOnly`, `Secure`, `SameSite=Strict` cookie; Nginx `auth_request` gates every route before serving content |
 | **Transport** | HTTPS only (TLS 1.2/1.3), HSTS, HTTP→HTTPS redirect |
 | **Browser** | CSP: `default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'self'`; `X-Frame-Options: DENY`; `X-Content-Type-Options: nosniff`; `Referrer-Policy: no-referrer`; `Permissions-Policy` |
-| **XSS prevention** | All AI response content sanitised with DOMPurify (SRI-pinned) before rendering; user input escaped with `escapeHtml` before DOM insertion |
+| **XSS prevention** | All AI response content (final answer and thinking block content) sanitised with DOMPurify (SRI-pinned) before rendering; user input escaped with `escapeHtml` before DOM insertion |
 | **Proxy** | Ollama API locked to exact-match `POST /ollama/api/chat` only — all other paths and methods denied; rate-limited to 5 req/min with burst of 5 |
 | **Containers** | Both containers: read-only filesystem, non-root user, `cap_drop: ALL`, `no-new-privileges`; Nginx adds `NET_BIND_SERVICE` only |
 | **Network** | Loopback-only binding (`127.0.0.1`); auth service port not published to the host (Docker-internal only) |
@@ -255,14 +256,15 @@ All auth settings live in `.env`:
 - **Profile Menu**: 👤 header widget displays the logged-in username; dropdown contains Save, Open, Clear, Close, and Sign out
 - **Persona Selector**: ▾ button next to the heading opens a panel to switch AI personas; selected persona shown as a subtitle beneath the heading
 - **Chat Input**: Auto-growing textarea (up to 6 lines); Enter sends, Shift+Enter inserts a newline; circular send button activates only when text is present and reverts to grey when empty
-- **Voice Input/Output**: Continuous speech recognition and text-to-speech synthesis
+- **Voice Input/Output**: Continuous speech recognition and text-to-speech synthesis; toolbar order: 🎤 mic → 🔊 auto-speak → 🔇 stop speaking
+- **Thinking Mode**: Live reasoning displayed in a collapsible block during AI response generation; collapses automatically when the final answer arrives; thinking content excluded from conversation history, copy, and speech output
 - **Real-time Streaming**: Live AI response streaming with stop control
 - **Multiple Personas**: 13 pre-configured AI personalities
-- **Per-message Actions**: Copy to clipboard and speak buttons appear on successful AI responses only
+- **Per-message Actions**: Copy to clipboard and speak buttons appear on successful AI responses only; both target the final answer only (thinking content excluded)
 - **Chat History**: Save/load conversation history as JSON; saved files use the format `YYYYMMDD-HHMMss-vpal-<Topic>.json` where `<Topic>` is a 2–3 word summary derived from the first user message
 - **Character Counter**: Remaining character count shown as you approach the 4,000-character limit
-- **Auto-Speak**: 🔊 toolbar icon toggles automatic text-to-speech after each AI response; preference saved across browser sessions via `localStorage`
-- **Markdown Support**: Rich text formatting in AI responses
+- **Auto-Speak**: 🔊 toolbar icon toggles automatic text-to-speech after each AI response; speaks the final answer only; preference saved across browser sessions via `localStorage`
+- **Markdown Support**: Rich text formatting in AI responses and thinking blocks
 
 ## 🔍 System Requirements
 

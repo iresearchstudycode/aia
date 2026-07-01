@@ -74,6 +74,23 @@
 - [x] CLAUDE.md CI section updated from `nginx:1-alpine` to `nginx:1.27-alpine` to match the actual CI job
 - [x] `.github/dependabot.yml` added — monthly Dependabot updates for both `npm` devDependencies and GitHub Actions workflow steps
 - [x] Version bumped to 1.5.4
+- [x] Gemma 4 thinking mode enabled in `api.js` — assistant prefill with `<|think|>` token primes reasoning; Ollama sampling options set (`temperature: 1.0`, `top_p: 0.95`, `top_k: 64`); "Thinking…" placeholder shown while the model reasons; `<|/think|>` boundary strips internal reasoning from displayed response, conversation history, and copy/speak button data; stop-during-thinking rolls back the user message cleanly
+- [x] Version bumped to 1.5.5
+- [x] Streaming thinking UI with collapsible block — reasoning content displayed live in an open `<details>` block during the thinking phase; on transition to the answer the block is locked (DOM stable, no `<details>` destruction during answer streaming); on stream completion the block collapses automatically and summary text changes from "Thinking…" to "Thinking"; user can re-expand at any time; thinking content is never saved to `conversationHistory` or exported to saved chat files
+- [x] Version bumped to 1.5.6
+- [x] Thinking mode dual-buffer refactor — `thinkingBuffer` captures native Ollama `message.thinking` tokens; `fullResponse` captures `message.content`; inline `<|/think|>` token boundary in `message.content` also supported; correct mode detected per-token so both Ollama native thinking and prefill-token approaches work without configuration
+- [x] Markdown rendering applied to thinking content — `DOMPurify.sanitize(marked.parse(...))` replaces `escapeHtml()` for all three thinking render sites (live thinking phase, transition, final rebuild); `white-space: pre-wrap` removed from `.thinking-content` CSS
+- [x] `.thinking-content` descendant CSS specificity fixed — added overrides so `p`, `li`, `h1`–`h6`, `strong`, `em`, `blockquote` inside `.thinking-content` inherit the muted `#718096` colour rather than being overridden by `.message-content` descendant rules; heading `font-size` reset to `inherit` to preserve the compact 0.8rem scale
+- [x] "Stop speaking" button (🔇) repositioned to the right of "Auto-speak" (🔊) in the toolbar — new order: 🎤 mic → 🔊 auto-TTS → 🔇 stop speaking
+- [x] Version bumped to 1.5.7
+- [x] Abort mid-answer now preserves thinking block — the abort handler derives `abortThinking` via `splitThinkingContent` and renders a collapsed `<details>` block alongside the partial answer and `[response stopped]` notice (previously the thinking block was silently discarded)
+- [x] `splitThinkingContent(thinkingBuffer, fullResponse)` extracted as a pure utility in `utils.js` — replaces the three copies of the inline split logic in `api.js`; `_THINK_END` constant lives alongside it; Node.js compat export enables Jest testing
+- [x] Jest unit tests added — `tests/js/thinking.test.js` covers `splitThinkingContent` across native mode, inline token mode, and abort scenarios (14 tests); `jest.config.js` added at project root; `npm run test:js` script added to `package.json`; `Test (jest)` step added to the `frontend-lint` CI job
+- [x] `aria-label="Toggle AI reasoning"` added to all `<summary>` elements in the thinking block — thinking phase, transition, final rebuild, and abort rebuild; screen readers now get a consistent description regardless of the summary text state ("Thinking…" vs "Thinking")
+- [x] Initial response bubble uses Unicode ellipsis `Thinking…` (U+2026) — matches the streaming thinking block summary; previously used ASCII `Thinking...`
+- [x] `test_main.py` module docstring updated to list `/auth/me` in the route handlers coverage summary
+- [x] `.thinking-content` max-height increased from 280px to 400px — gives more room for long reasoning chains before the scrollbar kicks in
+- [x] Version bumped to 1.5.8
 
 ## Known Limitations (Accepted Trade-offs)
 

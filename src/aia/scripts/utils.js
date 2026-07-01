@@ -1,5 +1,35 @@
 // utils.js - Utility functions
 
+const _THINK_END = '<|/think|>';
+
+/**
+ * Split streaming buffers into { thinking, answer } components.
+ * Works for both Ollama native thinking mode (separate message.thinking tokens)
+ * and inline token mode (<|/think|> boundary inside message.content).
+ *
+ * @param {string} thinkingBuffer - Accumulated message.thinking tokens
+ * @param {string} fullResponse   - Accumulated message.content tokens
+ * @returns {{ thinking: string, answer: string }}
+ */
+function splitThinkingContent(thinkingBuffer, fullResponse) {
+  if (thinkingBuffer && !fullResponse.includes(_THINK_END)) {
+    // Native Ollama thinking mode: thinking and answer arrive in separate fields.
+    return { thinking: thinkingBuffer, answer: fullResponse };
+  }
+  const idx = fullResponse.indexOf(_THINK_END);
+  if (idx === -1) {
+    // Inline token mode, still in the thinking phase.
+    return { thinking: fullResponse, answer: '' };
+  }
+  return {
+    thinking: fullResponse.slice(0, idx),
+    answer: fullResponse.slice(idx + _THINK_END.length).trimStart()
+  };
+}
+
+// Node.js compat — lets Jest import this function for unit tests; no-op in browser.
+if (typeof module !== 'undefined') module.exports = { splitThinkingContent };
+
 // Format timestamp as: ddd, dd/mmm/yyyy HH:MM:SS AM/PM
 function formatTimestamp(d) {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

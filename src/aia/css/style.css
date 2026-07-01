@@ -535,6 +535,86 @@ body {
 .status-stopped { opacity: 0.5; font-size: 0.85em; margin-top: 4px; }
 .status-error { color: #e53e3e; }
 
+/* Thinking block — collapsible reasoning section streamed before the AI answer */
+.thinking-block {
+  margin-bottom: 12px;
+  border: 1px solid rgba(102, 126, 234, 0.25);
+  border-radius: 6px;
+  background: rgba(102, 126, 234, 0.04);
+  overflow: hidden;
+}
+
+.thinking-block summary {
+  cursor: pointer;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  color: #667eea;
+  font-style: italic;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.thinking-block summary::-webkit-details-marker {
+  display: none;
+}
+
+.thinking-block summary::before {
+  content: '\25B8';
+  font-style: normal;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.thinking-block[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.thinking-block summary:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.thinking-content {
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  color: #718096;
+  font-family: inherit;
+  line-height: 1.55;
+  border-top: 1px solid rgba(102, 126, 234, 0.15);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Override .message-content descendant rules so thinking text stays muted */
+.thinking-content p,
+.thinking-content li,
+.thinking-content h1,
+.thinking-content h2,
+.thinking-content h3,
+.thinking-content h4,
+.thinking-content h5,
+.thinking-content h6,
+.thinking-content strong,
+.thinking-content em,
+.thinking-content blockquote {
+  color: inherit;
+}
+
+.thinking-content h1,
+.thinking-content h2,
+.thinking-content h3,
+.thinking-content h4,
+.thinking-content h5,
+.thinking-content h6 {
+  font-size: inherit;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
 /* Context trim divider rendered by addContextTrimNotice() in chat.js */
 .context-trim-notice {
   text-align: center;

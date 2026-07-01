@@ -56,6 +56,9 @@ jobs:
       - name: Lint (htmlhint)
         run: npm run lint:html
 
+      - name: Test (jest)
+        run: npm run test:js
+
   nginx-config-check:
     name: Nginx — config syntax
     runs-on: ubuntu-latest

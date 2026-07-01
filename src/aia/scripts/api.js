@@ -18,7 +18,17 @@ function setStreamingUI(isStreaming) {
 
 async function streamOllamaResponse(userMessage, messageDiv) {
   const contentDiv = messageDiv.querySelector('.message-content');
+
+  // fullResponse  — accumulates message.content tokens (the answer in both modes)
+  // thinkingBuffer — accumulates message.thinking tokens (native Ollama thinking mode)
+  //                  OR the pre-<|/think|> portion of message.content (inline token mode)
   let fullResponse = '';
+  let thinkingBuffer = '';
+
+  // inAnswerPhase / answerDiv — used during streaming to keep the <details> element
+  // stable so user open/close actions survive repeated innerHTML writes to answerDiv.
+  let inAnswerPhase = false;
+  let answerDiv = null;
 
   // Add user message to conversation history (include timestamps)
   const userTsISO = new Date().toISOString();
@@ -41,10 +51,15 @@ async function streamOllamaResponse(userMessage, messageDiv) {
     addContextTrimNotice();
   }
 
+  // CRITICAL: The <|think|> token triggers the reasoning process
+  const thinkingToken = "<|think|>  ";
+
   // Build messages array with system prompt — only send role+content to API
+  // The assistant prefill primes Gemma 4 to enter reasoning mode before answering.
   const messages = [
     { role: 'system', content: currentSystemPrompt },
-    ...conversationHistory.map(m => ({ role: m.role, content: m.content }))
+    ...conversationHistory.map(m => ({ role: m.role, content: m.content })),
+    { role: 'assistant', content: thinkingToken }
   ];
 
   streamAbortController = new AbortController();
@@ -54,7 +69,12 @@ async function streamOllamaResponse(userMessage, messageDiv) {
     const response = await fetch(OLLAMA_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODEL_NAME, messages, stream: true }),
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages,
+        stream: true,
+        options: { temperature: 1.0, top_p: 0.95, top_k: 64 }
+      }),
       signal: streamAbortController.signal,
       redirect: 'manual'
     });
@@ -85,16 +105,70 @@ async function streamOllamaResponse(userMessage, messageDiv) {
       for (const line of lines) {
         try {
           const json = JSON.parse(line);
-          if (json.message && json.message.content) {
-            fullResponse += json.message.content;
-            contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(fullResponse));
-            const messagesDiv = document.getElementById('chatMessages');
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+          if (!json.message) continue;
+
+          // Native Ollama thinking mode: reasoning arrives in message.thinking,
+          // the answer arrives separately in message.content.
+          // Inline token mode: both arrive in message.content with <|/think|> boundary.
+          const gotThinking = json.message.thinking;
+          const gotContent = json.message.content;
+          if (!gotThinking && !gotContent) continue;
+
+          if (gotThinking) thinkingBuffer += json.message.thinking;
+          if (gotContent) fullResponse += json.message.content;
+
+          const { thinking: currentThinking, answer: currentAnswer } =
+            splitThinkingContent(thinkingBuffer, fullResponse);
+          const isAnswering = currentAnswer.length > 0;
+
+          if (!isAnswering) {
+            // Thinking phase — live-update rendered reasoning content.
+            contentDiv.innerHTML =
+              '<details class="thinking-block" open>' +
+              '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
+              '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
+              '</details>';
+          } else {
+            if (!inAnswerPhase) {
+              // Transition: build the stable two-part structure once so the <details>
+              // element survives repeated innerHTML writes during answer streaming.
+              inAnswerPhase = true;
+              contentDiv.innerHTML =
+                '<details class="thinking-block" open>' +
+                '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
+                '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
+                '</details>' +
+                '<div class="answer-content"></div>';
+              answerDiv = contentDiv.querySelector('.answer-content');
+            }
+            if (answerDiv) answerDiv.innerHTML = DOMPurify.sanitize(marked.parse(currentAnswer));
           }
+
+          document.getElementById('chatMessages').scrollTop =
+            document.getElementById('chatMessages').scrollHeight;
         } catch (e) {
           console.error('Error parsing JSON:', e);
         }
       }
+    }
+
+    // Derive final thinking text and answer from whichever mode was active.
+    const { thinking: finalThinking, answer: savedContent } =
+      splitThinkingContent(thinkingBuffer, fullResponse);
+
+    // Rebuild final DOM: collapsed thinking block (if any) + rendered answer.
+    // This is the authoritative render — overwrites whatever partial state the
+    // streaming loop left behind.
+    const answerHtml = DOMPurify.sanitize(marked.parse(savedContent));
+    if (finalThinking) {
+      contentDiv.innerHTML =
+        '<details class="thinking-block">' +
+        '<summary aria-label="Toggle AI reasoning">Thinking</summary>' +
+        '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(finalThinking)) + '</div>' +
+        '</details>' +
+        '<div class="answer-content">' + answerHtml + '</div>';
+    } else {
+      contentDiv.innerHTML = answerHtml;
     }
 
     // Add assistant response to conversation history (include timestamps)
@@ -102,7 +176,7 @@ async function streamOllamaResponse(userMessage, messageDiv) {
     const assistantTsFmt = formatTimestamp(new Date());
     conversationHistory.push({
       role: 'assistant',
-      content: fullResponse,
+      content: savedContent,
       timestamp: assistantTsISO,
       formattedTimestamp: assistantTsFmt
     });
@@ -111,33 +185,51 @@ async function streamOllamaResponse(userMessage, messageDiv) {
     if (tsElem) tsElem.textContent = assistantTsFmt;
 
     const copyBtn = messageDiv.querySelector('.copy-btn');
-    if (copyBtn) copyBtn.dataset.content = fullResponse;
+    if (copyBtn) copyBtn.dataset.content = savedContent;
     const speakBtn = messageDiv.querySelector('.speak-btn');
-    if (speakBtn) speakBtn.dataset.content = fullResponse;
+    if (speakBtn) speakBtn.dataset.content = savedContent;
     const actionsDiv = messageDiv.querySelector('.message-actions');
     if (actionsDiv) actionsDiv.style.display = '';
 
     if (document.getElementById('autoTTSBtn').classList.contains('tts-on')) {
-      speakText(fullResponse);
+      speakText(savedContent);
     }
 
   } catch (error) {
-    if (error.name === 'AbortError' && fullResponse) {
-      // Partial content received before stop — save it so the conversation remains coherent.
-      // The user message is already in history; add the truncated assistant reply.
-      conversationHistory.push({
-        role: 'assistant',
-        content: fullResponse,
-        timestamp: new Date().toISOString(),
-        formattedTimestamp: formatTimestamp(new Date())
-      });
-      contentDiv.innerHTML =
-        DOMPurify.sanitize(marked.parse(fullResponse)) +
-        '<p class="status-stopped">[response stopped]</p>';
-      const copyBtn = messageDiv.querySelector('.copy-btn');
-      if (copyBtn) copyBtn.dataset.content = fullResponse;
-      const speakBtn = messageDiv.querySelector('.speak-btn');
-      if (speakBtn) speakBtn.dataset.content = fullResponse;
+    if (error.name === 'AbortError' && (fullResponse || thinkingBuffer)) {
+      // Derive partial answer and any completed thinking from whichever mode was active.
+      const { thinking: abortThinking, answer: savedContent } =
+        splitThinkingContent(thinkingBuffer, fullResponse);
+
+      if (savedContent) {
+        // Partial answer received before stop — save it so the conversation remains coherent.
+        conversationHistory.push({
+          role: 'assistant',
+          content: savedContent,
+          timestamp: new Date().toISOString(),
+          formattedTimestamp: formatTimestamp(new Date())
+        });
+        const partialHtml = DOMPurify.sanitize(marked.parse(savedContent)) +
+          '<p class="status-stopped">[response stopped]</p>';
+        if (abortThinking) {
+          contentDiv.innerHTML =
+            '<details class="thinking-block">' +
+            '<summary aria-label="Toggle AI reasoning">Thinking</summary>' +
+            '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(abortThinking)) + '</div>' +
+            '</details>' +
+            '<div class="answer-content">' + partialHtml + '</div>';
+        } else {
+          contentDiv.innerHTML = partialHtml;
+        }
+        const copyBtn = messageDiv.querySelector('.copy-btn');
+        if (copyBtn) copyBtn.dataset.content = savedContent;
+        const speakBtn = messageDiv.querySelector('.speak-btn');
+        if (speakBtn) speakBtn.dataset.content = savedContent;
+      } else {
+        // Stopped during thinking phase — nothing useful to keep.
+        conversationHistory.pop();
+        contentDiv.innerHTML = '<p class="status-muted">Response stopped.</p>';
+      }
     } else {
       // Nothing useful generated — roll back the user message entirely.
       conversationHistory.pop();

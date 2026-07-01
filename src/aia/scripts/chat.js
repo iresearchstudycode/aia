@@ -95,7 +95,7 @@ function addAIMessagePlaceholder() {
   messageDiv.innerHTML = `
       <div class="message-label">AI Assistant</div>
       <div class="message-content">
-        <p class="status-muted">Thinking...</p>
+        <p class="status-muted">Thinking…</p>
       </div>
       <div class="message-timestamp">${escapeHtml(timestamp)}</div>
     `;

@@ -98,14 +98,14 @@ Scripts are loaded in dependency order in `index.html`:
 | `utils.js` | `formatTimestamp()`, `escapeHtml()`, `showToast()` — pure helpers |
 | `speech.js` | Web Speech API: continuous recognition with 3-second silence detection, TTS with voice preference ("Microsoft Catherine") |
 | `chat.js` | Message rendering, chat save/load, system prompt state management; also defines `COPY_ICON`, `CHECK_ICON`, `SPEAK_ICON`, `STOP_ICON` as top-level SVG string constants — `speech.js` reads `SPEAK_ICON`/`STOP_ICON` to toggle per-message button state; all four are declared in `eslint.config.js` crossModuleGlobals |
-| `api.js` | `streamOllamaResponse()` — streaming fetch, real-time markdown rendering, abort via `streamAbortController` |
+| `api.js` | `streamOllamaResponse()` — streaming fetch, Gemma 4 thinking mode (dual-buffer: `thinkingBuffer` for native Ollama `message.thinking` tokens, `fullResponse` for `message.content`; inline `<|/think|>` token boundary also supported), live collapsible thinking block rendered via `<details>`, final answer and thinking both pass through `DOMPurify.sanitize(marked.parse(...))`, abort via `streamAbortController`; thinking content excluded from `conversationHistory`, copy, and TTS |
 | `main.js` | `DOMContentLoaded` wiring — wires ALL button/input event listeners via `addEventListener` (no inline HTML handlers); initialises default persona from the HTML `selected` attribute |
 
 **Global state lives in `config.js`** (`conversationHistory`, `currentSystemPrompt`) and is shared across modules via the window scope — there is no module bundler.
 
 ## Security Invariants
 
-- All AI response content passes through `DOMPurify.sanitize(marked.parse(...))` before being set as `innerHTML` — in `api.js` (streaming) and `chat.js` (`renderConversationHistory`).
+- All AI response content — both the final answer and thinking block content — passes through `DOMPurify.sanitize(marked.parse(...))` before being set as `innerHTML` — in `api.js` (streaming and final rebuild) and `chat.js` (`renderConversationHistory`).
 - User-supplied text uses `escapeHtml()` before insertion into `innerHTML` (`addUserMessage`, `renderConversationHistory`).
 - CSP has no `unsafe-inline` in either `script-src` or `style-src`. All event handlers are wired via `addEventListener` in `main.js`; all element visibility is controlled by CSS classes or `element.style.display` (programmatic — not subject to CSP).
 - The streaming fetch in `api.js` is wired to a module-level `streamAbortController`; call `stopStreaming()` to cancel mid-stream. If tokens were received before abort, the partial response is saved to `conversationHistory`; the user message is only rolled back when nothing was generated.
