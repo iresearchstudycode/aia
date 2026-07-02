@@ -7,7 +7,7 @@
     "test:js": "jest"
   },
   "devDependencies": {
-    "@eslint/js": "^9.17.0",
+    "@eslint/js": "^10.0.1",
     "eslint": "^10.6.0",
     "globals": "^15.14.0",
     "htmlhint": "^1.1.4",
