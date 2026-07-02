@@ -219,16 +219,14 @@ def _setup_html(users: dict[str, str]) -> str:
         totp = pyotp.TOTP(secret)
         uri = totp.provisioning_uri(name=username, issuer_name=_APP_TITLE)
         svg = _qr_svg(uri)
-        cards.append(
-            f"""<div class="setup-card">
+        cards.append(f"""<div class="setup-card">
       <h3>{username}</h3>
       <p>Scan with Google Authenticator:</p>
       <div class="qr">{svg}</div>
       <p class="uri-label">Or copy the setup URI:</p>
       <code class="uri">{uri}</code>
       <p class="secret-label">TOTP Secret (keep private): <code>{secret}</code></p>
-    </div>"""
-        )
+    </div>""")
     cards_html = "\n".join(cards)
     return f"""<!doctype html>
 <html lang="en">
