@@ -121,6 +121,8 @@
 - [x] Version bumped to 1.7.0
 - [x] Bug fix: thinking mode OFF did not suppress reasoning — `gemma4:e4b` reasons by default; `think: false` must be sent explicitly in the request body; `requestBody.think = thinkingEnabled` added in `_buildRequestBody`; 6 new routing tests assert `think` field value across all modes and vision cases — total suite now 64 tests
 - [x] Version bumped to 1.7.1
+- [x] Bug fix: with thinking OFF, an empty `<details class="thinking-block">` was rendered during streaming because the `!inAnswerPhase` branch always inserted the block regardless of whether `currentThinking` was non-empty; fixed by only emitting the block when `currentThinking` is truthy — answer now renders directly into `.answer-content` with no thinking widget visible
+- [x] Version bumped to 1.7.2
 
 ## Known Limitations (Accepted Trade-offs)
 

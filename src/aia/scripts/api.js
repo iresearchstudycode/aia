@@ -201,12 +201,12 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
             } else {
               if (!inAnswerPhase) {
                 inAnswerPhase = true;
-                contentDiv.innerHTML =
-                  '<details class="thinking-block" open>' +
-                  '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
-                  '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
-                  '</details>' +
-                  '<div class="answer-content"></div>';
+                contentDiv.innerHTML = (currentThinking
+                  ? '<details class="thinking-block" open>' +
+                    '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
+                    '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
+                    '</details>'
+                  : '') + '<div class="answer-content"></div>';
                 answerDiv = contentDiv.querySelector('.answer-content');
               }
               if (answerDiv) answerDiv.innerHTML = DOMPurify.sanitize(marked.parse(currentAnswer));
