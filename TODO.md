@@ -119,6 +119,8 @@
 - [x] `currentThinkingMode` added to `config.js` and `eslint.config.js` globals
 - [x] Jest routing tests updated to pass `thinkingMode` explicitly; 8 new tests cover all four modes (off/low/medium/high) for prefill, options, and budget values — total suite now 58 tests
 - [x] Version bumped to 1.7.0
+- [x] Bug fix: thinking mode OFF did not suppress reasoning — `gemma4:e4b` reasons by default; `think: false` must be sent explicitly in the request body; `requestBody.think = thinkingEnabled` added in `_buildRequestBody`; 6 new routing tests assert `think` field value across all modes and vision cases — total suite now 64 tests
+- [x] Version bumped to 1.7.1
 
 ## Known Limitations (Accepted Trade-offs)
 

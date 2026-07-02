@@ -107,6 +107,41 @@ describe('_buildRequestBody — thinking prefill', () => {
   });
 });
 
+// ─── think field ─────────────────────────────────────────────────────────────
+
+describe('_buildRequestBody — think field', () => {
+  test('thinking off: think:false sent explicitly (model reasons by default otherwise)', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'off');
+    expect(requestBody.think).toBe(false);
+  });
+
+  test('thinking low: think:true', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'low');
+    expect(requestBody.think).toBe(true);
+  });
+
+  test('thinking medium: think:true', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'medium');
+    expect(requestBody.think).toBe(true);
+  });
+
+  test('thinking high: think:true', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'high');
+    expect(requestBody.think).toBe(true);
+  });
+
+  test('initial vision: no think field (gemma3 does not support reasoning)', () => {
+    const { requestBody } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION, 'off');
+    expect(requestBody.think).toBeUndefined();
+  });
+
+  test('follow-up vision: no think field regardless of mode', () => {
+    const history = [{ role: 'user', imageBase64: 'img64' }];
+    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'high');
+    expect(requestBody.think).toBeUndefined();
+  });
+});
+
 // ─── Options ─────────────────────────────────────────────────────────────────
 
 describe('_buildRequestBody — options', () => {

@@ -45,6 +45,9 @@ function _buildRequestBody(imageBase64, history, systemPrompt, modelName, vision
   };
 
   if (!isVision) {
+    // think: false explicitly suppresses native reasoning in gemma4:e4b — omitting
+    // the field is not enough because the model reasons by default.
+    requestBody.think = thinkingEnabled;
     const options = { temperature: 1.0, top_p: 0.95, top_k: 64 };
     if (thinkingEnabled) {
       // Low/Medium cap the thinking budget; High lets the model reason without limit.
