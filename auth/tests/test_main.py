@@ -6,7 +6,8 @@ Coverage:
 - CSRF token derivation: _make_csrf_token
 - User loading: _load_users
 - Session validation: _validate_session
-- Route handlers: /health, /auth/verify, /auth/login (GET+POST), /auth/logout, /auth/setup, /auth/me
+- Route handlers: /health, /auth/verify, /auth/login (GET+POST),
+  /auth/logout, /auth/setup, /auth/me
 """
 
 import time

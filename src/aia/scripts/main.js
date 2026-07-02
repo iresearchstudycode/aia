@@ -156,7 +156,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   // Close the dropdown after each menu-item action (before any confirm dialogs).
-  ['saveBtn', 'openBtn', 'clearBtn', 'closeBtn'].forEach(function (id) {
+  ['saveBtn', 'exportMdBtn', 'openBtn', 'clearBtn', 'closeBtn'].forEach(function (id) {
     document.getElementById(id).addEventListener('click', closeProfileDropdown);
   });
 
@@ -210,6 +210,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Header controls (now inside the profile dropdown)
   document.getElementById('saveBtn').addEventListener('click', saveChat);
+  document.getElementById('exportMdBtn').addEventListener('click', exportChatAsMarkdown);
   document.getElementById('openBtn').addEventListener('click', openChat);
   document.getElementById('clearBtn').addEventListener('click', clearChat);
   document.getElementById('closeBtn').addEventListener('click', closeWindow);
