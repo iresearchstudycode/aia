@@ -1,5 +1,21 @@
 // main.js - Initialization and event handlers
 
+// Trap Tab/Shift-Tab focus inside an open panel so keyboard users cannot
+// accidentally tab to elements behind the overlay.
+function _trapFocus(panel, e) {
+  const focusable = Array.from(
+    panel.querySelectorAll('button:not(:disabled), select:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')
+  ).filter(el => el.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey) {
+    if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+  } else {
+    if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+}
+
 function _getCookie(name) {
   const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
   return match ? decodeURIComponent(match[1]) : '';
@@ -120,11 +136,15 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!profileMenu.contains(e.target)) closeProfileDropdown();
   });
 
-  // Close both panels on Escape.
+  // Close both panels on Escape; trap Tab focus inside whichever panel is open.
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       closeProfileDropdown();
       closePersonaPanel();
+    }
+    if (e.key === 'Tab') {
+      if (personaPanel.classList.contains('open')) _trapFocus(personaPanel, e);
+      if (profileDropdown.classList.contains('open')) _trapFocus(profileDropdown, e);
     }
   });
 
@@ -285,9 +305,24 @@ document.addEventListener('DOMContentLoaded', function () {
       : 'Enable thinking mode — model reasons before answering';
     thinkingDepthSelect.style.display = isOn ? 'inline-block' : 'none';
     currentThinkingMode = isOn ? thinkingDepthSelect.value : 'off';
+    localStorage.setItem('thinkingOn', String(isOn));
   });
 
   thinkingDepthSelect.addEventListener('change', function () {
     currentThinkingMode = this.value;
+    localStorage.setItem('thinkingDepth', this.value);
   });
+
+  // Restore thinking mode preference across sessions (mirrors autoTTS persistence).
+  const savedThinkingDepth = localStorage.getItem('thinkingDepth') || 'medium';
+  const savedThinkingOn = localStorage.getItem('thinkingOn') === 'true';
+  thinkingDepthSelect.value = savedThinkingDepth;
+  if (savedThinkingOn) {
+    thinkingModeBtn.classList.add('thinking-on');
+    thinkingModeBtn.setAttribute('aria-pressed', 'true');
+    thinkingModeBtn.setAttribute('aria-label', 'Thinking mode: On');
+    thinkingModeBtn.title = 'Thinking mode: On — click to disable';
+    thinkingDepthSelect.style.display = 'inline-block';
+    currentThinkingMode = savedThinkingDepth;
+  }
 });

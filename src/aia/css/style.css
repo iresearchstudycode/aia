@@ -797,6 +797,12 @@ body {
   line-height: 1;
 }
 
+.remove-image-btn svg {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
 .remove-image-btn:hover {
   background: rgba(0, 0, 0, 0.15);
 }

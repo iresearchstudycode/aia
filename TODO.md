@@ -134,6 +134,12 @@
 - [x] Vision placeholder UX improvement (P4) — saved-chat image placeholder changed from plain text to an inline SVG camera/landscape icon + "Image not available in saved file" label; `.image-placeholder` flex layout and `.image-placeholder svg` sizing added to CSS
 - [x] Chevron rotation animation (P5) — persona toggle chevron and profile trigger chevron now rotate 180° when their panel is open via CSS `transition: transform 0.2s ease` and `[aria-expanded="true"] svg { transform: rotate(180deg) }`
 - [x] Version bumped to 1.9.0
+- [x] Bug fix: `clearChat()` and `handleOpenFile()` now call `clearImagePreview()` — pending image attachment no longer silently persists into a cleared or newly loaded conversation
+- [x] Thinking mode preference persisted to `localStorage` — on/off state and depth (Low/Medium/High) survive page reload, matching the existing `autoTTS` persistence behaviour
+- [x] AI loading placeholder changed from "Thinking…" to "Working…" — "Thinking…" was misleading for vision requests and for text requests with thinking mode OFF
+- [x] `removeImageBtn` now uses an SVG × icon instead of a `✕` text character — the only remaining non-SVG button after the v1.8.0 redesign
+- [x] Keyboard focus trap added to persona panel and profile dropdown — Tab/Shift-Tab now cycles within the open panel; keyboard users can no longer accidentally tab to elements behind the overlay
+- [x] Version bumped to 1.9.1
 
 ## Known Limitations (Accepted Trade-offs)
 

@@ -116,7 +116,7 @@ function addAIMessagePlaceholder() {
   messageDiv.innerHTML = `
       <div class="message-label">AI Assistant</div>
       <div class="message-content">
-        <p class="status-muted">Thinking…</p>
+        <p class="status-muted">Working…</p>
       </div>
       <div class="message-timestamp">${escapeHtml(timestamp)}</div>
     `;
@@ -149,6 +149,7 @@ function clearChat() {
     stopSpeaking(); // Stop any ongoing speech (this will resume recognition if needed)
     conversationHistory = [];
     document.getElementById('chatMessages').innerHTML = '';
+    clearImagePreview();
     updateSystemPromptState(); // Re-enable system prompt selector
   }
 }
@@ -438,6 +439,7 @@ function handleOpenFile(event) {
       });
 
       renderConversationHistory();
+      clearImagePreview();
       // updateSystemPromptState() is now called inside renderConversationHistory()
     } catch (err) {
       alert('Failed to open chat: ' + err.message);
