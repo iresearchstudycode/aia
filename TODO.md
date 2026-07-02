@@ -125,6 +125,8 @@
 - [x] Version bumped to 1.7.2
 - [x] Bug fix: answer rendered inside thinking block when thinking mode is OFF — root cause: `splitThinkingContent('', answer)` returns `{ thinking: answer, answer: '' }` (hits the "inline mode, still thinking" branch); fixed by computing `thinkingActive` once after `_buildRequestBody` and bypassing `splitThinkingContent` in all three call sites (live stream loop, final render, abort handler) when false; answer now streams directly into `contentDiv` with no thinking block
 - [x] Version bumped to 1.7.3
+- [x] ChatGPT-style redesign with sky blue + dark navy palette — page background dark navy (#0f172a); header solid dark navy with sky-blue chat-bubble logo; user messages right-aligned rounded pill (#dbeafe sky-blue bubble, no left border); AI messages clean card (subtle border, no left border); send button sky blue (#0ea5e9); all toolbar and dropdown emoji replaced with inline ChatGPT-style SVG line icons (mic, volume, mute, paperclip, lightbulb, user, chevron, download, folder, trash, X, logout); thinking-mode active state sky blue (not purple); speak-button speaking state sky blue; action-button hover sky blue; all indigo/purple accent (#667eea, #764ba2) replaced throughout
+- [x] Version bumped to 1.8.0
 
 ## Known Limitations (Accepted Trade-offs)
 

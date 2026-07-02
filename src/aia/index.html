@@ -6,9 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
 
   <link rel="icon" href="images/icon.ico" type="image/x-icon">
-  <title>🤖 AI Assistant (Local)</title>
+  <title>AI Assistant (Local)</title>
   <link rel="stylesheet" href="css/style.css">
-
 
   <script type="application/javascript" src="./scripts/marked.min.js"
     integrity="sha256-4Pc7cD47oE980D7DghoNwV643QQ3juFvHEx9nl+MuEw="></script>
@@ -27,68 +26,162 @@
     <div class="chat-header">
       <div class="header-title">
         <div class="title-main">
-          🤖 AI Assistant
-          <button type="button" id="personaToggleBtn" class="persona-toggle-btn" aria-haspopup="true" aria-expanded="false"
-            title="Choose persona">▾</button>
+          <!-- Chat bubble with three dots — AI identity mark -->
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+            class="header-bot-icon" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            <circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/>
+            <circle cx="12" cy="10" r="1" fill="currentColor" stroke="none"/>
+            <circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/>
+          </svg>
+          <span>AI Assistant</span>
+          <button type="button" id="personaToggleBtn" class="persona-toggle-btn"
+            aria-haspopup="true" aria-expanded="false" title="Choose persona">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
         </div>
         <div id="currentPersonaLabel" class="current-persona-label"></div>
       </div>
       <div class="header-actions">
         <div class="profile-menu" id="profileMenu">
-          <button type="button" class="profile-trigger" id="profileTrigger" aria-haspopup="true" aria-expanded="false">
-            👤 <span id="profileName"></span>
+          <button type="button" class="profile-trigger" id="profileTrigger"
+            aria-haspopup="true" aria-expanded="false">
+            <!-- User icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            <span id="profileName"></span>
+            <!-- Chevron -->
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+              class="profile-chevron" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
           </button>
           <div class="profile-dropdown" id="profileDropdown">
-            <button type="button" id="saveBtn">💾 Save</button>
-            <button type="button" id="openBtn">📂 Open</button>
-            <button type="button" id="clearBtn">🗑️ Clear</button>
-            <button type="button" id="closeBtn">✖️ Close</button>
+            <button type="button" id="saveBtn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Save
+            </button>
+            <button type="button" id="openBtn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+              Open
+            </button>
+            <button type="button" id="clearBtn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+              </svg>
+              Clear
+            </button>
+            <button type="button" id="closeBtn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+              Close
+            </button>
             <hr class="dropdown-divider">
             <form id="logoutForm" method="post" action="/auth/logout">
-              <button type="submit">🔒 Sign out</button>
+              <button type="submit">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <polyline points="16 17 21 12 16 7"/>
+                  <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                Sign out
+              </button>
             </form>
           </div>
         </div>
       </div>
     </div>
+
     <div class="chat-messages" id="chatMessages" role="log" aria-label="Chat messages" aria-live="polite">
       <!-- Chat messages will appear here -->
     </div>
+
     <input type="file" id="openInput" accept="application/json,.json">
-  <input type="file" id="imageInput" accept="image/*">
+    <input type="file" id="imageInput" accept="image/*">
+
     <div class="chat-input">
       <div class="chat-input-container">
         <div class="image-preview-strip" id="imagePreviewStrip">
           <img id="imagePreviewThumb" class="image-preview-thumb" alt="Image to attach">
           <button type="button" id="removeImageBtn" class="remove-image-btn" aria-label="Remove attached image">✕</button>
         </div>
-        <textarea id="userInput" rows="1" aria-label="Message" placeholder="Message AI Assistant — Shift+Enter for new line..."></textarea>
+        <textarea id="userInput" rows="1" aria-label="Message"
+          placeholder="Message AI Assistant — Shift+Enter for new line..."></textarea>
         <div class="chat-input-toolbar">
           <div class="toolbar-left">
+            <!-- Microphone -->
             <button type="button" class="voice-btn toolbar-icon-btn" id="micBtn"
-              aria-label="Toggle voice input"
-              aria-pressed="false"
-              title="Toggle Continuous Speech Recognition - Pauses while AI speaks to avoid echo. Say 'stop listening' or click to stop.">
-              🎤
+              aria-label="Toggle voice input" aria-pressed="false"
+              title="Toggle Continuous Speech Recognition — say 'stop listening' or click to stop">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
             </button>
+            <!-- Auto-speak -->
             <button type="button" class="voice-btn toolbar-icon-btn" id="autoTTSBtn"
-              aria-label="Toggle auto-speak"
-              aria-pressed="false"
-              title="Toggle Auto-speak — automatically reads AI responses aloud after each message">
-              🔊
+              aria-label="Toggle auto-speak" aria-pressed="false"
+              title="Toggle Auto-speak — automatically reads AI responses aloud">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg>
             </button>
+            <!-- Stop speaking -->
             <button type="button" class="voice-btn toolbar-icon-btn" id="speakerBtn"
               aria-label="Stop speaking" title="Stop Speaking">
-              🔇
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <line x1="23" y1="9" x2="17" y2="15"/>
+                <line x1="17" y1="9" x2="23" y2="15"/>
+              </svg>
             </button>
+            <!-- Attach image -->
             <button type="button" class="voice-btn toolbar-icon-btn" id="attachImageBtn"
               aria-label="Attach image" title="Attach an image for visual analysis">
-              📎
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+              </svg>
             </button>
+            <!-- Thinking mode -->
             <button type="button" class="voice-btn toolbar-icon-btn" id="thinkingModeBtn"
               aria-label="Thinking mode: Off" aria-pressed="false"
               title="Enable thinking mode — model reasons before answering">
-              💡
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="9" y1="18" x2="15" y2="18"/>
+                <line x1="10" y1="22" x2="14" y2="22"/>
+                <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/>
+              </svg>
             </button>
             <select id="thinkingDepthSelect" class="thinking-depth-select" aria-label="Thinking depth">
               <option value="low">Low</option>
@@ -98,15 +191,17 @@
           </div>
           <div class="toolbar-right">
             <span id="charCounter" class="char-counter"></span>
-            <button type="button" class="send-btn" id="sendBtn" title="Send message" aria-label="Send message" disabled>
+            <button type="button" class="send-btn" id="sendBtn"
+              title="Send message" aria-label="Send message" disabled>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 19V5M5 12l7-7 7 7" />
+                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 19V5M5 12l7-7 7 7"/>
               </svg>
             </button>
-            <button type="button" class="stop-streaming-btn" id="stopBtn" title="Stop response" aria-label="Stop response">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="5" y="5" width="14" height="14" rx="2" />
+            <button type="button" class="stop-streaming-btn" id="stopBtn"
+              title="Stop response" aria-label="Stop response">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <rect x="5" y="5" width="14" height="14" rx="2"/>
               </svg>
             </button>
           </div>
