@@ -249,6 +249,31 @@ async function sendMessage() {
   }
 }
 
+// Derive a short topic slug from the first user message — used in export filenames.
+function _chatTopic() {
+  const stopwords = new Set([
+    'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+    'should', 'may', 'might', 'shall', 'can', 'to', 'of', 'in', 'on',
+    'at', 'by', 'for', 'with', 'about', 'from', 'and', 'but', 'or', 'nor',
+    'so', 'yet', 'i', 'me', 'my', 'we', 'our', 'you', 'your', 'it', 'its',
+    'this', 'that', 'what', 'which', 'who', 'how', 'when', 'where', 'why',
+    'not', 'no', 'if', 'as', 'just', 'please', 'help', 'tell', 'make',
+    'write', 'explain', 'give', 'show', 'get', 'use', 'need', 'want',
+  ]);
+  const firstUser = conversationHistory.find(m => m.role === 'user');
+  if (!firstUser || !firstUser.content) return 'Chat';
+  const words = firstUser.content
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !stopwords.has(w));
+  const topic = words.slice(0, 3)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join('-');
+  return topic || 'Chat';
+}
+
 // Save chat function
 function saveChat() {
   if (conversationHistory.length === 0) {
@@ -272,30 +297,6 @@ function saveChat() {
   a.href = url;
 
   // Generate filename: YYYYMMDD-HHMMss-vpal-<Topic>
-  // Topic: first 2-3 meaningful words from the opening user message.
-  function _chatTopic() {
-    const stopwords = new Set([
-      'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-      'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-      'should', 'may', 'might', 'shall', 'can', 'to', 'of', 'in', 'on',
-      'at', 'by', 'for', 'with', 'about', 'from', 'and', 'but', 'or', 'nor',
-      'so', 'yet', 'i', 'me', 'my', 'we', 'our', 'you', 'your', 'it', 'its',
-      'this', 'that', 'what', 'which', 'who', 'how', 'when', 'where', 'why',
-      'not', 'no', 'if', 'as', 'just', 'please', 'help', 'tell', 'make',
-      'write', 'explain', 'give', 'show', 'get', 'use', 'need', 'want',
-    ]);
-    const firstUser = conversationHistory.find(m => m.role === 'user');
-    if (!firstUser || !firstUser.content) return 'Chat';
-    const words = firstUser.content
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length > 2 && !stopwords.has(w));
-    const topic = words.slice(0, 3)
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-      .join('-');
-    return topic || 'Chat';
-  }
   const now = new Date();
   const yyyy = now.getFullYear();
   const mo = String(now.getMonth() + 1).padStart(2, '0');
@@ -310,6 +311,65 @@ function saveChat() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   showToast('Chat saved');
+}
+
+// Export chat as a human-readable Markdown file
+function exportChatAsMarkdown() {
+  if (conversationHistory.length === 0) {
+    alert('No conversation to export!');
+    return;
+  }
+
+  const sel = document.getElementById('systemPromptSelect');
+  const personaName = sel.options[sel.selectedIndex].text;
+  const headerDate = formatTimestamp(new Date());
+
+  const lines = [
+    '# VPAL Chat Export',
+    '',
+    `**Date:** ${headerDate}`,
+    `**Persona:** ${personaName}`,
+    '',
+    '---',
+  ];
+
+  conversationHistory.forEach(msg => {
+    const formatted = msg.formattedTimestamp || formatTimestamp(new Date(msg.timestamp || Date.now()));
+
+    if (msg.role === 'user') {
+      lines.push('', `## You — ${formatted}`, '');
+      if (msg.imageDataUrl || msg.hasImage) {
+        lines.push('📎 *Image attached (not available in export)*', '');
+      }
+      if (msg.content) lines.push(msg.content);
+    } else {
+      lines.push('', `## AI Assistant (${personaName}) — ${formatted}`, '');
+      lines.push(msg.content || '');
+    }
+
+    lines.push('', '---');
+  });
+
+  const markdown = lines.join('\n');
+  const blob = new Blob([markdown], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mo = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mi = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  a.download = `${yyyy}${mo}${dd}-${hh}${mi}${ss}-vpal-${_chatTopic()}.md`;
+
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Chat exported as Markdown');
 }
 
 // Trigger file chooser for opening JSON chat

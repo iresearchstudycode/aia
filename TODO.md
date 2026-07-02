@@ -140,6 +140,8 @@
 - [x] `removeImageBtn` now uses an SVG × icon instead of a `✕` text character — the only remaining non-SVG button after the v1.8.0 redesign
 - [x] Keyboard focus trap added to persona panel and profile dropdown — Tab/Shift-Tab now cycles within the open panel; keyboard users can no longer accidentally tab to elements behind the overlay
 - [x] Version bumped to 1.9.1
+- [x] Export as Markdown — "Export MD" option added to the profile dropdown; `exportChatAsMarkdown()` in `chat.js` produces a `.md` file with a metadata header (date, persona), then one H2 section per message (`## You — HH:MM:SS`, `## AI Assistant (Persona Name) — HH:MM:SS`); AI content inserted verbatim (already stored as Markdown); image attachment noted inline; same smart topic slug and timestamp filename pattern as JSON save; `_chatTopic()` extracted to module scope so both export functions share it
+- [x] Version bumped to 1.9.2
 
 ## Known Limitations (Accepted Trade-offs)
 
