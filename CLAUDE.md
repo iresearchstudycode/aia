@@ -109,13 +109,14 @@ Scripts are loaded in dependency order in `index.html`:
 - User-supplied text uses `escapeHtml()` before insertion into `innerHTML` (`addUserMessage`, `renderConversationHistory`).
 - CSP has no `unsafe-inline` in either `script-src` or `style-src`. All event handlers are wired via `addEventListener` in `main.js`; all element visibility is controlled by CSS classes or `element.style.display` (programmatic — not subject to CSP).
 - The streaming fetch in `api.js` is wired to a module-level `streamAbortController`; call `stopStreaming()` to cancel mid-stream. If tokens were received before abort, the partial response is saved to `conversationHistory`; the user message is only rolled back when nothing was generated.
-- User input is capped at `MAX_INPUT_LENGTH` (4000) set programmatically on `#userInput` in `main.js`; Nginx enforces `client_max_body_size 1m` on the proxy endpoint.
+- User input is capped at `MAX_INPUT_LENGTH` (4000) set programmatically on `#userInput` in `main.js`; Nginx enforces `client_max_body_size 1m` globally and `20m` on the `/ollama/api/chat` location to accommodate base64-encoded image payloads.
 
 ## Key Configuration
 
 All runtime configuration is in [src/aia/scripts/config.js](src/aia/scripts/config.js):
 
-- `MODEL_NAME` — Ollama model to use (default: `gemma4:e4b`)
+- `MODEL_NAME` — text + thinking model (default: `gemma4:e4b`)
+- `VISION_MODEL_NAME` — vision-capable model for image requests (default: `gemma3:4b`); `gemma4:e4b` has no vision encoder in its GGUF so a separate model is required
 - `OLLAMA_API_URL` — proxied endpoint (default: `https://localhost/ollama/api/chat`)
 - `MAX_HISTORY_MESSAGES` — maximum entries in `conversationHistory` before oldest pairs are trimmed (default: `40`, i.e. 20 exchanges). Tune this when switching to a model with a smaller or larger context window.
 - `SPEECH_RECOGNITION_LANG` — BCP 47 language tag for the Web Speech API (default: `'en-US'`). Change to `'en-AU'`, `'fr-FR'`, etc. to match your locale.

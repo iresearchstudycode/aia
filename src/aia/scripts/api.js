@@ -2,6 +2,57 @@
 
 let streamAbortController = null;
 
+// Pure function: builds the Ollama /api/chat request body for a given turn.
+// Extracted so it can be unit-tested in Node.js without a DOM or global state.
+// Returns { requestBody, isVision, hasCurrentImage } — the flags are needed by
+// the caller to choose stream vs non-stream paths and the abort handler.
+function _buildRequestBody(imageBase64, history, systemPrompt, modelName, visionModelName) {
+  const thinkingToken = "<|think|>  ";
+
+  // isVision: true when this message or any history entry contains an image.
+  // hasCurrentImage: true only when a new image is attached to this specific message.
+  // They differ on follow-ups: user asks a text question after an image turn —
+  // isVision stays true (routes to gemma3), hasCurrentImage is false (stream:true).
+  const isVision = detectVisionContext(imageBase64, history);
+  const hasCurrentImage = !!imageBase64;
+
+  // Maps history images into the messages array for multi-turn vision conversations.
+  // Thinking prefill omitted when isVision — gemma3 doesn't support it, and Ollama
+  // rejects an assistant prefill on requests that contain images.
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...history.map(m => {
+      const msg = { role: m.role, content: m.content };
+      if (m.imageBase64) msg.images = [m.imageBase64];
+      return msg;
+    }),
+  ];
+  if (!isVision) {
+    messages.push({ role: 'assistant', content: thinkingToken });
+  }
+
+  // Initial vision requests (hasCurrentImage) use stream:false — Ollama's streaming
+  // path silently drops image tokens for GGUF models without vision encoders.
+  // Follow-up text in an image conversation (isVision && !hasCurrentImage) streams
+  // normally so the user sees tokens as they arrive.
+  // Text-only requests stream with thinking-mode sampling options.
+  const requestBody = {
+    model: isVision ? visionModelName : modelName,
+    messages,
+    stream: !hasCurrentImage,
+  };
+  if (!isVision) {
+    requestBody.options = { temperature: 1.0, top_p: 0.95, top_k: 64 };
+  } else if (!hasCurrentImage) {
+    requestBody.options = { num_ctx: 8192 };
+  }
+
+  return { requestBody, isVision, hasCurrentImage };
+}
+
+// Node.js compat export — lets Jest import _buildRequestBody for unit tests.
+if (typeof module !== 'undefined') module.exports = { _buildRequestBody };
+
 function stopStreaming() {
   if (streamAbortController) streamAbortController.abort();
 }
@@ -19,18 +70,16 @@ function setStreamingUI(isStreaming) {
 async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null, imageDataUrl = null) {
   const contentDiv = messageDiv.querySelector('.message-content');
 
-  // fullResponse  — accumulates message.content tokens (the answer in both modes)
-  // thinkingBuffer — accumulates message.thinking tokens (native Ollama thinking mode)
-  //                  OR the pre-<|/think|> portion of message.content (inline token mode)
+  // fullResponse  — accumulates message.content tokens (streaming text path only)
+  // thinkingBuffer — accumulates message.thinking tokens (streaming text path only)
   let fullResponse = '';
   let thinkingBuffer = '';
 
-  // inAnswerPhase / answerDiv — used during streaming to keep the <details> element
-  // stable so user open/close actions survive repeated innerHTML writes to answerDiv.
+  // inAnswerPhase / answerDiv — keeps the <details> element stable during streaming
   let inAnswerPhase = false;
   let answerDiv = null;
 
-  // Add user message to conversation history (include timestamps)
+  // Add user message to conversation history
   const userTsISO = new Date().toISOString();
   const userTsFmt = formatTimestamp(new Date());
   const userHistoryEntry = {
@@ -46,31 +95,18 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
   }
   conversationHistory.push(userHistoryEntry);
 
-  // Update system prompt state after adding to history
   updateSystemPromptState();
 
   // Trim oldest pairs when history exceeds the context limit
   if (conversationHistory.length > MAX_HISTORY_MESSAGES) {
     conversationHistory.splice(0, conversationHistory.length - MAX_HISTORY_MESSAGES);
-    // Ensure history starts with a user message (no orphaned assistant reply)
     if (conversationHistory[0].role !== 'user') conversationHistory.splice(0, 1);
     addContextTrimNotice();
   }
 
-  // CRITICAL: The <|think|> token triggers the reasoning process
-  const thinkingToken = "<|think|>  ";
-
-  // Build messages array with system prompt — only send role+content (+ images) to API.
-  // The assistant prefill primes Gemma 4 to enter reasoning mode before answering.
-  const messages = [
-    { role: 'system', content: currentSystemPrompt },
-    ...conversationHistory.map(m => {
-      const msg = { role: m.role, content: m.content };
-      if (m.imageBase64) msg.images = [m.imageBase64];
-      return msg;
-    }),
-    { role: 'assistant', content: thinkingToken }
-  ];
+  const { requestBody, hasCurrentImage } = _buildRequestBody(
+    imageBase64, conversationHistory, currentSystemPrompt, MODEL_NAME, VISION_MODEL_NAME
+  );
 
   streamAbortController = new AbortController();
   setStreamingUI(true);
@@ -79,109 +115,117 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
     const response = await fetch(OLLAMA_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: MODEL_NAME,
-        messages,
-        stream: true,
-        options: { temperature: 1.0, top_p: 0.95, top_k: 64 }
-      }),
+      body: JSON.stringify(requestBody),
       signal: streamAbortController.signal,
       redirect: 'manual'
     });
 
-    // An opaque redirect means nginx intercepted the request and redirected
-    // to /auth/login because the session has expired or the cookie is missing.
     if (response.type === 'opaqueredirect') {
       throw new Error('session-expired');
     }
 
     if (!response.ok) {
       if (response.status === 404) {
-        throw new Error(`Model "${MODEL_NAME}" not found — run: ollama pull ${MODEL_NAME}`);
+        const m = requestBody.model;
+        throw new Error(`Model "${m}" not found — run: ollama pull ${m}`);
       }
-      throw new Error(`Ollama returned HTTP ${response.status}`);
+      let detail = '';
+      try {
+        const body = await response.json();
+        if (body && body.error) detail = `: ${body.error}`;
+      } catch { /* ignore parse failures */ }
+      throw new Error(`Ollama returned HTTP ${response.status}${detail}`);
     }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+    let savedContent = '';
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    if (hasCurrentImage) {
+      // ---------------------------------------------------------------
+      // Non-streaming vision path: single JSON response object.
+      // ---------------------------------------------------------------
+      const data = await response.json();
+      savedContent = (data.message && data.message.content) || '';
+      const answerHtml = DOMPurify.sanitize(marked.parse(savedContent));
+      contentDiv.innerHTML = answerHtml || '<p class="status-muted">No response received.</p>';
 
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n').filter(line => line.trim());
+    } else {
+      // ---------------------------------------------------------------
+      // Streaming text path: newline-delimited JSON chunks.
+      // ---------------------------------------------------------------
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
 
-      for (const line of lines) {
-        try {
-          const json = JSON.parse(line);
-          if (!json.message) continue;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-          // Native Ollama thinking mode: reasoning arrives in message.thinking,
-          // the answer arrives separately in message.content.
-          // Inline token mode: both arrive in message.content with <|/think|> boundary.
-          const gotThinking = json.message.thinking;
-          const gotContent = json.message.content;
-          if (!gotThinking && !gotContent) continue;
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n').filter(line => line.trim());
 
-          if (gotThinking) thinkingBuffer += json.message.thinking;
-          if (gotContent) fullResponse += json.message.content;
+        for (const line of lines) {
+          try {
+            const json = JSON.parse(line);
+            if (!json.message) continue;
 
-          const { thinking: currentThinking, answer: currentAnswer } =
-            splitThinkingContent(thinkingBuffer, fullResponse);
-          const isAnswering = currentAnswer.length > 0;
+            const gotThinking = json.message.thinking;
+            const gotContent = json.message.content;
+            if (!gotThinking && !gotContent) continue;
 
-          if (!isAnswering) {
-            // Thinking phase — live-update rendered reasoning content.
-            contentDiv.innerHTML =
-              '<details class="thinking-block" open>' +
-              '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
-              '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
-              '</details>';
-          } else {
-            if (!inAnswerPhase) {
-              // Transition: build the stable two-part structure once so the <details>
-              // element survives repeated innerHTML writes during answer streaming.
-              inAnswerPhase = true;
+            if (gotThinking) thinkingBuffer += json.message.thinking;
+            if (gotContent) fullResponse += json.message.content;
+
+            const { thinking: currentThinking, answer: currentAnswer } =
+              splitThinkingContent(thinkingBuffer, fullResponse);
+            const isAnswering = currentAnswer.length > 0;
+
+            if (!isAnswering) {
               contentDiv.innerHTML =
                 '<details class="thinking-block" open>' +
                 '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
                 '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
-                '</details>' +
-                '<div class="answer-content"></div>';
-              answerDiv = contentDiv.querySelector('.answer-content');
+                '</details>';
+            } else {
+              if (!inAnswerPhase) {
+                inAnswerPhase = true;
+                contentDiv.innerHTML =
+                  '<details class="thinking-block" open>' +
+                  '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
+                  '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
+                  '</details>' +
+                  '<div class="answer-content"></div>';
+                answerDiv = contentDiv.querySelector('.answer-content');
+              }
+              if (answerDiv) answerDiv.innerHTML = DOMPurify.sanitize(marked.parse(currentAnswer));
             }
-            if (answerDiv) answerDiv.innerHTML = DOMPurify.sanitize(marked.parse(currentAnswer));
-          }
 
-          document.getElementById('chatMessages').scrollTop =
-            document.getElementById('chatMessages').scrollHeight;
-        } catch (e) {
-          console.error('Error parsing JSON:', e);
+            document.getElementById('chatMessages').scrollTop =
+              document.getElementById('chatMessages').scrollHeight;
+          } catch (e) {
+            console.error('Error parsing JSON:', e);
+          }
         }
+      }
+
+      const { thinking: finalThinking, answer: streamedContent } =
+        splitThinkingContent(thinkingBuffer, fullResponse);
+      savedContent = streamedContent;
+
+      const answerHtml = DOMPurify.sanitize(marked.parse(savedContent));
+      if (finalThinking) {
+        contentDiv.innerHTML =
+          '<details class="thinking-block">' +
+          '<summary aria-label="Toggle AI reasoning">Thinking</summary>' +
+          '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(finalThinking)) + '</div>' +
+          '</details>' +
+          '<div class="answer-content">' + answerHtml + '</div>';
+      } else {
+        contentDiv.innerHTML = answerHtml;
       }
     }
 
-    // Derive final thinking text and answer from whichever mode was active.
-    const { thinking: finalThinking, answer: savedContent } =
-      splitThinkingContent(thinkingBuffer, fullResponse);
-
-    // Rebuild final DOM: collapsed thinking block (if any) + rendered answer.
-    // This is the authoritative render — overwrites whatever partial state the
-    // streaming loop left behind.
-    const answerHtml = DOMPurify.sanitize(marked.parse(savedContent));
-    if (finalThinking) {
-      contentDiv.innerHTML =
-        '<details class="thinking-block">' +
-        '<summary aria-label="Toggle AI reasoning">Thinking</summary>' +
-        '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(finalThinking)) + '</div>' +
-        '</details>' +
-        '<div class="answer-content">' + answerHtml + '</div>';
-    } else {
-      contentDiv.innerHTML = answerHtml;
-    }
-
-    // Add assistant response to conversation history (include timestamps)
+    // -------------------------------------------------------------------
+    // Common post-request processing (both vision and text paths)
+    // -------------------------------------------------------------------
     const assistantTsISO = new Date().toISOString();
     const assistantTsFmt = formatTimestamp(new Date());
     conversationHistory.push({
@@ -206,13 +250,12 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
     }
 
   } catch (error) {
-    if (error.name === 'AbortError' && (fullResponse || thinkingBuffer)) {
-      // Derive partial answer and any completed thinking from whichever mode was active.
+    if (error.name === 'AbortError' && !hasCurrentImage && (fullResponse || thinkingBuffer)) {
+      // Streaming abort with partial content — preserve what was generated.
       const { thinking: abortThinking, answer: savedContent } =
         splitThinkingContent(thinkingBuffer, fullResponse);
 
       if (savedContent) {
-        // Partial answer received before stop — save it so the conversation remains coherent.
         conversationHistory.push({
           role: 'assistant',
           content: savedContent,
@@ -236,12 +279,10 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
         const speakBtn = messageDiv.querySelector('.speak-btn');
         if (speakBtn) speakBtn.dataset.content = savedContent;
       } else {
-        // Stopped during thinking phase — nothing useful to keep.
         conversationHistory.pop();
         contentDiv.innerHTML = '<p class="status-muted">Response stopped.</p>';
       }
     } else {
-      // Nothing useful generated — roll back the user message entirely.
       conversationHistory.pop();
       if (error.name === 'AbortError') {
         contentDiv.innerHTML = '<p class="status-muted">Response stopped.</p>';

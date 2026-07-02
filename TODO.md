@@ -94,6 +94,26 @@
 - [x] Image attachment for multimodal prompts — 📎 toolbar button opens a file picker; selected image is read via FileReader.readAsDataURL, validated for type (image/*) and size (≤ 10 MB), shown as a thumbnail preview strip above the textarea (with ✕ remove), and sent in the Ollama API `images` field as raw base64; the full data URL is stored in conversationHistory for in-session thumbnail display; imageBase64/imageDataUrl are stripped from saved JSON files (hasImage flag preserved so loaded history shows a placeholder); send button enabled with image even when textarea is empty; messages with only an image and no text are supported
 - [x] clearImagePreview() defined as a top-level function in main.js so sendMessage/sendMessageAndContinueListening in chat.js can call it across script files
 - [x] Version bumped to 1.6.0
+- [x] Image preview strip startup visibility fixed — CSS `.image-preview-strip` default changed from `display:flex` to `display:none`; redundant inline `style="display:none"` and empty `src=""` removed from HTML
+- [x] Nginx `client_max_body_size 20m` override added to `/ollama/api/chat` location — global 1 MB cap blocked multimodal payloads (base64 image ≈ 1.33× raw file size)
+- [x] Nginx CSP `img-src 'self' data:` added — allows FileReader-produced data: URLs to render in image preview and chat bubbles
+- [x] Ollama error detail surfaced — non-200 responses now read the JSON body and append `body.error` to the thrown message for easier diagnosis
+- [x] Vision routing: image requests use `VISION_MODEL_NAME` (`gemma3:4b`, confirmed vision-capable) with `stream:false` and no sampling options; text requests keep `MODEL_NAME` (`gemma4:e4b`) with streaming, thinking prefill, and sampling options — `gemma4:e4b` has no vision encoder in its GGUF
+- [x] Version bumped to 1.6.1
+- [x] Multi-turn vision conversations — `detectVisionContext(imageBase64, history)` in `utils.js` checks both the current message and all history entries; `isVision=true` persists across follow-up text turns, keeping the conversation on `VISION_MODEL_NAME` (gemma3:4b); thinking prefill and sampling options suppressed for all vision turns; follow-up turns use `stream:true` for live token display
+- [x] Resize notification — `showToast()` fires in `main.js` after canvas downscale with scaled dimensions; `calcResizeDims` return compared against original to detect whether resize occurred
+- [x] Memory optimisation — `pendingImageDataUrl` now stores the resized data URL instead of the original; in-chat thumbnail and history both use the 1024px JPEG, eliminating up to 10 MB of in-memory data URL for large originals
+- [x] `calcResizeDims(naturalWidth, naturalHeight, maxDim)` and `detectVisionContext(imageBase64, history)` extracted as pure utilities in `utils.js` — Node.js compat export added; called from `main.js` and `api.js` respectively
+- [x] Jest tests for vision utilities — `tests/js/vision.test.js` covers `calcResizeDims` (landscape, portrait, square, small, boundary) and `detectVisionContext` (current image, history image, multi-turn, null/undefined guards) — 17 tests
+- [x] num_ctx hint for multi-turn vision follow-ups — `requestBody.options = { num_ctx: 8192 }` sent when `isVision && !hasCurrentImage` to prevent silent context truncation
+- [x] File size cap lowered — `MAX_IMAGE_SIZE_BYTES` reduced from 10 MB to 5 MB; alert message references the constant dynamically
+- [x] CLAUDE.md updated — `VISION_MODEL_NAME` added to Key Configuration; Security Invariants nginx note updated to reflect 1 m global + 20 m per-location cap
+- [x] README.md updated — overview and prerequisites mention image attachment and `gemma3:4b` vision model
+- [x] 404 error message uses actual model name (`requestBody.model`) rather than hardcoded `MODEL_NAME`
+- [x] Version bumped to 1.6.2
+- [x] `_buildRequestBody(imageBase64, history, systemPrompt, modelName, visionModelName)` extracted from `streamOllamaResponse` in `api.js` — pure function with no DOM or global state; returns `{ requestBody, isVision, hasCurrentImage }`; Node.js compat export added; `streamOllamaResponse` destructures `{ requestBody, hasCurrentImage }` and passes globals as arguments
+- [x] Integration tests for request routing — `tests/js/routing.test.js` covers model selection, stream mode, thinking prefill, options, messages array construction, and returned flags across text-only / initial vision / follow-up vision scenarios (17 tests; total suite now 50 tests across 3 files)
+- [x] Version bumped to 1.6.3
 
 ## Known Limitations (Accepted Trade-offs)
 

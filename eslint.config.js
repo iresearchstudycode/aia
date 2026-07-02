@@ -6,6 +6,7 @@ const globals = require('globals');
 const crossModuleGlobals = {
   // config.js — constants
   MODEL_NAME: 'readonly',
+  VISION_MODEL_NAME: 'readonly',
   OLLAMA_API_URL: 'readonly',
   MAX_HISTORY_MESSAGES: 'readonly',
   MAX_INPUT_LENGTH: 'readonly',
@@ -27,6 +28,8 @@ const crossModuleGlobals = {
   escapeHtml: 'readonly',
   showToast: 'readonly',
   splitThinkingContent: 'readonly',
+  calcResizeDims: 'readonly',
+  detectVisionContext: 'readonly',
   // speech.js — functions
   loadVoices: 'readonly',
   toggleSpeechRecognition: 'readonly',

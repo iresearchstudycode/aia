@@ -628,7 +628,7 @@ body {
 
 /* Image attachment preview strip — shown above the textarea when an image is pending */
 .image-preview-strip {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 8px;
   padding: 6px 12px;

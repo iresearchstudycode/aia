@@ -3,7 +3,7 @@ A secure, voice-enabled AI chat interface that runs entirely on your local machi
 
 ## 📋 Overview
 
-This web application provides a chat interface with voice input/output capabilities, connecting to locally-hosted AI models through Ollama's REST API. The application features a responsive design, real-time streaming responses, a live reasoning display with collapsible thinking blocks, and multiple AI personas — protected by TOTP authentication for up to five users.
+This web application provides a chat interface with voice input/output capabilities and image attachment for multimodal (vision) queries, connecting to locally-hosted AI models through Ollama's REST API. The application features a responsive design, real-time streaming responses, a live reasoning display with collapsible thinking blocks, and multiple AI personas — protected by TOTP authentication for up to five users.
 
 ## 🏗️ Architecture
 
@@ -41,7 +41,8 @@ This web application provides a chat interface with voice input/output capabilit
 │                                                        ▼                                                                     │
 │                                       ┌──────────────────────────────────┐                                                   │
 │                                       │       Local AI Models            │                                                   │
-│                                       │         (gemma4:e4b)             │                                                   │
+│                                       │  gemma4:e4b  (text + thinking)   │                                                   │
+│                                       │  gemma3:4b   (vision)            │                                                   │
 │                                       └──────────────────────────────────┘                                                   │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -69,7 +70,7 @@ Every request to Nginx triggers an internal sub-request to the auth service (`au
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
 - [Ollama](https://ollama.ai) installed and running on the host machine
-- The default model pulled: `ollama pull gemma4:e4b`
+- Models pulled: `ollama pull gemma4:e4b` (text + thinking) and `ollama pull gemma3:4b` (vision)
 - TLS certificates generated with [mkcert](https://github.com/FiloSottile/mkcert) and placed in `deploy/certs/`
 - A modern web browser with Web Speech API support (Chrome, Edge, Firefox, Safari 14.1+)
 

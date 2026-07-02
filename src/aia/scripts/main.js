@@ -230,7 +230,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (file.size > MAX_IMAGE_SIZE_BYTES) {
-      alert(`Image too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 10 MB.`);
+      alert(`Image too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is ${MAX_IMAGE_SIZE_BYTES / 1024 / 1024} MB.`);
       this.value = '';
       return;
     }
@@ -238,14 +238,33 @@ document.addEventListener('DOMContentLoaded', function () {
     const reader = new FileReader();
     reader.onload = function (e) {
       const dataUrl = e.target.result;
-      pendingImageDataUrl = dataUrl;
-      // Strip the "data:<mime>;base64," prefix — Ollama expects raw base64.
-      pendingImageBase64 = dataUrl.split(',')[1];
+      // Resize to ≤1024px before encoding for Ollama. Large images overflow
+      // gemma3:4b's context window (causing HTTP 500). The resized JPEG is used
+      // for both the thumbnail and the API — no need to hold the original in memory.
+      const img = new Image();
+      img.onload = function () {
+        const MAX_DIM = 1024;
+        const { w, h } = calcResizeDims(img.naturalWidth, img.naturalHeight, MAX_DIM);
+        const wasResized = w !== img.naturalWidth || h !== img.naturalHeight;
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff'; // white fill for transparent PNG areas
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        const resizedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
 
-      imagePreviewThumb.src = dataUrl;
-      imagePreviewStrip.style.display = 'flex';
-      attachImageBtn.classList.add('active');
-      document.getElementById('sendBtn').disabled = false;
+        pendingImageDataUrl = resizedDataUrl;               // resized: thumbnail + history
+        pendingImageBase64 = resizedDataUrl.split(',')[1];  // resized JPEG: Ollama API
+
+        imagePreviewThumb.src = resizedDataUrl;
+        imagePreviewStrip.style.display = 'flex';
+        attachImageBtn.classList.add('active');
+        document.getElementById('sendBtn').disabled = false;
+        if (wasResized) showToast(`Image scaled to ${w}×${h} for analysis`);
+      };
+      img.src = dataUrl;
     };
     reader.readAsDataURL(file);
     this.value = ''; // reset so the same file can be re-selected

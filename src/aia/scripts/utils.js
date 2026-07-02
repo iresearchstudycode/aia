@@ -27,8 +27,24 @@ function splitThinkingContent(thinkingBuffer, fullResponse) {
   };
 }
 
-// Node.js compat — lets Jest import this function for unit tests; no-op in browser.
-if (typeof module !== 'undefined') module.exports = { splitThinkingContent };
+// Returns clamped { w, h } for an image resize. If both dimensions already fit
+// within maxDim, the original values are returned unchanged. Exported for testing.
+function calcResizeDims(naturalWidth, naturalHeight, maxDim) {
+  if (naturalWidth <= maxDim && naturalHeight <= maxDim) return { w: naturalWidth, h: naturalHeight };
+  if (naturalWidth >= naturalHeight) {
+    return { w: maxDim, h: Math.round(naturalHeight * maxDim / naturalWidth) };
+  }
+  return { w: Math.round(naturalWidth * maxDim / naturalHeight), h: maxDim };
+}
+
+// Returns true when the current message or any history entry carries an image.
+// Used by api.js to select the vision model and adjust stream/options behaviour.
+function detectVisionContext(imageBase64, history) {
+  return !!imageBase64 || (Array.isArray(history) && history.some(m => !!m.imageBase64));
+}
+
+// Node.js compat — lets Jest import these functions for unit tests; no-op in browser.
+if (typeof module !== 'undefined') module.exports = { splitThinkingContent, calcResizeDims, detectVisionContext };
 
 // Format timestamp as: ddd, dd/mmm/yyyy HH:MM:SS AM/PM
 function formatTimestamp(d) {
