@@ -6,7 +6,7 @@ let streamAbortController = null;
 // Extracted so it can be unit-tested in Node.js without a DOM or global state.
 // Returns { requestBody, isVision, hasCurrentImage } — the flags are needed by
 // the caller to choose stream vs non-stream paths and the abort handler.
-function _buildRequestBody(imageBase64, history, systemPrompt, modelName, visionModelName) {
+function _buildRequestBody(imageBase64, history, systemPrompt, modelName, visionModelName, thinkingMode = 'off') {
   const thinkingToken = "<|think|>  ";
 
   // isVision: true when this message or any history entry contains an image.
@@ -16,9 +16,11 @@ function _buildRequestBody(imageBase64, history, systemPrompt, modelName, vision
   const isVision = detectVisionContext(imageBase64, history);
   const hasCurrentImage = !!imageBase64;
 
-  // Maps history images into the messages array for multi-turn vision conversations.
-  // Thinking prefill omitted when isVision — gemma3 doesn't support it, and Ollama
-  // rejects an assistant prefill on requests that contain images.
+  // Thinking is only available for non-vision text requests and only when enabled.
+  // Vision uses gemma3:4b which has no thinking capability, and Ollama rejects an
+  // assistant prefill on any request that carries images.
+  const thinkingEnabled = !isVision && thinkingMode !== 'off';
+
   const messages = [
     { role: 'system', content: systemPrompt },
     ...history.map(m => {
@@ -27,7 +29,7 @@ function _buildRequestBody(imageBase64, history, systemPrompt, modelName, vision
       return msg;
     }),
   ];
-  if (!isVision) {
+  if (thinkingEnabled) {
     messages.push({ role: 'assistant', content: thinkingToken });
   }
 
@@ -35,14 +37,23 @@ function _buildRequestBody(imageBase64, history, systemPrompt, modelName, vision
   // path silently drops image tokens for GGUF models without vision encoders.
   // Follow-up text in an image conversation (isVision && !hasCurrentImage) streams
   // normally so the user sees tokens as they arrive.
-  // Text-only requests stream with thinking-mode sampling options.
+  // Text-only requests always stream; sampling options applied regardless of thinking.
   const requestBody = {
     model: isVision ? visionModelName : modelName,
     messages,
     stream: !hasCurrentImage,
   };
+
   if (!isVision) {
-    requestBody.options = { temperature: 1.0, top_p: 0.95, top_k: 64 };
+    const options = { temperature: 1.0, top_p: 0.95, top_k: 64 };
+    if (thinkingEnabled) {
+      // Low/Medium cap the thinking budget; High lets the model reason without limit.
+      const budgetMap = { low: 1024, medium: 4096 };
+      if (budgetMap[thinkingMode] !== undefined) {
+        options.thinking_budget = budgetMap[thinkingMode];
+      }
+    }
+    requestBody.options = options;
   } else if (!hasCurrentImage) {
     requestBody.options = { num_ctx: 8192 };
   }
@@ -105,7 +116,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
   }
 
   const { requestBody, hasCurrentImage } = _buildRequestBody(
-    imageBase64, conversationHistory, currentSystemPrompt, MODEL_NAME, VISION_MODEL_NAME
+    imageBase64, conversationHistory, currentSystemPrompt, MODEL_NAME, VISION_MODEL_NAME, currentThinkingMode
   );
 
   streamAbortController = new AbortController();

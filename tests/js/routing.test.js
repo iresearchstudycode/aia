@@ -15,12 +15,12 @@ const THINK = '<|think|>';
 
 describe('_buildRequestBody — model selection', () => {
   test('text-only request uses MODEL_NAME', () => {
-    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'off');
     expect(requestBody.model).toBe(MODEL);
   });
 
   test('initial vision (imageBase64 set) uses VISION_MODEL_NAME', () => {
-    const { requestBody } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION, 'off');
     expect(requestBody.model).toBe(VISION);
   });
 
@@ -29,8 +29,15 @@ describe('_buildRequestBody — model selection', () => {
       { role: 'user', content: 'describe this', imageBase64: 'img64' },
       { role: 'assistant', content: 'a motorway at night' },
     ];
-    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'off');
     expect(requestBody.model).toBe(VISION);
+  });
+
+  test('thinking mode does not affect model selection', () => {
+    const { requestBody: off } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'off');
+    const { requestBody: high } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'high');
+    expect(off.model).toBe(MODEL);
+    expect(high.model).toBe(MODEL);
   });
 });
 
@@ -38,18 +45,18 @@ describe('_buildRequestBody — model selection', () => {
 
 describe('_buildRequestBody — stream mode', () => {
   test('text-only: stream:true', () => {
-    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'off');
     expect(requestBody.stream).toBe(true);
   });
 
   test('initial vision (hasCurrentImage): stream:false', () => {
-    const { requestBody } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION, 'off');
     expect(requestBody.stream).toBe(false);
   });
 
   test('follow-up vision (no new image, history has image): stream:true', () => {
     const history = [{ role: 'user', imageBase64: 'img64' }];
-    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'off');
     expect(requestBody.stream).toBe(true);
   });
 });
@@ -57,16 +64,34 @@ describe('_buildRequestBody — stream mode', () => {
 // ─── Thinking prefill ─────────────────────────────────────────────────────────
 
 describe('_buildRequestBody — thinking prefill', () => {
-  test('text-only: assistant prefill with <|think|> present', () => {
-    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION);
+  test('thinking OFF: no prefill (default state)', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'off');
+    const hasPrefill = requestBody.messages.some(m => m.content && m.content.includes(THINK));
+    expect(hasPrefill).toBe(false);
+  });
+
+  test('thinking high: assistant prefill with <|think|> present', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'high');
     const prefill = requestBody.messages.find(
       m => m.role === 'assistant' && m.content && m.content.includes(THINK)
     );
     expect(prefill).toBeTruthy();
   });
 
-  test('initial vision: no thinking prefill', () => {
-    const { requestBody } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION);
+  test('thinking low: prefill present', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'low');
+    const hasPrefill = requestBody.messages.some(m => m.content && m.content.includes(THINK));
+    expect(hasPrefill).toBe(true);
+  });
+
+  test('thinking medium: prefill present', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'medium');
+    const hasPrefill = requestBody.messages.some(m => m.content && m.content.includes(THINK));
+    expect(hasPrefill).toBe(true);
+  });
+
+  test('initial vision: no thinking prefill regardless of mode', () => {
+    const { requestBody } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION, 'high');
     const hasPrefill = requestBody.messages.some(m => m.content && m.content.includes(THINK));
     expect(hasPrefill).toBe(false);
   });
@@ -76,7 +101,7 @@ describe('_buildRequestBody — thinking prefill', () => {
       { role: 'user', content: 'describe', imageBase64: 'img64' },
       { role: 'assistant', content: 'a cat' },
     ];
-    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'high');
     const hasPrefill = requestBody.messages.some(m => m.content && m.content.includes(THINK));
     expect(hasPrefill).toBe(false);
   });
@@ -85,20 +110,40 @@ describe('_buildRequestBody — thinking prefill', () => {
 // ─── Options ─────────────────────────────────────────────────────────────────
 
 describe('_buildRequestBody — options', () => {
-  test('text-only: thinking-mode sampling options', () => {
-    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION);
+  test('text-only, thinking off: sampling options, no thinking_budget', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'off');
+    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64 });
+  });
+
+  test('text-only, thinking low: sampling options + thinking_budget 1024', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'low');
+    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64, thinking_budget: 1024 });
+  });
+
+  test('text-only, thinking medium: sampling options + thinking_budget 4096', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'medium');
+    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64, thinking_budget: 4096 });
+  });
+
+  test('text-only, thinking high: sampling options, no budget cap', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'high');
     expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64 });
   });
 
   test('initial vision: no options (matches Ollama working sample)', () => {
-    const { requestBody } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION, 'off');
     expect(requestBody.options).toBeUndefined();
   });
 
   test('follow-up vision: num_ctx hint to prevent context truncation', () => {
     const history = [{ role: 'user', imageBase64: 'img64' }];
-    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'off');
     expect(requestBody.options).toEqual({ num_ctx: 8192 });
+  });
+
+  test('vision ignores thinking mode: no sampling options or budget on initial vision', () => {
+    const { requestBody } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION, 'high');
+    expect(requestBody.options).toBeUndefined();
   });
 });
 
@@ -106,20 +151,20 @@ describe('_buildRequestBody — options', () => {
 
 describe('_buildRequestBody — messages array', () => {
   test('system prompt is always the first message', () => {
-    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'off');
     expect(requestBody.messages[0]).toEqual({ role: 'system', content: SYSTEM });
   });
 
   test('history entry with image gets images field', () => {
     const history = [{ role: 'user', content: 'look at this', imageBase64: 'img64' }];
-    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'off');
     const msg = requestBody.messages.find(m => m.content === 'look at this');
     expect(msg.images).toEqual(['img64']);
   });
 
   test('text-only history entry has no images field', () => {
     const history = [{ role: 'user', content: 'hello' }];
-    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'off');
     const msg = requestBody.messages.find(m => m.content === 'hello');
     expect(msg.images).toBeUndefined();
   });
@@ -132,7 +177,7 @@ describe('_buildRequestBody — messages array', () => {
       { role: 'assistant', content: 'response' },
       { role: 'user', content: 'second image', imageBase64: 'b64_2' },
     ];
-    const { requestBody } = _buildRequestBody('b64_2', history, SYSTEM, MODEL, VISION);
+    const { requestBody } = _buildRequestBody('b64_2', history, SYSTEM, MODEL, VISION, 'off');
     const histImg = requestBody.messages.find(m => m.content === 'first image');
     const curImg = requestBody.messages.find(m => m.content === 'second image');
     expect(histImg.images).toEqual(['b64_1']);
@@ -144,20 +189,20 @@ describe('_buildRequestBody — messages array', () => {
 
 describe('_buildRequestBody — returned flags', () => {
   test('text-only: isVision=false, hasCurrentImage=false', () => {
-    const { isVision, hasCurrentImage } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION);
+    const { isVision, hasCurrentImage } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'off');
     expect(isVision).toBe(false);
     expect(hasCurrentImage).toBe(false);
   });
 
   test('initial vision: isVision=true, hasCurrentImage=true', () => {
-    const { isVision, hasCurrentImage } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION);
+    const { isVision, hasCurrentImage } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION, 'off');
     expect(isVision).toBe(true);
     expect(hasCurrentImage).toBe(true);
   });
 
   test('follow-up vision: isVision=true, hasCurrentImage=false', () => {
     const history = [{ role: 'user', imageBase64: 'img64' }];
-    const { isVision, hasCurrentImage } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION);
+    const { isVision, hasCurrentImage } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'off');
     expect(isVision).toBe(true);
     expect(hasCurrentImage).toBe(false);
   });

@@ -85,6 +85,16 @@
               aria-label="Attach image" title="Attach an image for visual analysis">
               📎
             </button>
+            <button type="button" class="voice-btn toolbar-icon-btn" id="thinkingModeBtn"
+              aria-label="Thinking mode: Off" aria-pressed="false"
+              title="Enable thinking mode — model reasons before answering">
+              💡
+            </button>
+            <select id="thinkingDepthSelect" class="thinking-depth-select" aria-label="Thinking depth">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
           </div>
           <div class="toolbar-right">
             <span id="charCounter" class="char-counter"></span>

@@ -114,6 +114,11 @@
 - [x] `_buildRequestBody(imageBase64, history, systemPrompt, modelName, visionModelName)` extracted from `streamOllamaResponse` in `api.js` — pure function with no DOM or global state; returns `{ requestBody, isVision, hasCurrentImage }`; Node.js compat export added; `streamOllamaResponse` destructures `{ requestBody, hasCurrentImage }` and passes globals as arguments
 - [x] Integration tests for request routing — `tests/js/routing.test.js` covers model selection, stream mode, thinking prefill, options, messages array construction, and returned flags across text-only / initial vision / follow-up vision scenarios (17 tests; total suite now 50 tests across 3 files)
 - [x] Version bumped to 1.6.3
+- [x] Thinking mode control — 💡 toolbar button toggles thinking ON/OFF (default OFF); when ON a depth selector appears inline offering Low / Medium / High; `currentThinkingMode` global (`'off'|'low'|'medium'|'high'`) wired in `main.js`; depth defaults to Medium when first enabled
+- [x] `_buildRequestBody` updated: `thinkingMode` parameter (default `'off'`) controls whether the `<|think|>` prefill is injected and whether `thinking_budget` is added to options (Low=1024, Medium=4096, High=no cap); sampling options applied regardless of thinking mode; vision requests always ignore thinking mode
+- [x] `currentThinkingMode` added to `config.js` and `eslint.config.js` globals
+- [x] Jest routing tests updated to pass `thinkingMode` explicitly; 8 new tests cover all four modes (off/low/medium/high) for prefill, options, and budget values — total suite now 58 tests
+- [x] Version bumped to 1.7.0
 
 ## Known Limitations (Accepted Trade-offs)
 

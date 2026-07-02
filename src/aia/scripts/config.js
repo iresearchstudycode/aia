@@ -34,3 +34,4 @@ let currentSystemPrompt = systemPrompts.auEnglishEditor;
 let conversationHistory = [];
 let pendingImageDataUrl = null; // data: URL for in-chat thumbnail display
 let pendingImageBase64 = null;  // raw base64 for the Ollama API images field
+let currentThinkingMode = 'off'; // 'off' | 'low' | 'medium' | 'high'

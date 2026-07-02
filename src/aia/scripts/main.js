@@ -271,4 +271,23 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   document.getElementById('removeImageBtn').addEventListener('click', clearImagePreview);
+
+  // Thinking mode — toggle ON/OFF; when ON show depth selector and update global.
+  const thinkingModeBtn = document.getElementById('thinkingModeBtn');
+  const thinkingDepthSelect = document.getElementById('thinkingDepthSelect');
+
+  thinkingModeBtn.addEventListener('click', function () {
+    const isOn = this.classList.toggle('thinking-on');
+    this.setAttribute('aria-pressed', String(isOn));
+    this.setAttribute('aria-label', isOn ? 'Thinking mode: On' : 'Thinking mode: Off');
+    this.title = isOn
+      ? 'Thinking mode: On — click to disable'
+      : 'Enable thinking mode — model reasons before answering';
+    thinkingDepthSelect.style.display = isOn ? 'inline-block' : 'none';
+    currentThinkingMode = isOn ? thinkingDepthSelect.value : 'off';
+  });
+
+  thinkingDepthSelect.addEventListener('change', function () {
+    currentThinkingMode = this.value;
+  });
 });

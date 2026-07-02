@@ -23,6 +23,7 @@ const crossModuleGlobals = {
   currentSystemPrompt: 'writable',
   pendingImageDataUrl: 'writable',
   pendingImageBase64: 'writable',
+  currentThinkingMode: 'writable',
   // utils.js
   formatTimestamp: 'readonly',
   escapeHtml: 'readonly',
