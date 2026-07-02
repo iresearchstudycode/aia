@@ -3,7 +3,7 @@ A secure, voice-enabled AI chat interface that runs entirely on your local machi
 
 ## 📋 Overview
 
-This web application provides a chat interface with voice input/output capabilities and image attachment for multimodal (vision) queries, connecting to locally-hosted AI models through Ollama's REST API. The application features a responsive design, real-time streaming responses, a live reasoning display with collapsible thinking blocks, and multiple AI personas — protected by TOTP authentication for up to five users.
+This web application provides a ChatGPT-style chat interface (dark navy header, sky-blue user bubbles, clean card AI responses) with voice input/output, image attachment for multimodal vision queries, and a live collapsible thinking block for reasoning-capable models. It connects to locally-hosted AI models through Ollama's REST API with no external dependencies — protected by TOTP authentication for up to five users.
 
 ## 🏗️ Architecture
 
@@ -155,7 +155,7 @@ TOTP_SECRET_1=<base32 secret>
 1. Visit `https://localhost/` — unauthenticated requests redirect to `/auth/login`.
 2. Enter your username and the current 6-digit code from Google Authenticator.
 3. On success, a signed session cookie is set (8-hour TTL by default).
-4. Click the 👤 profile menu in the header, then **🔒 Sign out** to end the session.
+4. Click the profile menu (user icon + username) in the header, then **Sign out** to end the session.
 
 ### Setup page security
 
@@ -209,7 +209,8 @@ vpal/
 
 ### Ollama settings
 
-- **Model**: `MODEL_NAME` in `config.js` (default: `gemma4:e4b`)
+- **Text + thinking model**: `MODEL_NAME` in `config.js` (default: `gemma4:e4b`)
+- **Vision model**: `VISION_MODEL_NAME` in `config.js` (default: `gemma3:4b`) — used automatically when an image is attached; `gemma4:e4b` has no vision encoder
 - **API URL**: `OLLAMA_API_URL` in `config.js` (default: `https://localhost/ollama/api/chat`)
 - **Context length**: `MAX_HISTORY_MESSAGES` in `config.js` (default: `40`, i.e. 20 exchanges)
 
@@ -254,18 +255,21 @@ All auth settings live in `.env`:
 ## 🎯 Features
 
 - **TOTP Authentication**: Google Authenticator login for up to five users
-- **Profile Menu**: 👤 header widget displays the logged-in username; dropdown contains Save, Open, Clear, Close, and Sign out
-- **Persona Selector**: ▾ button next to the heading opens a panel to switch AI personas; selected persona shown as a subtitle beneath the heading
-- **Chat Input**: Auto-growing textarea (up to 6 lines); Enter sends, Shift+Enter inserts a newline; circular send button activates only when text is present and reverts to grey when empty
-- **Voice Input/Output**: Continuous speech recognition and text-to-speech synthesis; toolbar order: 🎤 mic → 🔊 auto-speak → 🔇 stop speaking
-- **Thinking Mode**: Live reasoning displayed in a collapsible block during AI response generation; collapses automatically when the final answer arrives; thinking content excluded from conversation history, copy, and speech output
-- **Real-time Streaming**: Live AI response streaming with stop control
+- **ChatGPT-style UI**: Dark navy header, sky-blue user message bubbles (right-aligned), clean card AI responses; all controls use inline SVG line icons with no emoji
+- **Profile Menu**: SVG user icon + logged-in username in the header; dropdown (Save, Open, Clear, Close, Sign out) opens as a fixed overlay with Tab focus trap and Escape to close
+- **Persona Selector**: Chevron button next to the heading opens a panel to switch AI personas; selected persona shown as a subtitle; locked during an active conversation; Tab focus trap and Escape to close
+- **Chat Input**: Auto-growing textarea (up to 6 lines); Enter sends, Shift+Enter inserts a newline; circular sky-blue send button activates only when text or an image is pending
+- **Voice Input/Output**: Continuous speech recognition with 3-second silence detection; text-to-speech synthesis with per-message speak buttons; toolbar: mic → auto-speak → stop speaking
+- **Image Attachment**: Paperclip toolbar button opens a file picker; images are resized to ≤ 1024 px before being sent; vision requests are automatically routed to `gemma3:4b`; in-session thumbnails shown in user bubbles; saved chats show an SVG camera icon placeholder where the image was
+- **Thinking Mode**: Lightbulb toolbar button toggles reasoning ON/OFF; depth selector (Low / Medium / High) appears inline when enabled; live reasoning displayed in a collapsible `<details>` block; collapses when the final answer arrives; thinking content excluded from history, copy, and speech; mode and depth saved to `localStorage` and restored on reload
+- **Dual-model Routing**: Text requests use `gemma4:e4b` (streaming, thinking-capable); image requests and vision follow-ups use `gemma3:4b`; `think: false` sent explicitly to suppress native reasoning when thinking is OFF
+- **Real-time Streaming**: Live token-by-token response display with a stop button
 - **Multiple Personas**: 13 pre-configured AI personalities
-- **Per-message Actions**: Copy to clipboard and speak buttons appear on successful AI responses only; both target the final answer only (thinking content excluded)
-- **Chat History**: Save/load conversation history as JSON; saved files use the format `YYYYMMDD-HHMMss-vpal-<Topic>.json` where `<Topic>` is a 2–3 word summary derived from the first user message
-- **Character Counter**: Remaining character count shown as you approach the 4,000-character limit
-- **Auto-Speak**: 🔊 toolbar icon toggles automatic text-to-speech after each AI response; speaks the final answer only; preference saved across browser sessions via `localStorage`
-- **Markdown Support**: Rich text formatting in AI responses and thinking blocks
+- **Per-message Actions**: Copy and speak SVG icon buttons appear on successful AI responses only; target the final answer (thinking content excluded)
+- **Chat History**: Save/load conversation history as JSON; filename format `YYYYMMDD-HHMMss-vpal-<Topic>.json`; base64 image data stripped on save (preserves `hasImage` flag for routing and placeholder display)
+- **Character Counter**: Remaining count shown as you approach the 4,000-character limit, with warning and danger colour states
+- **Auto-Speak**: Toolbar icon toggles automatic TTS after each AI response; preference saved to `localStorage`
+- **Markdown Support**: Rich text formatting in AI responses and thinking blocks via Marked.js + DOMPurify
 
 ## 🔍 System Requirements
 
@@ -284,7 +288,9 @@ All auth settings live in `.env`:
 | Auth container won't start | `SECRET_KEY` is missing or under 32 characters, or no `USER_N` / `TOTP_SECRET_N` pairs are set |
 | Voice not working | Check browser microphone permissions |
 | Ollama connection failed | Ensure Ollama is running: `ollama serve` |
-| Model not found | Run `ollama pull gemma4:e4b` |
+| Text model not found | Run `ollama pull gemma4:e4b` |
+| Vision/image not working | Run `ollama pull gemma3:4b`; vision uses a separate model from the text model |
+| Image sends but gets no response | Image may exceed context window — the app resizes to ≤ 1024 px automatically, but very complex images can still overload `gemma3:4b` |
 
 ### Debug mode
 

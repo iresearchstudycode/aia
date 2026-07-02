@@ -24,7 +24,9 @@ docker inspect --format='{{.State.Health.Status}}' vpal-nginx
 
 **Prerequisites:**
 - Docker Desktop running
-- Ollama running on the Windows host at `localhost:11434` with the `gemma4:e4b` model pulled
+- Ollama running on the Windows host at `localhost:11434` with both models pulled:
+  - `ollama pull gemma4:e4b` — text + thinking model
+  - `ollama pull gemma3:4b` — vision model (used automatically when an image is attached)
 - `.env` file in the project root with `SECRET_KEY`, `USER_1`, `TOTP_SECRET_1` (see `auth/main.py` for all supported vars)
 
 ## Testing
@@ -51,11 +53,14 @@ npm run lint:js
 
 # Frontend HTML lint (HTMLHint — validates src/aia/index.html)
 npm run lint:html
+
+# Frontend JS unit tests (Jest)
+npx jest --testPathPattern="tests/js"
 ```
 
 CI runs three jobs automatically on every push and PR to `master` (`.github/workflows/ci.yml`):
 - `auth-lint-test` — black + flake8 + pytest
-- `frontend-lint` — ESLint (`src/aia/scripts/*.js`) + HTMLHint (`src/aia/index.html`)
+- `frontend-lint` — ESLint (`src/aia/scripts/`) + HTMLHint (`src/aia/index.html`) + Jest (`tests/js/`)
 - `nginx-config-check` — generates dummy TLS certs, mounts `nginx.conf` into `nginx:1.27-alpine`, runs `nginx -t`
 
 ## Architecture
@@ -94,12 +99,12 @@ Scripts are loaded in dependency order in `index.html`:
 |---|---|
 | `marked.min.js` | Markdown parser (vendored, third-party) |
 | `dompurify.min.js` | HTML sanitizer (vendored, v3.4.11) — applied at every AI content → innerHTML boundary |
-| `config.js` | `MODEL_NAME`, `OLLAMA_API_URL`, the 13 system prompt objects, and global mutable state (`conversationHistory[]`, `currentSystemPrompt`, `pendingImageDataUrl`, `pendingImageBase64`) |
-| `utils.js` | `formatTimestamp()`, `escapeHtml()`, `showToast()`, `splitThinkingContent()` — pure helpers; Node.js compat export on `splitThinkingContent` enables Jest unit tests |
+| `config.js` | `MODEL_NAME`, `VISION_MODEL_NAME`, `OLLAMA_API_URL`, the 13 system prompt objects, and global mutable state (`conversationHistory[]`, `currentSystemPrompt`, `pendingImageDataUrl`, `pendingImageBase64`, `currentThinkingMode`) |
+| `utils.js` | `formatTimestamp()`, `escapeHtml()`, `showToast()`, `splitThinkingContent()`, `calcResizeDims()`, `detectVisionContext()` — pure helpers; Node.js compat export enables Jest unit tests |
 | `speech.js` | Web Speech API: continuous recognition with 3-second silence detection, TTS with voice preference ("Microsoft Catherine") |
-| `chat.js` | Message rendering, chat save/load, system prompt state management; `addUserMessage(text, imageDataUrl)` renders image thumbnails in user bubbles; `renderConversationHistory` handles both in-session images and `hasImage` placeholders from loaded files; `saveChat` strips `imageBase64`/`imageDataUrl` from the JSON export (preserves `hasImage` flag); also defines `COPY_ICON`, `CHECK_ICON`, `SPEAK_ICON`, `STOP_ICON` as top-level SVG string constants |
-| `api.js` | `streamOllamaResponse(userMessage, messageDiv, imageBase64, imageDataUrl)` — streaming fetch with multimodal image support (`images` field in user messages); Gemma 4 thinking mode (dual-buffer: `thinkingBuffer` for native Ollama `message.thinking` tokens, `fullResponse` for `message.content`; inline `<|/think|>` token boundary also supported); live collapsible thinking block rendered via `<details>`; final answer and thinking both pass through `DOMPurify.sanitize(marked.parse(...))`; abort preserves thinking block; thinking excluded from `conversationHistory`, copy, and TTS |
-| `main.js` | `DOMContentLoaded` wiring — wires ALL button/input event listeners via `addEventListener` (no inline HTML handlers); initialises default persona from the HTML `selected` attribute; `clearImagePreview()` defined at top level (called cross-module by `chat.js`) — resets `pendingImageDataUrl`/`pendingImageBase64`, hides preview strip, re-evaluates send button |
+| `chat.js` | Message rendering, chat save/load, system prompt state management; `addUserMessage(text, imageDataUrl)` renders image thumbnails in user bubbles; `renderConversationHistory` handles both in-session images and SVG-icon `hasImage` placeholders from loaded files; `saveChat` strips `imageBase64`/`imageDataUrl` from the JSON export (preserves `hasImage` flag); `clearChat()` and `handleOpenFile()` both call `clearImagePreview()` to prevent stale image state; also defines `COPY_ICON`, `CHECK_ICON`, `SPEAK_ICON`, `STOP_ICON` as top-level SVG string constants |
+| `api.js` | `streamOllamaResponse(userMessage, messageDiv, imageBase64, imageDataUrl)` — builds request via `_buildRequestBody()` (pure, unit-tested); streaming fetch with multimodal image support; dual-model routing (`gemma4:e4b` text/thinking, `gemma3:4b` vision); `think: false` sent explicitly when thinking is OFF; dual-buffer thinking mode (`thinkingBuffer` + `fullResponse`); live collapsible `<details>` thinking block; `thinkingActive` flag guards all three `splitThinkingContent` call sites; final answer and thinking both pass through `DOMPurify.sanitize(marked.parse(...))` |
+| `main.js` | `DOMContentLoaded` wiring — all event listeners via `addEventListener`; `_trapFocus(panel, e)` defined at top level for Tab/Shift-Tab focus trapping in persona panel and profile dropdown; thinking mode on/off + depth persisted to `localStorage` and restored on load (mirrors `autoTTS`); `clearImagePreview()` defined at top level (called cross-module by `chat.js`) |
 
 **Global state lives in `config.js`** (`conversationHistory`, `currentSystemPrompt`) and is shared across modules via the window scope — there is no module bundler.
 
@@ -120,6 +125,7 @@ All runtime configuration is in [src/aia/scripts/config.js](src/aia/scripts/conf
 - `OLLAMA_API_URL` — proxied endpoint (default: `https://localhost/ollama/api/chat`)
 - `MAX_HISTORY_MESSAGES` — maximum entries in `conversationHistory` before oldest pairs are trimmed (default: `40`, i.e. 20 exchanges). Tune this when switching to a model with a smaller or larger context window.
 - `SPEECH_RECOGNITION_LANG` — BCP 47 language tag for the Web Speech API (default: `'en-US'`). Change to `'en-AU'`, `'fr-FR'`, etc. to match your locale.
+- `currentThinkingMode` — runtime global (`'off' | 'low' | 'medium' | 'high'`); set by the lightbulb toolbar button in `main.js`; persisted to `localStorage` as `thinkingOn` + `thinkingDepth` and restored on page load
 - System prompts object — keys map to `<option value>` in the persona selector dropdown
 
 To add a new persona: add a key to the system prompts object in `config.js` and a matching `<option>` in the `#systemPromptSelect` dropdown in `index.html`. The default selected persona is controlled by the `selected` attribute in `index.html` — `main.js` reads it on load and sets `currentSystemPrompt` accordingly.
