@@ -123,6 +123,8 @@
 - [x] Version bumped to 1.7.1
 - [x] Bug fix: with thinking OFF, an empty `<details class="thinking-block">` was rendered during streaming because the `!inAnswerPhase` branch always inserted the block regardless of whether `currentThinking` was non-empty; fixed by only emitting the block when `currentThinking` is truthy — answer now renders directly into `.answer-content` with no thinking widget visible
 - [x] Version bumped to 1.7.2
+- [x] Bug fix: answer rendered inside thinking block when thinking mode is OFF — root cause: `splitThinkingContent('', answer)` returns `{ thinking: answer, answer: '' }` (hits the "inline mode, still thinking" branch); fixed by computing `thinkingActive` once after `_buildRequestBody` and bypassing `splitThinkingContent` in all three call sites (live stream loop, final render, abort handler) when false; answer now streams directly into `contentDiv` with no thinking block
+- [x] Version bumped to 1.7.3
 
 ## Known Limitations (Accepted Trade-offs)
 

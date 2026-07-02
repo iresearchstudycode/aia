@@ -118,9 +118,15 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
     addContextTrimNotice();
   }
 
-  const { requestBody, hasCurrentImage } = _buildRequestBody(
+  const { requestBody, isVision, hasCurrentImage } = _buildRequestBody(
     imageBase64, conversationHistory, currentSystemPrompt, MODEL_NAME, VISION_MODEL_NAME, currentThinkingMode
   );
+  // Captured once so all three render sites (live loop, final, abort) agree on whether
+  // thinking is active for this request. When false, splitThinkingContent is bypassed
+  // entirely — calling it with an empty thinkingBuffer and no <|/think|> boundary
+  // returns { thinking: fullResponse, answer: '' }, which would render the answer inside
+  // the thinking block.
+  const thinkingActive = !isVision && currentThinkingMode !== 'off';
 
   streamAbortController = new AbortController();
   setStreamingUI(true);
@@ -188,28 +194,32 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
             if (gotThinking) thinkingBuffer += json.message.thinking;
             if (gotContent) fullResponse += json.message.content;
 
-            const { thinking: currentThinking, answer: currentAnswer } =
-              splitThinkingContent(thinkingBuffer, fullResponse);
-            const isAnswering = currentAnswer.length > 0;
-
-            if (!isAnswering) {
-              contentDiv.innerHTML =
-                '<details class="thinking-block" open>' +
-                '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
-                '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
-                '</details>';
+            if (!thinkingActive) {
+              contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(fullResponse));
             } else {
-              if (!inAnswerPhase) {
-                inAnswerPhase = true;
-                contentDiv.innerHTML = (currentThinking
-                  ? '<details class="thinking-block" open>' +
-                    '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
-                    '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
-                    '</details>'
-                  : '') + '<div class="answer-content"></div>';
-                answerDiv = contentDiv.querySelector('.answer-content');
+              const { thinking: currentThinking, answer: currentAnswer } =
+                splitThinkingContent(thinkingBuffer, fullResponse);
+              const isAnswering = currentAnswer.length > 0;
+
+              if (!isAnswering) {
+                contentDiv.innerHTML =
+                  '<details class="thinking-block" open>' +
+                  '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
+                  '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
+                  '</details>';
+              } else {
+                if (!inAnswerPhase) {
+                  inAnswerPhase = true;
+                  contentDiv.innerHTML = (currentThinking
+                    ? '<details class="thinking-block" open>' +
+                      '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
+                      '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
+                      '</details>'
+                    : '') + '<div class="answer-content"></div>';
+                  answerDiv = contentDiv.querySelector('.answer-content');
+                }
+                if (answerDiv) answerDiv.innerHTML = DOMPurify.sanitize(marked.parse(currentAnswer));
               }
-              if (answerDiv) answerDiv.innerHTML = DOMPurify.sanitize(marked.parse(currentAnswer));
             }
 
             document.getElementById('chatMessages').scrollTop =
@@ -220,9 +230,14 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
         }
       }
 
-      const { thinking: finalThinking, answer: streamedContent } =
-        splitThinkingContent(thinkingBuffer, fullResponse);
-      savedContent = streamedContent;
+      let finalThinking = '';
+      if (thinkingActive) {
+        const split = splitThinkingContent(thinkingBuffer, fullResponse);
+        finalThinking = split.thinking;
+        savedContent = split.answer;
+      } else {
+        savedContent = fullResponse;
+      }
 
       const answerHtml = DOMPurify.sanitize(marked.parse(savedContent));
       if (finalThinking) {
@@ -266,8 +281,15 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
   } catch (error) {
     if (error.name === 'AbortError' && !hasCurrentImage && (fullResponse || thinkingBuffer)) {
       // Streaming abort with partial content — preserve what was generated.
-      const { thinking: abortThinking, answer: savedContent } =
-        splitThinkingContent(thinkingBuffer, fullResponse);
+      let abortThinking = '';
+      let savedContent;
+      if (thinkingActive) {
+        const split = splitThinkingContent(thinkingBuffer, fullResponse);
+        abortThinking = split.thinking;
+        savedContent = split.answer;
+      } else {
+        savedContent = fullResponse;
+      }
 
       if (savedContent) {
         conversationHistory.push({
