@@ -319,7 +319,12 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
         contentDiv.innerHTML = '<p class="status-muted">Response stopped.</p>';
       }
     } else {
-      conversationHistory.pop();
+      // For vision aborts the user entry is legitimate (they did send the message
+      // with an image); keep it so history stays in sync with the DOM. For all
+      // other no-content aborts pop the entry — nothing was generated.
+      if (!(error.name === 'AbortError' && hasCurrentImage)) {
+        conversationHistory.pop();
+      }
       if (error.name === 'AbortError') {
         contentDiv.innerHTML = '<p class="status-muted">Response stopped.</p>';
       } else if (error.message === 'session-expired') {

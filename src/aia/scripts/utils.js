@@ -40,7 +40,9 @@ function calcResizeDims(naturalWidth, naturalHeight, maxDim) {
 // Returns true when the current message or any history entry carries an image.
 // Used by api.js to select the vision model and adjust stream/options behaviour.
 function detectVisionContext(imageBase64, history) {
-  return !!imageBase64 || (Array.isArray(history) && history.some(m => !!m.imageBase64));
+  // m.imageBase64 covers live-session entries; m.hasImage covers entries loaded
+  // from saved files where base64 was stripped to keep the JSON small.
+  return !!imageBase64 || (Array.isArray(history) && history.some(m => !!m.imageBase64 || m.hasImage === true));
 }
 
 // Node.js compat — lets Jest import these functions for unit tests; no-op in browser.

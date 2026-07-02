@@ -2,7 +2,7 @@
   "name": "vpal",
   "private": true,
   "scripts": {
-    "lint:js": "eslint 'src/aia/scripts/*.js'",
+    "lint:js": "eslint src/aia/scripts",
     "lint:html": "htmlhint src/aia/index.html",
     "test:js": "jest"
   },

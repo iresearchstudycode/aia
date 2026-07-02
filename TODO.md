@@ -127,6 +127,13 @@
 - [x] Version bumped to 1.7.3
 - [x] ChatGPT-style redesign with sky blue + dark navy palette — page background dark navy (#0f172a); header solid dark navy with sky-blue chat-bubble logo; user messages right-aligned rounded pill (#dbeafe sky-blue bubble, no left border); AI messages clean card (subtle border, no left border); send button sky blue (#0ea5e9); all toolbar and dropdown emoji replaced with inline ChatGPT-style SVG line icons (mic, volume, mute, paperclip, lightbulb, user, chevron, download, folder, trash, X, logout); thinking-mode active state sky blue (not purple); speak-button speaking state sky blue; action-button hover sky blue; all indigo/purple accent (#667eea, #764ba2) replaced throughout
 - [x] Version bumped to 1.8.0
+- [x] Page background lightened to light grey (#f1f5f9 / Tailwind slate-100) — dark navy was too harsh for extended reading sessions
+- [x] Vision history routing fix (P1) — `detectVisionContext` now checks `m.hasImage === true` in addition to `m.imageBase64`; loaded chats where base64 was stripped on save now correctly route follow-up questions to `VISION_MODEL_NAME` (gemma3:4b) instead of falling back to `MODEL_NAME`; 3 new Jest tests added (total suite 67 tests)
+- [x] Vision abort desync fix (P2) — aborting an initial vision request no longer pops the user's history entry while the user bubble remains in the DOM; `conversationHistory.pop()` skipped when `error.name === 'AbortError' && hasCurrentImage`
+- [x] Windows ESLint glob fix (P3) — `lint:js` script changed from `eslint 'src/aia/scripts/*.js'` (shell glob, broken on Windows) to `eslint src/aia/scripts` (directory); `*.min.js` exclusion moved to a global `{ ignores: ['**/*.min.js'] }` block in `eslint.config.js` (standalone block without `files` applies globally in ESLint v9 flat config)
+- [x] Vision placeholder UX improvement (P4) — saved-chat image placeholder changed from plain text to an inline SVG camera/landscape icon + "Image not available in saved file" label; `.image-placeholder` flex layout and `.image-placeholder svg` sizing added to CSS
+- [x] Chevron rotation animation (P5) — persona toggle chevron and profile trigger chevron now rotate 180° when their panel is open via CSS `transition: transform 0.2s ease` and `[aria-expanded="true"] svg { transform: rotate(180deg) }`
+- [x] Version bumped to 1.9.0
 
 ## Known Limitations (Accepted Trade-offs)
 

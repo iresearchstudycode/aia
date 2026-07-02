@@ -72,9 +72,12 @@ const crossModuleGlobals = {
 };
 
 module.exports = [
+  // Global ignore — never lint vendored minified files regardless of how ESLint
+  // is invoked (glob or directory). A standalone ignores block without `files`
+  // applies globally in ESLint v9 flat config.
+  { ignores: ['**/*.min.js'] },
   {
     files: ['src/aia/scripts/*.js'],
-    ignores: ['**/*.min.js'],
     ...js.configs.recommended,
     languageOptions: {
       ecmaVersion: 2021,

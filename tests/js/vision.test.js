@@ -88,4 +88,28 @@ describe('detectVisionContext', () => {
   test('undefined history handled gracefully → false', () => {
     expect(detectVisionContext(null, undefined)).toBe(false);
   });
+
+  // hasImage: true covers loaded chats where imageBase64 was stripped from the
+  // saved JSON file but the flag is preserved so routing stays on the vision model.
+  test('loaded chat: hasImage:true in history entry → true', () => {
+    expect(detectVisionContext(null, [
+      { role: 'user', content: 'describe this', hasImage: true },
+      { role: 'assistant', content: 'a motorway at night' },
+    ])).toBe(true);
+  });
+
+  test('loaded chat: hasImage:false does not trigger vision → false', () => {
+    expect(detectVisionContext(null, [
+      { role: 'user', content: 'hello', hasImage: false },
+    ])).toBe(false);
+  });
+
+  test('loaded chat: hasImage only on a later history entry → true', () => {
+    expect(detectVisionContext(null, [
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello' },
+      { role: 'user', content: 'look at this', hasImage: true },
+      { role: 'assistant', content: 'I see it' },
+    ])).toBe(true);
+  });
 });
