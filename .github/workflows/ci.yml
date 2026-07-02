@@ -76,6 +76,7 @@ jobs:
       - name: Validate nginx config syntax
         run: |
           docker run --rm \
+            --add-host auth:127.0.0.1 \
             -v "${{ github.workspace }}/deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
             -v "${{ github.workspace }}/deploy/certs/localhost.pem:/etc/nginx/ssl/localhost.pem:ro" \
             -v "${{ github.workspace }}/deploy/certs/localhost-key.pem:/etc/nginx/ssl/localhost-key.pem:ro" \
