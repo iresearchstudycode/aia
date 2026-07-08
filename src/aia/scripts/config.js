@@ -1,6 +1,6 @@
 // config.js - Configuration constants and system prompts
-const MODEL_NAME = 'gemma4:e4b';        // text + thinking mode
-const VISION_MODEL_NAME = 'gemma3:4b'; // vision-capable model (gemma4:e4b has no vision encoder)
+const MODEL_NAME = 'gemma4:26b';        // text + thinking mode
+const VISION_MODEL_NAME = 'gemma4:26b'; // vision-capable model (same model handles text and vision)
 const OLLAMA_API_URL = 'https://localhost/ollama/api/chat';
 const MAX_HISTORY_MESSAGES = 40; // 20 user/assistant exchanges
 const MAX_INPUT_LENGTH = 4000;
