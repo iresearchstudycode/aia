@@ -49,7 +49,50 @@ This web application provides a ChatGPT-style chat interface (dark navy header, 
 
 Every request to Nginx triggers an internal sub-request to the auth service (`auth_request`). If the session cookie is missing or expired, Nginx redirects the browser to the login page — no unauthenticated request ever reaches the static application or Ollama proxy.
 
-**Optional VoiceBox path (not pictured above):** `POST /voicebox/speak` and `GET /voicebox/audio/{id}` are proxied the same way as `/ollama/api/chat` — auth-gated, then forwarded to a `vpal-voicebox-proxy` container (`cgr.dev/chainguard/python`), which talks to a local Voicebox desktop app's REST API at `host.docker.internal:17493` on your behalf. This lets AI responses be spoken through VoiceBox as an alternative to the browser's own Web Speech API — with two extras the browser engine doesn't have: repeat text is served from an in-memory cache instead of being re-synthesized (and re-spoken from scratch), and the toolbar shows a real "generating" spinner while synthesis is in progress. It's entirely optional — the app works fully without Voicebox running; selecting the VoiceBox engine while it's unreachable just shows a toast error.
+### VoiceBox Path (optional)
+
+The same Nginx container also proxies two more routes, gated by the identical `auth_request` session check, to an additional service:
+
+```text
+                 ┌─────────┐
+                 │ Browser │
+                 └─────────┘
+                      │
+            HTTPS (127.0.0.1:443)
+POST /voicebox/speak, GET /voicebox/audio/{id}
+                      ▼
+┌────────────────────────────────────────────┐
+│                Host Machine                │
+│   ┌───────────────────────────────────┐    │
+│   │ Docker: vpal-nginx                │    │
+│   │ (same instance as the main flow)  │    │
+│   │ auth_request /auth/verify — same  │    │
+│   │ session gate as every other route │    │
+│   └───────────────────────────────────┘    │
+│                     │                      │
+│         HTTP/REST (Docker network)         │
+│                     ▼                      │
+│  ┌──────────────────────────────────────┐  │
+│  │ Docker: vpal-voicebox-proxy          │  │
+│  │ cgr.dev/chainguard/python, uid=65532 │  │
+│  │ FastAPI + httpx                      │  │
+│  │ in-memory generation cache           │  │
+│  └──────────────────────────────────────┘  │
+│                     │                      │
+│   HTTP/REST · host.docker.internal:17493   │
+│                     ▼                      │
+│     ┌────────────────────────────────┐     │
+│     │ Voicebox (local desktop app)   │     │
+│     │ POST /speak                    │     │
+│     │ GET  /generate/{id}/status     │     │
+│     │ GET  /audio/{id}               │     │
+│     │ plays a fresh clip through the │     │
+│     │ host's speakers directly       │     │
+│     └────────────────────────────────┘     │
+└────────────────────────────────────────────┘
+```
+
+This lets AI responses be spoken through VoiceBox as an alternative to the browser's own Web Speech API — with two extras the browser engine doesn't have: repeat text is served from `vpal-voicebox-proxy`'s in-memory cache instead of being re-synthesized (and re-spoken) from scratch, and the toolbar shows a real "generating" spinner for the full synthesis duration on a cache miss. It's entirely optional — the app works fully without Voicebox running; selecting the VoiceBox engine while it's unreachable just shows a toast error.
 
 ### Technology Stack
 
