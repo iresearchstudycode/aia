@@ -49,6 +49,8 @@ This web application provides a ChatGPT-style chat interface (dark navy header, 
 
 Every request to Nginx triggers an internal sub-request to the auth service (`auth_request`). If the session cookie is missing or expired, Nginx redirects the browser to the login page — no unauthenticated request ever reaches the static application or Ollama proxy.
 
+**Optional VoiceBox path (not pictured above):** `POST /voicebox/speak` and `GET /voicebox/audio/{id}` are proxied the same way as `/ollama/api/chat` — auth-gated, then forwarded to a `vpal-voicebox-proxy` container (`cgr.dev/chainguard/python`), which talks to a local Voicebox desktop app's REST API at `host.docker.internal:17493` on your behalf. This lets AI responses be spoken through VoiceBox as an alternative to the browser's own Web Speech API — with two extras the browser engine doesn't have: repeat text is served from an in-memory cache instead of being re-synthesized (and re-spoken from scratch), and the toolbar shows a real "generating" spinner while synthesis is in progress. It's entirely optional — the app works fully without Voicebox running; selecting the VoiceBox engine while it's unreachable just shows a toast error.
+
 ### Technology Stack
 
 | Layer | Technology |
@@ -60,6 +62,7 @@ Every request to Nginx triggers an internal sub-request to the auth service (`au
 | HTML sanitisation | DOMPurify v3.4.11 (vendored, SRI-pinned) |
 | Web server | Nginx (`cgr.dev/chainguard/nginx`, distroless, uid=65532) |
 | Auth service | FastAPI + pyotp + itsdangerous (`cgr.dev/chainguard/python:latest`, uid=65532) |
+| VoiceBox proxy (optional) | FastAPI + httpx (`cgr.dev/chainguard/python:latest`, uid=65532) — bridges to a local Voicebox app's REST API; in-memory generation cache |
 | Session | HMAC-signed cookie (`itsdangerous.TimestampSigner`), 8-hour TTL |
 | TOTP | RFC 6238 via `pyotp`, compatible with Google Authenticator |
 | Container | Docker, read-only filesystems, minimal capability sets |
@@ -73,6 +76,7 @@ Every request to Nginx triggers an internal sub-request to the auth service (`au
 - Models pulled: `ollama pull gemma4:e4b` (text + thinking) and `ollama pull gemma3:4b` (vision)
 - TLS certificates generated with [mkcert](https://github.com/FiloSottile/mkcert) and placed in `deploy/certs/`
 - A modern web browser with Web Speech API support (Chrome, Edge, Firefox, Safari 14.1+)
+- (Optional) The Voicebox desktop app running on the host if you want the VoiceBox TTS engine — the app works fully without it
 
 ### Installation
 
@@ -176,6 +180,15 @@ vpal/
 │   │   └── test_main.py            # 65 pytest tests
 │   └── static/
 │       └── login.css               # Login page styles
+├── voicebox-proxy/                 # VoiceBox TTS proxy service (optional)
+│   ├── main.py                     # FastAPI app + Voicebox REST client + generation cache
+│   ├── requirements.txt
+│   ├── requirements-test.txt       # pytest, flake8, black, httpx
+│   ├── Dockerfile                  # Multi-stage Chainguard build (digest-pinned)
+│   ├── pytest.ini
+│   └── tests/
+│       ├── conftest.py             # sys.path setup
+│       └── test_main.py            # 31 pytest tests
 ├── src/
 │   └── aia/                        # Web application source
 │       ├── index.html              # Main HTML structure
@@ -218,6 +231,7 @@ vpal/
 
 - **Language**: `SPEECH_RECOGNITION_LANG` in `config.js` (BCP 47, default: `en-US`)
 - **Silence detection**: `SILENCE_TIMEOUT_MS` in `config.js` (default: `3000` ms)
+- **TTS engine**: Toolbar dropdown next to the auto-speak button — "VoiceBox" (local Voicebox app, default; via `VOICEBOX_SPEAK_URL` in `config.js`, default: `https://localhost/voicebox/speak`) or "Browser" (Web Speech API); choice persisted to `localStorage`. If Voicebox isn't running, switch to "Browser" or it'll show an unavailable toast on speak. VoiceBox shows a spinner on the speak button while a new line is being synthesized; repeating the exact same text skips synthesis entirely and instantly replays the cached clip (with a working stop button, unlike a fresh generation).
 
 ### Auth settings
 
@@ -230,6 +244,16 @@ All auth settings live in `.env`:
 | `SETUP_TOKEN` | — | Enables QR setup page when set; remove after setup |
 | `USER_N` / `TOTP_SECRET_N` | — | Username and TOTP secret for user N (N = 1–5) |
 
+### VoiceBox settings (optional)
+
+All optional and only needed if you run the Voicebox desktop app locally and want the VoiceBox TTS engine. Set in `.env`; the app works fully without them:
+
+| Variable | Default | Description |
+|---|---|---|
+| `VOICEBOX_URL` | `http://host.docker.internal:17493` | Base URL of the local Voicebox app's REST API |
+| `VOICEBOX_CLIENT_ID` | `vpal` | Client identifier sent to Voicebox (not a secret — Voicebox has no auth of its own) |
+| `VOICEBOX_TIMEOUT_SECONDS` | `60` | Timeout for both starting and awaiting a voice generation — must cover your slowest expected synthesis |
+
 ## 🛡️ Security
 
 ### Implemented measures
@@ -241,8 +265,8 @@ All auth settings live in `.env`:
 | **Transport** | HTTPS only (TLS 1.2/1.3), HSTS, HTTP→HTTPS redirect |
 | **Browser** | CSP: `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'`; `X-Frame-Options: DENY`; `X-Content-Type-Options: nosniff`; `Referrer-Policy: no-referrer`; `Permissions-Policy` |
 | **XSS prevention** | All AI response content (final answer and thinking block content) sanitised with DOMPurify (SRI-pinned) before rendering; user input escaped with `escapeHtml` before DOM insertion |
-| **Proxy** | Ollama API locked to exact-match `POST /ollama/api/chat` only — all other paths and methods denied; rate-limited to 5 req/min with burst of 5 |
-| **Containers** | Both containers: read-only filesystem, non-root user, `cap_drop: ALL`, `no-new-privileges`; Nginx adds `NET_BIND_SERVICE` only |
+| **Proxy** | Ollama API locked to exact-match `POST /ollama/api/chat` only — all other paths and methods denied; rate-limited to 5 req/min with burst of 5. VoiceBox proxy locked to `POST /voicebox/speak` and `GET /voicebox/audio/{id}` only; also auth-gated (Voicebox itself has no authentication of its own); both rate-limited to 10 req/min with burst of 3 |
+| **Containers** | All three containers: read-only filesystem, non-root user, `cap_drop: ALL`, `no-new-privileges`; Nginx adds `NET_BIND_SERVICE` only |
 | **Network** | Loopback-only binding (`127.0.0.1`); auth service port not published to the host (Docker-internal only) |
 | **Secrets** | All credentials in `.env` (gitignored); no hardcoded keys, tokens, or passwords anywhere in source |
 | **Input** | User messages capped at 4,000 characters; Nginx enforces 1 MB request body limit; uploaded chat files capped at 5 MB |
@@ -259,7 +283,7 @@ All auth settings live in `.env`:
 - **Profile Menu**: SVG user icon + logged-in username in the header; dropdown (Save, Open, Clear, Close, Sign out) opens as a fixed overlay with Tab focus trap and Escape to close
 - **Persona Selector**: Chevron button next to the heading opens a panel to switch AI personas; selected persona shown as a subtitle; locked during an active conversation; Tab focus trap and Escape to close
 - **Chat Input**: Auto-growing textarea (up to 6 lines); Enter sends, Shift+Enter inserts a newline; circular sky-blue send button activates only when text or an image is pending
-- **Voice Input/Output**: Continuous speech recognition with 3-second silence detection; text-to-speech synthesis with per-message speak buttons; toolbar: mic → auto-speak → stop speaking
+- **Voice Input/Output**: Continuous speech recognition with 3-second silence detection; text-to-speech synthesis with per-message speak buttons; toolbar: mic → auto-speak → TTS engine (Browser / VoiceBox) → stop speaking
 - **Image Attachment**: Paperclip toolbar button opens a file picker; images are resized to ≤ 1024 px before being sent; vision requests are automatically routed to `gemma3:4b`; in-session thumbnails shown in user bubbles; saved chats show an SVG camera icon placeholder where the image was
 - **Thinking Mode**: Lightbulb toolbar button toggles reasoning ON/OFF; depth selector (Low / Medium / High) appears inline when enabled; live reasoning displayed in a collapsible `<details>` block; collapses when the final answer arrives; thinking content excluded from history, copy, and speech; mode and depth saved to `localStorage` and restored on reload
 - **Dual-model Routing**: Text requests use `gemma4:e4b` (streaming, thinking-capable); image requests and vision follow-ups use `gemma3:4b`; `think: false` sent explicitly to suppress native reasoning when thinking is OFF
@@ -291,13 +315,15 @@ All auth settings live in `.env`:
 | Text model not found | Run `ollama pull gemma4:e4b` |
 | Vision/image not working | Run `ollama pull gemma3:4b`; vision uses a separate model from the text model |
 | Image sends but gets no response | Image may exceed context window — the app resizes to ≤ 1024 px automatically, but very complex images can still overload `gemma3:4b` |
+| "VoiceBox is unavailable" toast | The Voicebox desktop app isn't running on the host, or `VOICEBOX_URL` in `.env` doesn't match its port — switch the toolbar TTS engine back to "Browser" as a workaround |
 
 ### Debug mode
 
-Open browser developer tools (F12) → **Console**. For auth container logs:
+Open browser developer tools (F12) → **Console**. For container logs:
 ```powershell
 docker logs vpal-auth
 docker logs vpal-nginx
+docker logs vpal-voicebox-proxy
 ```
 
 ## 📄 License

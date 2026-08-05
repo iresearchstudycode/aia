@@ -35,6 +35,34 @@ jobs:
         working-directory: auth
         run: pytest tests/ -v
 
+  voicebox-proxy-lint-test:
+    name: Voicebox proxy — format, lint & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: |
+            voicebox-proxy/requirements.txt
+            voicebox-proxy/requirements-test.txt
+
+      - name: Install dependencies
+        run: pip install -r voicebox-proxy/requirements.txt -r voicebox-proxy/requirements-test.txt
+
+      - name: Format (black --check)
+        run: black voicebox-proxy/main.py voicebox-proxy/tests/ --check --line-length=99
+
+      - name: Lint (flake8)
+        run: flake8 voicebox-proxy/main.py voicebox-proxy/tests/ --max-line-length=99
+
+      - name: Test (pytest)
+        working-directory: voicebox-proxy
+        run: pytest tests/ -v
+
   frontend-lint:
     name: Frontend — ESLint
     runs-on: ubuntu-latest
@@ -77,6 +105,7 @@ jobs:
         run: |
           docker run --rm \
             --add-host auth:127.0.0.1 \
+            --add-host voicebox-proxy:127.0.0.1 \
             --add-host host.docker.internal:127.0.0.1 \
             -v "${{ github.workspace }}/deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
             -v "${{ github.workspace }}/deploy/certs/localhost.pem:/etc/nginx/ssl/localhost.pem:ro" \

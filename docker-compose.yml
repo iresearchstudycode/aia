@@ -37,14 +37,57 @@ services:
       retries: 3
       start_period: 15s
 
+  voicebox-proxy:
+    build:
+      context: ./voicebox-proxy
+      dockerfile: Dockerfile
+    container_name: vpal-voicebox-proxy
+    restart: unless-stopped
+    env_file: .env
+
+    # Connects the container to your Windows host network gateway so it can
+    # reach the local Voicebox desktop app (127.0.0.1:17493 on the host).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    # Security: non-root (uid 65532, Chainguard default), read-only root, no capabilities
+    read_only: true
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+          pids: 30
+
+    # Port exposed only within the Docker network — never published to the host
+    expose:
+      - "8002"
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   web-server:
     image: cgr.dev/chainguard/nginx
     container_name: vpal-nginx
     restart: unless-stopped
 
-    # Nginx starts only after the auth service is healthy
+    # Nginx starts only after the auth and voicebox-proxy services are healthy
     depends_on:
       auth:
+        condition: service_healthy
+      voicebox-proxy:
         condition: service_healthy
 
     healthcheck:

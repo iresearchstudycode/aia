@@ -45,8 +45,28 @@ function detectVisionContext(imageBase64, history) {
   return !!imageBase64 || (Array.isArray(history) && history.some(m => !!m.imageBase64 || m.hasImage === true));
 }
 
+// Strip markdown formatting from AI response text so it reads naturally when
+// spoken aloud — shared by both the browser (Web Speech API) and VoiceBox
+// text-to-speech paths in speech.js.
+function stripMarkdownForSpeech(text) {
+  return text
+    // Must run before the char-strip below, which would otherwise remove the
+    // backtick fences and make this pattern unmatchable.
+    .replace(/```[\s\S]*?```/g, 'code block')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[#*`_~]/g, '')
+    .replace(/\n+/g, '. ');
+}
+
 // Node.js compat — lets Jest import these functions for unit tests; no-op in browser.
-if (typeof module !== 'undefined') module.exports = { splitThinkingContent, calcResizeDims, detectVisionContext };
+if (typeof module !== 'undefined') {
+  module.exports = {
+    splitThinkingContent,
+    calcResizeDims,
+    detectVisionContext,
+    stripMarkdownForSpeech
+  };
+}
 
 // Format timestamp as: ddd, dd/mmm/yyyy HH:MM:SS AM/PM
 function formatTimestamp(d) {
