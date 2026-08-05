@@ -179,8 +179,17 @@ function toggleSpeechRecognition() {
   }
 }
 
-// Text to Speech function
+// Text to Speech function — routes to the browser's Web Speech API or the
+// VoiceBox proxy depending on currentTTSEngine (config.js / ttsEngineSelect).
 function speakText(text, sourceBtn) {
+  if (currentTTSEngine === 'voicebox') {
+    speakTextViaVoicebox(text, sourceBtn);
+    return;
+  }
+  speakTextViaBrowser(text, sourceBtn);
+}
+
+function speakTextViaBrowser(text, sourceBtn) {
   if (!('speechSynthesis' in window)) {
     return;
   }
@@ -211,12 +220,7 @@ function speakText(text, sourceBtn) {
     document.getElementById('micBtn').classList.add('paused');
   }
 
-  // Remove markdown formatting for better speech
-  const cleanText = text
-    .replace(/[#*`_~]/g, '')
-    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
-    .replace(/```[\s\S]*?```/g, 'code block')
-    .replace(/\n+/g, '. ');
+  const cleanText = stripMarkdownForSpeech(text);
 
   // Select a specific voice
   const aussieVoice = availableVoices.find(voice =>
@@ -276,10 +280,136 @@ function speakText(text, sourceBtn) {
   speechSynthesis.speak(currentUtterance);
 }
 
+// Shared <audio> element used only to replay a cached VoiceBox generation —
+// created lazily so pages that never touch VoiceBox don't pay for it. A
+// *fresh* generation is played by Voicebox itself through the host's
+// speakers (no audio element involved); this element only ever plays back
+// clips VoiceBox already generated earlier, fetched via GET /voicebox/audio/{id}.
+let voiceboxAudio = null;
+
+function getVoiceboxAudio() {
+  if (!voiceboxAudio) {
+    voiceboxAudio = new Audio();
+    voiceboxAudio.addEventListener('ended', onVoiceboxAudioFinished);
+    voiceboxAudio.addEventListener('error', onVoiceboxAudioFinished);
+  }
+  return voiceboxAudio;
+}
+
+function onVoiceboxAudioFinished() {
+  isSpeaking = false;
+  resetActiveSpeakBtn();
+  document.getElementById('speakerBtn').style.display = 'none';
+  document.getElementById('speakerBtn').classList.remove('speaking');
+}
+
+// Play a cached VoiceBox generation and wire up real stop/speaking state —
+// unlike a fresh generation (which VoiceBox plays itself with no signal back
+// to this page), a cache hit is played entirely by this page, so it can be
+// stopped like the browser engine can.
+function playVoiceboxAudio(audioUrl, sourceBtn) {
+  const audio = getVoiceboxAudio();
+  const speakerBtn = document.getElementById('speakerBtn');
+
+  activeSpeakBtn = sourceBtn || null;
+  if (activeSpeakBtn) {
+    activeSpeakBtn.innerHTML = STOP_ICON;
+    activeSpeakBtn.title = 'Stop speaking';
+    activeSpeakBtn.setAttribute('aria-label', 'Stop speaking');
+    activeSpeakBtn.setAttribute('aria-pressed', 'true');
+    activeSpeakBtn.classList.add('speaking');
+  }
+
+  isSpeaking = true;
+  speakerBtn.style.display = 'flex';
+  speakerBtn.classList.add('speaking');
+
+  audio.src = audioUrl;
+  audio.play().catch(function () {
+    onVoiceboxAudioFinished();
+    showToast('Could not play VoiceBox audio.');
+  });
+}
+
+// Speak text through the VoiceBox proxy (POST /voicebox/speak, gated by the
+// session cookie like every other authenticated route). The request stays
+// pending for the whole synthesis duration on a cache miss, so its pending
+// state doubles as the "generating" indicator — the button (or the header
+// speaker icon, for auto-TTS with no button) shows a spinner until it
+// resolves. A fresh generation is played by VoiceBox itself through the
+// host's speakers; a cache hit is replayed by this page via
+// playVoiceboxAudio(), which does support a real stop control.
+function speakTextViaVoicebox(text, sourceBtn) {
+  stopSpeaking(); // stop any in-progress browser speech or cached VoiceBox playback
+
+  const cleanText = stripMarkdownForSpeech(text);
+  if (!cleanText.trim()) return;
+
+  const btn = sourceBtn || null;
+  const speakerBtn = document.getElementById('speakerBtn');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = SPINNER_ICON;
+    btn.classList.add('generating');
+    btn.title = 'Generating voice…';
+    btn.setAttribute('aria-label', 'Generating voice');
+  }
+  speakerBtn.style.display = 'flex';
+  speakerBtn.classList.add('generating');
+
+  fetch(VOICEBOX_SPEAK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: cleanText })
+  })
+    .then(function (response) {
+      if (!response.ok) throw new Error('Voicebox request failed');
+      return response.json();
+    })
+    .then(function (data) {
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove('generating');
+      }
+      speakerBtn.classList.remove('generating');
+
+      if (data.cached) {
+        playVoiceboxAudio(data.audio_url, btn);
+        return;
+      }
+
+      // Fresh generation — VoiceBox already played it through the host
+      // speakers, so there is nothing left for this page to play.
+      speakerBtn.style.display = 'none';
+      if (btn) {
+        btn.innerHTML = CHECK_ICON;
+        btn.title = 'Sent to VoiceBox';
+        setTimeout(function () {
+          btn.innerHTML = SPEAK_ICON;
+          btn.title = 'Speak this response';
+          btn.setAttribute('aria-label', 'Speak this response');
+        }, 1500);
+      }
+    })
+    .catch(function () {
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove('generating');
+        btn.innerHTML = SPEAK_ICON;
+        btn.title = 'Speak this response';
+        btn.setAttribute('aria-label', 'Speak this response');
+      }
+      speakerBtn.classList.remove('generating');
+      speakerBtn.style.display = 'none';
+      showToast('VoiceBox is unavailable — check the Voicebox app is running');
+    });
+}
+
 // Stop speaking function
 function stopSpeaking() {
   resetActiveSpeakBtn();
-  if (speechSynthesis.speaking) {
+  if ('speechSynthesis' in window && speechSynthesis.speaking) {
     speechSynthesis.cancel();
 
     // Resume speech recognition if it was active before stopping
@@ -293,8 +423,12 @@ function stopSpeaking() {
       }
     }
   }
+  if (voiceboxAudio && !voiceboxAudio.paused) {
+    voiceboxAudio.pause();
+    voiceboxAudio.currentTime = 0;
+  }
   isSpeaking = false;
   document.getElementById('speakerBtn').style.display = 'none';
-  document.getElementById('speakerBtn').classList.remove('speaking');
+  document.getElementById('speakerBtn').classList.remove('speaking', 'generating');
   currentUtterance = null;
 }

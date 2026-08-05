@@ -8,6 +8,7 @@ const crossModuleGlobals = {
   MODEL_NAME: 'readonly',
   VISION_MODEL_NAME: 'readonly',
   OLLAMA_API_URL: 'readonly',
+  VOICEBOX_SPEAK_URL: 'readonly',
   MAX_HISTORY_MESSAGES: 'readonly',
   MAX_INPUT_LENGTH: 'readonly',
   MAX_UPLOAD_FILE_BYTES: 'readonly',
@@ -24,6 +25,7 @@ const crossModuleGlobals = {
   pendingImageDataUrl: 'writable',
   pendingImageBase64: 'writable',
   currentThinkingMode: 'writable',
+  currentTTSEngine: 'writable',
   // utils.js
   formatTimestamp: 'readonly',
   escapeHtml: 'readonly',
@@ -31,6 +33,7 @@ const crossModuleGlobals = {
   splitThinkingContent: 'readonly',
   calcResizeDims: 'readonly',
   detectVisionContext: 'readonly',
+  stripMarkdownForSpeech: 'readonly',
   // speech.js — functions
   loadVoices: 'readonly',
   toggleSpeechRecognition: 'readonly',
@@ -47,6 +50,7 @@ const crossModuleGlobals = {
   CHECK_ICON: 'readonly',
   SPEAK_ICON: 'readonly',
   STOP_ICON: 'readonly',
+  SPINNER_ICON: 'readonly',
   // chat.js — functions
   updateSystemPromptState: 'readonly',
   addUserMessage: 'readonly',

@@ -179,6 +179,17 @@ document.addEventListener('DOMContentLoaded', function () {
     localStorage.setItem('autoTTS', String(isOn));
   });
 
+  // TTS engine selector (Browser vs VoiceBox) — applies to both auto-TTS and
+  // the per-message speak button; persisted to localStorage like autoTTS.
+  const ttsEngineSelect = document.getElementById('ttsEngineSelect');
+  const savedTTSEngine = localStorage.getItem('ttsEngine') || 'voicebox';
+  ttsEngineSelect.value = savedTTSEngine;
+  currentTTSEngine = savedTTSEngine;
+  ttsEngineSelect.addEventListener('change', function () {
+    currentTTSEngine = this.value;
+    localStorage.setItem('ttsEngine', this.value);
+  });
+
   // Chat input
   const userInput = document.getElementById('userInput');
   userInput.maxLength = MAX_INPUT_LENGTH;
