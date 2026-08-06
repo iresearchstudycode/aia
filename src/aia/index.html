@@ -7,12 +7,18 @@
 
   <link rel="icon" href="images/icon.ico" type="image/x-icon">
   <title>AI Assistant (Local)</title>
+  <link rel="stylesheet" href="css/katex.min.css"
+    integrity="sha256-D7cRycdMsXGGYZM5SLZT+8CaYn2l3eiSa00QWFNwmT4=">
   <link rel="stylesheet" href="css/style.css">
 
   <script type="application/javascript" src="./scripts/marked.min.js"
     integrity="sha256-4Pc7cD47oE980D7DghoNwV643QQ3juFvHEx9nl+MuEw="></script>
   <script type="application/javascript" src="./scripts/dompurify.min.js"
     integrity="sha256-8v2XYS/R3cnnhZUEHXIvvAlCbSJXLU4P1aIgA1EDVRI="></script>
+  <script type="application/javascript" src="./scripts/katex.min.js"
+    integrity="sha256-aLkRVRC4ztuZCaEN53mclMBwdIEpb3VcCoiIy4/N4hY="></script>
+  <script type="application/javascript" src="./scripts/katex-auto-render.min.js"
+    integrity="sha256-5TctGZvNrotN5x0PfOunKkuhJ3SifGCm8fd9A7MijuQ="></script>
   <script type="application/javascript" src="./scripts/config.js"></script>
   <script type="application/javascript" src="./scripts/utils.js"></script>
   <script type="application/javascript" src="./scripts/speech.js"></script>
@@ -131,12 +137,30 @@
 
     <input type="file" id="openInput" accept="application/json,.json">
     <input type="file" id="imageInput" accept="image/*">
+    <input type="file" id="documentInput" accept=".txt,.md,.markdown,.pdf,text/plain,text/markdown,application/pdf">
 
     <div class="chat-input">
       <div class="chat-input-container">
         <div class="image-preview-strip" id="imagePreviewStrip">
           <img id="imagePreviewThumb" class="image-preview-thumb" alt="Image to attach">
           <button type="button" id="removeImageBtn" class="remove-image-btn" aria-label="Remove attached image">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="document-preview-strip" id="documentPreviewStrip">
+          <svg class="document-preview-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          <span id="documentPreviewName" class="document-preview-name"></span>
+          <button type="button" id="removeDocumentBtn" class="remove-image-btn" aria-label="Remove attached document">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18"/>
@@ -186,14 +210,38 @@
                 <line x1="17" y1="9" x2="23" y2="15"/>
               </svg>
             </button>
-            <!-- Attach image -->
-            <button type="button" class="voice-btn toolbar-icon-btn" id="attachImageBtn"
-              aria-label="Attach image" title="Attach an image for visual analysis">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-              </svg>
-            </button>
+            <!-- Attach menu ("+") — ChatGPT-style single trigger consolidating
+                 image and document attachment behind one popup with two options. -->
+            <div class="attach-menu" id="attachMenu">
+              <button type="button" class="voice-btn toolbar-icon-btn attach-menu-btn" id="attachMenuBtn"
+                aria-label="Add photos or files" aria-haspopup="true" aria-expanded="false"
+                title="Add photos or files">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+              </button>
+              <div class="attach-menu-dropdown" id="attachMenuDropdown">
+                <button type="button" id="addImageMenuItem" title="Attach an image for visual analysis">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                  </svg>
+                  Add photos
+                </button>
+                <button type="button" id="addFileMenuItem" title="Attach a .txt, .md, or .pdf file to ask questions about">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                  </svg>
+                  Add files
+                </button>
+              </div>
+            </div>
             <!-- Thinking mode -->
             <button type="button" class="voice-btn toolbar-icon-btn" id="thinkingModeBtn"
               aria-label="Thinking mode: Off" aria-pressed="false"

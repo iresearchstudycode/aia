@@ -21,6 +21,14 @@ function _getCookie(name) {
   return match ? decodeURIComponent(match[1]) : '';
 }
 
+// Toggles the "+" attach button's active indicator based on whether an image
+// or document is currently pending — both attachment types share one trigger
+// button, so its active state reflects either being set.
+function _updateAttachMenuActiveState() {
+  const btn = document.getElementById('attachMenuBtn');
+  if (btn) btn.classList.toggle('active', !!(pendingImageBase64 || pendingDocumentText));
+}
+
 // Clears any pending image attachment — resets global state, hides the preview
 // strip, and re-evaluates the send button. Called by sendMessage/sendMessageAndContinueListening
 // in chat.js before dispatching the request, and by the remove-image button.
@@ -29,9 +37,24 @@ function clearImagePreview() {
   pendingImageBase64 = null;
   document.getElementById('imagePreviewStrip').style.display = 'none';
   document.getElementById('imagePreviewThumb').src = '';
-  document.getElementById('attachImageBtn').classList.remove('active');
+  _updateAttachMenuActiveState();
   const textarea = document.getElementById('userInput');
-  document.getElementById('sendBtn').disabled = textarea.value.trim().length === 0;
+  document.getElementById('sendBtn').disabled = textarea.value.trim().length === 0 && !pendingDocumentText;
+}
+
+// Clears any pending document attachment — mirrors clearImagePreview(). Called
+// by sendMessage/sendMessageAndContinueListening/clearChat/handleOpenFile in
+// chat.js before dispatching a request or resetting the chat, and by the
+// remove-document button.
+function clearDocumentPreview() {
+  pendingDocumentText = null;
+  pendingDocumentName = null;
+  pendingDocumentTruncated = false;
+  document.getElementById('documentPreviewStrip').style.display = 'none';
+  document.getElementById('documentPreviewName').textContent = '';
+  _updateAttachMenuActiveState();
+  const textarea = document.getElementById('userInput');
+  document.getElementById('sendBtn').disabled = textarea.value.trim().length === 0 && !pendingImageBase64;
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -136,15 +159,46 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!profileMenu.contains(e.target)) closeProfileDropdown();
   });
 
-  // Close both panels on Escape; trap Tab focus inside whichever panel is open.
+  // Attach menu ("+") — consolidates image + document attachment into a single
+  // ChatGPT-style trigger; mirrors the profileTrigger/profileDropdown open/close
+  // pattern above, but opens upward since the trigger lives in the bottom toolbar.
+  const attachMenuBtn = document.getElementById('attachMenuBtn');
+  const attachMenuDropdown = document.getElementById('attachMenuDropdown');
+  const attachMenu = document.getElementById('attachMenu');
+
+  function openAttachMenu() {
+    const rect = attachMenuBtn.getBoundingClientRect();
+    attachMenuDropdown.style.bottom = (window.innerHeight - rect.top + 8) + 'px';
+    attachMenuDropdown.style.left = rect.left + 'px';
+    attachMenuDropdown.classList.add('open');
+    attachMenuBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeAttachMenu() {
+    attachMenuDropdown.classList.remove('open');
+    attachMenuBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  attachMenuBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    attachMenuDropdown.classList.contains('open') ? closeAttachMenu() : openAttachMenu();
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!attachMenu.contains(e.target)) closeAttachMenu();
+  });
+
+  // Close all panels on Escape; trap Tab focus inside whichever panel is open.
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       closeProfileDropdown();
       closePersonaPanel();
+      closeAttachMenu();
     }
     if (e.key === 'Tab') {
       if (personaPanel.classList.contains('open')) _trapFocus(personaPanel, e);
       if (profileDropdown.classList.contains('open')) _trapFocus(profileDropdown, e);
+      if (attachMenuDropdown.classList.contains('open')) _trapFocus(attachMenuDropdown, e);
     }
   });
 
@@ -153,6 +207,7 @@ document.addEventListener('DOMContentLoaded', function () {
   window.addEventListener('resize', function () {
     if (personaPanel.classList.contains('open')) closePersonaPanel();
     if (profileDropdown.classList.contains('open')) closeProfileDropdown();
+    if (attachMenuDropdown.classList.contains('open')) closeAttachMenu();
   });
 
   // Close the dropdown after each menu-item action (before any confirm dialogs).
@@ -241,15 +296,23 @@ document.addEventListener('DOMContentLoaded', function () {
   // File open
   document.getElementById('openInput').addEventListener('change', handleOpenFile);
 
-  // Image attachment — validates size/type, reads as data URL, shows preview strip.
-  const attachImageBtn = document.getElementById('attachImageBtn');
+  // Attach menu items — each opens its hidden file input then closes the menu.
   const imageInput = document.getElementById('imageInput');
-  const imagePreviewStrip = document.getElementById('imagePreviewStrip');
-  const imagePreviewThumb = document.getElementById('imagePreviewThumb');
+  const documentInput = document.getElementById('documentInput');
 
-  attachImageBtn.addEventListener('click', function () {
+  document.getElementById('addImageMenuItem').addEventListener('click', function () {
+    closeAttachMenu();
     imageInput.click();
   });
+
+  document.getElementById('addFileMenuItem').addEventListener('click', function () {
+    closeAttachMenu();
+    documentInput.click();
+  });
+
+  // Image attachment — validates size/type, reads as data URL, shows preview strip.
+  const imagePreviewStrip = document.getElementById('imagePreviewStrip');
+  const imagePreviewThumb = document.getElementById('imagePreviewThumb');
 
   imageInput.addEventListener('change', function () {
     const file = this.files && this.files[0];
@@ -292,7 +355,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         imagePreviewThumb.src = resizedDataUrl;
         imagePreviewStrip.style.display = 'flex';
-        attachImageBtn.classList.add('active');
+        _updateAttachMenuActiveState();
         document.getElementById('sendBtn').disabled = false;
         if (wasResized) showToast(`Image scaled to ${w}×${h} for analysis`);
       };
@@ -303,6 +366,72 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   document.getElementById('removeImageBtn').addEventListener('click', clearImagePreview);
+
+  // Document attachment — validates size/extension, extracts text (.txt/.md
+  // read client-side; .pdf sent to the doc-extract service), shows preview strip.
+  const documentPreviewStrip = document.getElementById('documentPreviewStrip');
+  const documentPreviewName = document.getElementById('documentPreviewName');
+
+  documentInput.addEventListener('change', async function () {
+    const file = this.files && this.files[0];
+    if (!file) return;
+    this.value = ''; // reset so the same file can be re-selected
+
+    const lowerName = file.name.toLowerCase();
+    const isPdf = lowerName.endsWith('.pdf');
+    const isPlainText = lowerName.endsWith('.txt') || lowerName.endsWith('.md') || lowerName.endsWith('.markdown');
+    if (!isPdf && !isPlainText) {
+      alert('Please select a .txt, .md, or .pdf file.');
+      return;
+    }
+
+    if (file.size > MAX_DOCUMENT_UPLOAD_BYTES) {
+      alert(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is ${MAX_DOCUMENT_UPLOAD_BYTES / 1024 / 1024} MB.`);
+      return;
+    }
+
+    attachMenuBtn.disabled = true;
+    documentPreviewName.textContent = `Extracting text from ${file.name}…`;
+    documentPreviewStrip.style.display = 'flex';
+
+    try {
+      let rawText;
+      if (isPlainText) {
+        rawText = await file.text();
+      } else {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetch(DOC_EXTRACT_URL, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || 'Could not extract text from this PDF.');
+        }
+        rawText = data.text;
+      }
+
+      if (!rawText || !rawText.trim()) {
+        throw new Error('No readable text found in this file (a scanned/image-only PDF has no extractable text).');
+      }
+
+      const { text, truncated } = truncateDocumentText(rawText, MAX_DOCUMENT_TEXT_CHARS);
+      pendingDocumentText = text;
+      pendingDocumentName = file.name;
+      pendingDocumentTruncated = truncated;
+
+      documentPreviewName.textContent = `${file.name} (${text.length.toLocaleString()} chars${truncated ? ', truncated' : ''})`;
+      _updateAttachMenuActiveState();
+      document.getElementById('sendBtn').disabled = false;
+      if (truncated) showToast(`${file.name} was long — using the first ${MAX_DOCUMENT_TEXT_CHARS.toLocaleString()} characters`);
+    } catch (err) {
+      console.error('Document extraction failed:', err);
+      showToast(err.message || 'Could not read this file.');
+      clearDocumentPreview();
+    } finally {
+      attachMenuBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('removeDocumentBtn').addEventListener('click', clearDocumentPreview);
 
   // Thinking mode — toggle ON/OFF; when ON show depth selector and update global.
   const thinkingModeBtn = document.getElementById('thinkingModeBtn');

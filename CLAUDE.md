@@ -32,12 +32,13 @@ docker inspect --format='{{.State.Health.Status}}' vpal-nginx
 
 ## Testing
 
-The auth and voicebox-proxy services each have a pytest suite. Run them from their own directory — `conftest.py` adjusts `sys.path` (and, for `auth/`, sets required env vars) automatically.
+The auth, voicebox-proxy, and doc-extract services each have a pytest suite. Run them from their own directory — `conftest.py` adjusts `sys.path` (and, for `auth/`, sets required env vars) automatically.
 
 ```bash
 # Install test dependencies (one-time)
 pip install -r auth/requirements.txt -r auth/requirements-test.txt
 pip install -r voicebox-proxy/requirements.txt -r voicebox-proxy/requirements-test.txt
+pip install -r doc-extract/requirements.txt -r doc-extract/requirements-test.txt
 
 # Run the full quality gate (mirrors CI exactly)
 black auth/main.py auth/tests/ --check --line-length=99
@@ -47,6 +48,10 @@ cd auth && pytest tests/ -v
 black voicebox-proxy/main.py voicebox-proxy/tests/ --check --line-length=99
 flake8 voicebox-proxy/main.py voicebox-proxy/tests/ --max-line-length=99
 cd voicebox-proxy && pytest tests/ -v
+
+black doc-extract/main.py doc-extract/tests/ --check --line-length=99
+flake8 doc-extract/main.py doc-extract/tests/ --max-line-length=99
+cd doc-extract && pytest tests/ -v
 
 # Run a single test class or test
 cd auth && pytest tests/ -v -k TestLogout
@@ -61,12 +66,13 @@ npm run lint:js
 npm run lint:html
 
 # Frontend JS unit tests (Jest)
-npx jest --testPathPattern="tests/js"
+npx jest --testPathPatterns="tests/js"
 ```
 
-CI runs four jobs automatically on every push and PR to `master` (`.github/workflows/ci.yml`):
+CI runs five jobs automatically on every push and PR to `master` (`.github/workflows/ci.yml`):
 - `auth-lint-test` — black + flake8 + pytest for `auth/`
 - `voicebox-proxy-lint-test` — black + flake8 + pytest for `voicebox-proxy/`
+- `doc-extract-lint-test` — black + flake8 + pytest for `doc-extract/`
 - `frontend-lint` — ESLint (`src/aia/scripts/`) + HTMLHint (`src/aia/index.html`) + Jest (`tests/js/`)
 - `nginx-config-check` — generates dummy TLS certs, mounts `nginx.conf` into `nginx:1.27-alpine`, runs `nginx -t`
 
@@ -84,9 +90,11 @@ Browser → HTTPS (port 443) / HTTP (port 80 → redirects to HTTPS)
            ├── auth_request /auth/verify (session gate applied to all routes below)
            ├── GET/HEAD /* → serves static files from src/aia/
            ├── POST /ollama/api/chat (exact match) → reverse proxy → host.docker.internal:11434/api/chat
-           └── voicebox-proxy service (cgr.dev/chainguard/python, uid=65532) → host.docker.internal:17493 (local Voicebox app REST API)
-                          POST /voicebox/speak       — synthesize (or resolve from cache) + play; blocks until done
-                          GET  /voicebox/audio/{id}  — fetch a past generation's audio, for cache-hit replay
+           ├── voicebox-proxy service (cgr.dev/chainguard/python, uid=65532) → host.docker.internal:17493 (local Voicebox app REST API)
+           │              POST /voicebox/speak       — synthesize (or resolve from cache) + play; blocks until done
+           │              GET  /voicebox/audio/{id}  — fetch a past generation's audio, for cache-hit replay
+           └── doc-extract service (cgr.dev/chainguard/python, uid=65532) — self-contained, no host dependency
+                          POST /doc-extract/extract  — PDF upload → extracted text (.txt/.md are read client-side, never reach this)
 ```
 
 Nginx handles TLS termination, HTTP→HTTPS redirect, and security headers (HSTS, CSP, X-Frame-Options). The container runs as a non-root user (uid=65532), read-only filesystem, with capabilities restricted to `NET_BIND_SERVICE` only.
@@ -109,23 +117,26 @@ Scripts are loaded in dependency order in `index.html`:
 |---|---|
 | `marked.min.js` | Markdown parser (vendored, third-party) |
 | `dompurify.min.js` | HTML sanitizer (vendored, v3.4.11) — applied at every AI content → innerHTML boundary |
-| `config.js` | `MODEL_NAME`, `VISION_MODEL_NAME`, `OLLAMA_API_URL`, `VOICEBOX_SPEAK_URL`, the 13 system prompt objects, and global mutable state (`conversationHistory[]`, `currentSystemPrompt`, `pendingImageDataUrl`, `pendingImageBase64`, `currentThinkingMode`, `currentTTSEngine`) |
-| `utils.js` | `formatTimestamp()`, `escapeHtml()`, `showToast()`, `splitThinkingContent()`, `calcResizeDims()`, `detectVisionContext()`, `stripMarkdownForSpeech()` — pure helpers; Node.js compat export enables Jest unit tests |
+| `katex.min.js` + `katex-auto-render.min.js` | Math typesetting (vendored, KaTeX v0.18.1) — `katex-auto-render` provides `renderMathInElement()`, wrapped by `renderMathIn()` in `chat.js` |
+| `config.js` | `MODEL_NAME`, `VISION_MODEL_NAME`, `OLLAMA_API_URL`, `VOICEBOX_SPEAK_URL`, `DOC_EXTRACT_URL`, the 13 system prompt objects, and global mutable state (`conversationHistory[]`, `currentSystemPrompt`, `pendingImageDataUrl`, `pendingImageBase64`, `currentThinkingMode`, `currentTTSEngine`, `pendingDocumentText`, `pendingDocumentName`, `pendingDocumentTruncated`) |
+| `utils.js` | `formatTimestamp()`, `escapeHtml()`, `showToast()`, `splitThinkingContent()`, `calcResizeDims()`, `detectVisionContext()`, `stripMarkdownForSpeech()`, `protectLatexDelimiters()` / `restoreLatexBackslashes()`, `truncateDocumentText()`, `buildDocumentMessageContent()` / `parseDocumentMessageContent()` (inverse pair — the latter recovers `{ documentName, question }` from a message's `content` for display) — pure helpers; Node.js compat export enables Jest unit tests |
 | `speech.js` | Web Speech API: continuous recognition with 3-second silence detection; `speakText()` routes to `speakTextViaBrowser()` (TTS with voice preference "Microsoft Catherine") or `speakTextViaVoicebox()` based on `currentTTSEngine`. The latter POSTs to `/voicebox/speak`, which blocks server-side for the full synthesis duration — the pending fetch itself doubles as the "generating" indicator (spinner icon on the speak button, or `#speakerBtn` for auto-TTS). A **fresh** generation is played by VoiceBox itself through the host's speakers (no signal back to the page, so no stop control); a **cached** repeat of the same text resolves near-instantly and is replayed by this page via `playVoiceboxAudio()` (a shared lazily-created `<audio>` element fetching `GET /voicebox/audio/{id}`), which *does* support `stopSpeaking()` |
-| `chat.js` | Message rendering, chat save/load, system prompt state management; `addUserMessage(text, imageDataUrl)` renders image thumbnails in user bubbles; `renderConversationHistory` handles both in-session images and SVG-icon `hasImage` placeholders from loaded files; `saveChat` strips `imageBase64`/`imageDataUrl` from the JSON export (preserves `hasImage` flag); `clearChat()` and `handleOpenFile()` both call `clearImagePreview()` to prevent stale image state; also defines `COPY_ICON`, `CHECK_ICON`, `SPEAK_ICON`, `STOP_ICON` as top-level SVG string constants |
-| `api.js` | `streamOllamaResponse(userMessage, messageDiv, imageBase64, imageDataUrl)` — builds request via `_buildRequestBody()` (pure, unit-tested); streaming fetch with multimodal image support; dual-model routing (`gemma4:e4b` text/thinking, `gemma3:4b` vision); `think: false` sent explicitly when thinking is OFF; dual-buffer thinking mode (`thinkingBuffer` + `fullResponse`); live collapsible `<details>` thinking block; `thinkingActive` flag guards all three `splitThinkingContent` call sites; final answer and thinking both pass through `DOMPurify.sanitize(marked.parse(...))` |
-| `main.js` | `DOMContentLoaded` wiring — all event listeners via `addEventListener`; `_trapFocus(panel, e)` defined at top level for Tab/Shift-Tab focus trapping in persona panel and profile dropdown; thinking mode on/off + depth persisted to `localStorage` and restored on load (mirrors `autoTTS`); `clearImagePreview()` defined at top level (called cross-module by `chat.js`) |
+| `chat.js` | Message rendering, chat save/load, system prompt state management; `addUserMessage(text, imageDataUrl)` renders image thumbnails in user bubbles; `renderConversationHistory` handles both in-session images and SVG-icon `hasImage` placeholders from loaded files; `saveChat` strips `imageBase64`/`imageDataUrl` from the JSON export (preserves `hasImage` flag); `clearChat()` and `handleOpenFile()` both call `clearImagePreview()`/`clearDocumentPreview()` to prevent stale attachment state; `renderMarkdownToHtml(text)` — the one function every AI/user content → `innerHTML` boundary goes through — combines `marked.parse()`, `protectLatexDelimiters()`/`restoreLatexBackslashes()`, and `DOMPurify.sanitize()`; `renderMathIn(element)` wraps KaTeX's `renderMathInElement()`, called after content is in the DOM; `_composeOutgoingMessage(rawMessage)` folds a pending document attachment (via `buildDocumentMessageContent()`) into the text actually sent to the model and stored in `conversationHistory`, while `addUserMessage`/`renderConversationHistory` separately call `parseDocumentMessageContent()` on that same stored content to display a compact filename chip (`_appendDocumentChip()`) + just the question — see [Document Text Extraction](#document-text-extraction-doc-extract); also defines `COPY_ICON`, `CHECK_ICON`, `SPEAK_ICON`, `STOP_ICON`, `SPINNER_ICON`, `DOCUMENT_ICON` as top-level SVG string constants |
+| `api.js` | `streamOllamaResponse(userMessage, messageDiv, imageBase64, imageDataUrl)` — builds request via `_buildRequestBody(imageBase64, history, systemPrompt, modelName, visionModelName, thinkingMode, numCtx)` (pure, unit-tested; `numCtx` defaults to 16384 for tests that omit it, but the real call site always passes `OLLAMA_NUM_CTX` explicitly so config.js stays the single tunable source); streaming fetch with multimodal image support; dual-model routing (`gemma4:e4b` text/thinking, `gemma3:4b` vision); `think: false` sent explicitly when thinking is OFF; `options.num_ctx` sent on every text/thinking request and every multi-turn-vision follow-up (never on the initial vision turn, which sends no `options` at all — matches a known-working Ollama sample); dual-buffer thinking mode (`thinkingBuffer` + `fullResponse`); live collapsible `<details>` thinking block; `thinkingActive` flag guards all three `splitThinkingContent` call sites; every render site uses `renderMarkdownToHtml()` (`chat.js`); `renderMathIn()` is called once per message at each *terminal* render point only (final answer, vision result, abort-with-partial-content) — not on every live-streamed token, to avoid re-typesetting the whole message on each chunk |
+| `main.js` | `DOMContentLoaded` wiring — all event listeners via `addEventListener`; `_trapFocus(panel, e)` defined at top level for Tab/Shift-Tab focus trapping in persona panel, profile dropdown, and attach menu; thinking mode on/off + depth persisted to `localStorage` and restored on load (mirrors `autoTTS`); `clearImagePreview()`/`clearDocumentPreview()` defined at top level (called cross-module by `chat.js`), both delegating to `_updateAttachMenuActiveState()` to toggle `#attachMenuBtn`'s active indicator; a single ChatGPT-style "+" trigger (`#attachMenuBtn`/`#attachMenuDropdown`, opened upward via `openAttachMenu()`/`closeAttachMenu()` — mirrors `openProfileDropdown()`/`closeProfileDropdown()`) replaces the old separate image/document toolbar buttons, offering "Add photos" and "Add files" menu items that each trigger their respective hidden `<input type="file">` then close the menu; the `documentInput` change handler validates extension/size, extracts text (`.txt`/`.md`/`.markdown` via `file.text()`; `.pdf` via a `POST` to `DOC_EXTRACT_URL`), applies `truncateDocumentText()`, and populates the preview strip |
 
 **Global state lives in `config.js`** (`conversationHistory`, `currentSystemPrompt`) and is shared across modules via the window scope — there is no module bundler.
 
 ## Security Invariants
 
-- All AI response content — both the final answer and thinking block content — passes through `DOMPurify.sanitize(marked.parse(...))` before being set as `innerHTML` — in `api.js` (streaming and final rebuild) and `chat.js` (`renderConversationHistory`).
-- User-supplied text uses `escapeHtml()` before insertion into `innerHTML` (`addUserMessage`, `renderConversationHistory`).
-- CSP has no `unsafe-inline` in either `script-src` or `style-src`. All event handlers are wired via `addEventListener` in `main.js`; all element visibility is controlled by CSS classes or `element.style.display` (programmatic — not subject to CSP).
+- All AI response content — both the final answer and thinking block content — passes through `renderMarkdownToHtml()` (`marked.parse()` → `DOMPurify.sanitize()`) before being set as `innerHTML` — in `api.js` (streaming and final rebuild) and `chat.js` (`renderConversationHistory`).
+- User-supplied message text is inserted via `.textContent` (`addUserMessage`, `renderConversationHistory`'s user branch) — never parsed as HTML or Markdown, so it needs no separate escaping. `escapeHtml()` is used elsewhere for values interpolated into an HTML *template string* before it becomes `innerHTML` — timestamps and the error-message path in `api.js`.
+- KaTeX (`renderMathIn()` in `chat.js`) always runs *after* `renderMarkdownToHtml()`, on the already-sanitized DOM — it never receives a raw HTML string, only already-inserted text nodes. `trust` is left at KaTeX's default of `false`, which disables `\href`, `\url`, `\includegraphics`, and the `\html*` macros — the only way a LaTeX source string could otherwise make KaTeX emit attacker-chosen HTML. Do not pass `trust: true` without re-reviewing this.
+- CSP: `script-src 'self'` has no `unsafe-inline`/`unsafe-eval`; all event handlers are wired via `addEventListener` in `main.js`. `style-src 'self' 'unsafe-inline'` is the one deliberate exception — KaTeX positions glyphs via computed inline `style` attributes on the spans it generates, with no CSS-class-only way to do that. The residual risk is bounded by the rest of the policy (`default-src 'self'`, `connect-src 'self'`, no external hosts in `img-src`), so an inline style still can't exfiltrate data or load an external resource. All other element visibility is controlled by CSS classes or `element.style.display` (unaffected either way — CSP only governs the `style` *attribute's contents*, not whether JS can set `element.style.display`).
 - The streaming fetch in `api.js` is wired to a module-level `streamAbortController`; call `stopStreaming()` to cancel mid-stream. If tokens were received before abort, the partial response is saved to `conversationHistory`; the user message is only rolled back when nothing was generated.
 - User input is capped at `MAX_INPUT_LENGTH` (4000) set programmatically on `#userInput` in `main.js`; Nginx enforces `client_max_body_size 1m` globally and `20m` on the `/ollama/api/chat` location to accommodate base64-encoded image payloads.
 - `/voicebox/speak` is gated by the same `auth_request /auth/verify` session check as every other application route, and rate-limited (`voicebox_speak` zone, 10 req/min, burst 3) — Voicebox itself has no authentication of its own, so this endpoint is the only thing standing between an unauthenticated request and the host's speakers.
+- A document attachment's extracted text is folded into the same `content` string as the user's typed question (`buildDocumentMessageContent()`) and flows through the exact same `.textContent`-insertion path as any other user message — there is no separate code path, and therefore no separate injection surface, for document-derived text vs. typed text. `/doc-extract/extract` is gated the same way as every other route (`auth_request`) and rate-limited (`doc_extract` zone, 10 req/min, burst 3).
 
 ## Key Configuration
 
@@ -134,6 +145,7 @@ All runtime configuration is in [src/aia/scripts/config.js](src/aia/scripts/conf
 - `MODEL_NAME` — text + thinking model (default: `gemma4:e4b`)
 - `VISION_MODEL_NAME` — vision-capable model for image requests (default: `gemma3:4b`); `gemma4:e4b` has no vision encoder in its GGUF so a separate model is required
 - `OLLAMA_API_URL` — proxied endpoint (default: `https://localhost/ollama/api/chat`)
+- `OLLAMA_NUM_CTX` — must match the Ollama server's actual configured context length (default: `16384`; set via `OLLAMA_CONTEXT_LENGTH` env var or `PARAMETER num_ctx` in the model's Modelfile). Passed as `_buildRequestBody`'s `numCtx` parameter (`api.js`) and sent as `options.num_ctx` on every text/thinking request and every multi-turn-vision follow-up — never omitted, so behavior doesn't silently depend on Ollama's own default. `MAX_DOCUMENT_TEXT_CHARS` (below) is sized against this value; raise them together, never one without the other.
 - `VOICEBOX_SPEAK_URL` — proxied endpoint for the VoiceBox TTS engine (default: `https://localhost/voicebox/speak`)
 - `MAX_HISTORY_MESSAGES` — maximum entries in `conversationHistory` before oldest pairs are trimmed (default: `40`, i.e. 20 exchanges). Tune this when switching to a model with a smaller or larger context window.
 - `SPEECH_RECOGNITION_LANG` — BCP 47 language tag for the Web Speech API (default: `'en-US'`). Change to `'en-AU'`, `'fr-FR'`, etc. to match your locale.
@@ -184,9 +196,53 @@ Voicebox itself has no authentication of its own (any `X-Voicebox-Client-Id` hea
 
 Configurable via env vars (all optional, sensible defaults baked in): `VOICEBOX_URL` (base URL, no path suffix), `VOICEBOX_CLIENT_ID`, `VOICEBOX_TIMEOUT_SECONDS` (default `60` — must cover the slowest expected synthesis) — see `.env.example`.
 
+## Math Rendering (KaTeX)
+
+Purely client-side — no backend or Nginx routing involved beyond the existing static-file serving. `katex.min.js` + `katex-auto-render.min.js` are vendored (see [Updating Vendored Libraries](#updating-vendored-libraries)); `renderMathIn(element)` in `chat.js` wraps `renderMathInElement()` with the app's delimiter set and is called once per message at each terminal render point in `api.js`/`chat.js` (never on every live-streamed token — see the `api.js` row in [JavaScript Module Architecture](#javascript-module-architecture)).
+
+**Delimiters supported:** `$$...$$` and `\[...\]` (display), `$...$` and `\(...\)` (inline), plus the AMS environments (`\begin{equation}`, `\begin{align}`, etc.). `$...$` is *not* one of `renderMathInElement`'s own defaults (it can clash with literal currency amounts) but is added explicitly since it's the form models emit most often — it's listed last in the delimiters array, which matters: `$` must come after `$$` or it would match `$$`'s first `$` instead.
+
+**The markdown-mangling bug (and why `protectLatexDelimiters` exists):** `marked.parse()` always runs before KaTeX ever sees the text, and CommonMark's backslash-escape rule strips a backslash immediately before ASCII punctuation — silently turning `\(` into `(`, `\[` into `[`, `\{` into `{`, and `\\` into `\`. That destroys the `\(...\)`/`\[...\]` delimiters and matrix row separators before KaTeX gets a chance to match them (`\frac`, `\sqrt`, `\alpha` etc. are unaffected — backslash followed by a *letter* isn't in CommonMark's escape set). `protectLatexDelimiters()`/`restoreLatexBackslashes()` in `utils.js` swap the backslash for a `U+E000` placeholder before `marked.parse()` and swap it back afterward; `renderMarkdownToHtml()` in `chat.js` is the one function that does this consistently — **always route new AI/user content → `innerHTML` sites through it, never call `marked.parse()`/`DOMPurify.sanitize()` directly.** Regression tests: `tests/js/latex-protect.test.js`.
+
+**Error handling:** a malformed expression (e.g. an unclosed brace) doesn't throw or blank out the message — `katex-auto-render.min.js` catches `ParseError` per-expression internally and falls back to rendering that one expression's raw source as plain text, leaving the rest of the message (and any other math in it) untouched.
+
+**CSS:** `.message-content .katex-display` gets `overflow-x: auto` in `style.css` — KaTeX's own CSS sets `white-space: nowrap` on display-mode blocks, so a wide equation (long matrix, long sum) needs its own horizontal scrollbar rather than overflowing the chat bubble, mirroring how `.message-content pre` already handles wide code blocks.
+
+## Document Text Extraction (doc-extract)
+
+Lets a user attach a `.txt`, `.md`, or `.pdf` file and ask questions about it. `.txt`/`.md`/`.markdown` are read entirely client-side (`file.text()`) and never reach a backend — only `.pdf` needs a real parser, handled by a new `doc-extract/` FastAPI service (`pypdf`).
+
+| File | Purpose |
+|---|---|
+| `doc-extract/main.py` | FastAPI app. `_extract_text()` reads every page via `pypdf.PdfReader`, joins non-blank pages with a blank line, and raises `ExtractionError` for encrypted or unparseable PDFs; the route layer additionally validates content-type/extension, upload size, and applies a generous server-side sanity cap on returned text length |
+| `doc-extract/Dockerfile` | Multi-stage Chainguard build (digest-pinned), mirrors `auth/Dockerfile` |
+| `doc-extract/requirements.txt` | Production dependencies (`fastapi`, `uvicorn`, `python-multipart`, `pypdf`) |
+| `doc-extract/requirements-test.txt` | Test dependencies (`pytest`, `httpx`, `flake8`, `black`) |
+| `doc-extract/tests/test_main.py` | 16 pytest tests covering text-joining/blank-page/encrypted/malformed-PDF cases (mostly `pypdf.PdfReader` mocked) plus two full end-to-end tests against the real `pypdf` with genuinely invalid bytes |
+
+Unlike `auth`/`voicebox-proxy`, `doc-extract` needs no `extra_hosts`/`host.docker.internal` — it's entirely self-contained, with no external app or host service to reach.
+
+**Why there's no separate "documents" field:** Ollama's chat API has a first-class `images` array for vision, but nothing equivalent for arbitrary text attachments. The extracted text has to be folded directly into the message's own `content` string. `buildDocumentMessageContent(name, text, truncated, question)` (`utils.js`) wraps it in a delimited block followed by the question (or a default prompt if none was typed):
+
+```
+--- Attached file: notes.pdf ---
+<extracted text>
+--- End of notes.pdf ---
+
+<question>
+```
+
+This is what's actually sent to Ollama *and* what's stored in `conversationHistory` — meaning it's automatically resent on every subsequent turn along with the rest of the history, which is what makes follow-up questions about an already-attached document work with no special-casing.
+
+**Display vs. storage — `parseDocumentMessageContent()`:** showing that full block in the chat bubble would be a poor experience for a 28,000-character document, so `addUserMessage()`/`renderConversationHistory()` call `parseDocumentMessageContent()` (the inverse of `buildDocumentMessageContent()`, matched via a regex with a backreference so the header/footer filename must agree) on the *same* stored `content` to recover `{ documentName, question }` for display — a filename chip (`_appendDocumentChip()`) plus just the question. Nothing is duplicated or stored differently; the split is purely a display-time parse of the one canonical string.
+
+**Truncation:** extracted text is capped at `MAX_DOCUMENT_TEXT_CHARS` (28,000 — `truncateDocumentText()` in `utils.js`, applied uniformly to all three file types in `main.js`) before being folded into the message, independent of doc-extract's own much larger 200,000-char server-side sanity cap (`_MAX_TEXT_CHARS` in `doc-extract/main.py`) — the frontend constant is the one that actually governs context-budget behavior; the backend one just bounds worst-case response size for a pathological PDF. The whole conversation history (including this text) is resent to Ollama on every turn, so an unbounded document would make every subsequent message more expensive, not just this one. 28,000 chars is ≈7K tokens at ~4 chars/token, sized against `OLLAMA_NUM_CTX` (16384 — see [Key Configuration](#key-configuration) and [Nginx Proxy](#nginx-proxy)) to leave roughly half the context free for the system prompt, conversation history, thinking budget, and the response itself; raising it without also raising `OLLAMA_NUM_CTX` risks Ollama silently truncating context (dropping the oldest tokens, which can be the system prompt or the start of the document itself) rather than erroring.
+
+**Validation:** extension-based on the frontend (`.txt`/`.md`/`.markdown`/`.pdf`) and both content-type *and* filename-extension based on `doc-extract` (some browsers send `application/octet-stream` for a `.pdf`). Encrypted and scanned/image-only PDFs are rejected — pypdf can open the former but VPAL treats it as a hard error rather than prompting for a password; the latter parses successfully but yields no extractable text, which `main.js` detects and reports as an error rather than silently attaching an empty document.
+
 ## Nginx Proxy
 
-The proxy in [deploy/nginx/nginx.conf](deploy/nginx/nginx.conf) uses **exact-match** or narrow prefix locations (`location = /ollama/api/chat`, `location = /voicebox/speak`, `location ^~ /voicebox/audio/`) that accept only the HTTP methods each route needs — all other methods and all other Ollama paths (e.g. `/api/tags`, `/api/delete`) are denied at the nginx layer. The `ollama_chat` rate limit zone allows 5 requests/min with a burst of 5; `voicebox_speak` (shared by both VoiceBox locations) allows 10 requests/min with a burst of 3 (`limit_req_zone`). `proxy_buffering off` and `proxy_read_timeout 300s` on the Ollama location support streaming responses; `/voicebox/speak` sets `proxy_read_timeout 90s` since it blocks on voicebox-proxy for the full synthesis duration (whose own httpx timeout is 60s).
+The proxy in [deploy/nginx/nginx.conf](deploy/nginx/nginx.conf) uses **exact-match** or narrow prefix locations (`location = /ollama/api/chat`, `location = /voicebox/speak`, `location ^~ /voicebox/audio/`, `location = /doc-extract/extract`) that accept only the HTTP methods each route needs — all other methods and all other Ollama paths (e.g. `/api/tags`, `/api/delete`) are denied at the nginx layer. The `ollama_chat` rate limit zone allows 5 requests/min with a burst of 5; `voicebox_speak` (shared by both VoiceBox locations) allows 10 requests/min with a burst of 3; `doc_extract` allows 10 requests/min with a burst of 3 (`limit_req_zone`). `proxy_buffering off` and `proxy_read_timeout 300s` on the Ollama location support streaming responses; `/voicebox/speak` sets `proxy_read_timeout 90s` since it blocks on voicebox-proxy for the full synthesis duration (whose own httpx timeout is 60s); `/doc-extract/extract` raises `client_max_body_size` to `15m` to match doc-extract's own upload limit.
 
 Security headers set on every response: `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy` (no `unsafe-inline`), `Referrer-Policy: no-referrer`, `Permissions-Policy`.
 
@@ -200,11 +256,13 @@ Self-signed certs are in `deploy/certs/` (generated via mkcert). Nginx is config
 
 ## Updating Vendored Libraries
 
-`marked.min.js` and `dompurify.min.js` are pinned with SHA-256 SRI hashes in `index.html`. When upgrading either file, recompute the hash and update the `integrity=` attribute:
+`marked.min.js`, `dompurify.min.js`, `katex.min.js`, `katex-auto-render.min.js`, and `css/katex.min.css` are all pinned with SHA-256 SRI hashes in `index.html`. When upgrading any of them, recompute the hash and update the corresponding `integrity=` attribute:
 
 ```powershell
-$bytes = [IO.File]::ReadAllBytes('src\aia\scripts\<filename>.js')
+$bytes = [IO.File]::ReadAllBytes('src\aia\scripts\<filename>.js')   # or src\aia\css\<filename>.css
 "sha256-" + [Convert]::ToBase64String([Security.Cryptography.SHA256]::Create().ComputeHash($bytes))
 ```
+
+KaTeX's font files (`src/aia/css/fonts/`) are referenced by `katex.min.css` via relative `url(fonts/...)` and are **not** individually SRI-pinned — SRI only covers the top-level `<script>`/`<link>` tag it's attached to, not resources that tag's content goes on to fetch. To re-vendor KaTeX from scratch (e.g. to bump its version): `npm pack katex@<version>` in a scratch directory, then copy `dist/katex.min.js` → `scripts/katex.min.js`, `dist/contrib/auto-render.min.js` → `scripts/katex-auto-render.min.js`, `dist/katex.min.css` → `css/katex.min.css`, and the entire `dist/fonts/` directory → `css/fonts/`.
 
 Paste the output into the matching `integrity="..."` attribute in `index.html`. The browser will refuse to load the script if the hash does not match.

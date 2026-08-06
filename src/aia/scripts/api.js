@@ -6,7 +6,10 @@ let streamAbortController = null;
 // Extracted so it can be unit-tested in Node.js without a DOM or global state.
 // Returns { requestBody, isVision, hasCurrentImage } — the flags are needed by
 // the caller to choose stream vs non-stream paths and the abort handler.
-function _buildRequestBody(imageBase64, history, systemPrompt, modelName, visionModelName, thinkingMode = 'off') {
+// numCtx defaults to 16384, mirroring OLLAMA_NUM_CTX in config.js — callers should
+// always pass that constant explicitly; the default only exists so tests that don't
+// care about num_ctx can omit it.
+function _buildRequestBody(imageBase64, history, systemPrompt, modelName, visionModelName, thinkingMode = 'off', numCtx = 16384) {
   const thinkingToken = "<|think|>  ";
 
   // isVision: true when this message or any history entry contains an image.
@@ -48,7 +51,7 @@ function _buildRequestBody(imageBase64, history, systemPrompt, modelName, vision
     // think: false explicitly suppresses native reasoning in gemma4:e4b — omitting
     // the field is not enough because the model reasons by default.
     requestBody.think = thinkingEnabled;
-    const options = { temperature: 1.0, top_p: 0.95, top_k: 64 };
+    const options = { temperature: 1.0, top_p: 0.95, top_k: 64, num_ctx: numCtx };
     if (thinkingEnabled) {
       // Low/Medium cap the thinking budget; High lets the model reason without limit.
       const budgetMap = { low: 1024, medium: 4096 };
@@ -58,7 +61,9 @@ function _buildRequestBody(imageBase64, history, systemPrompt, modelName, vision
     }
     requestBody.options = options;
   } else if (!hasCurrentImage) {
-    requestBody.options = { num_ctx: 8192 };
+    // num_ctx hint prevents Ollama from silently truncating a multi-turn vision
+    // conversation to its own (possibly smaller) default context length.
+    requestBody.options = { num_ctx: numCtx };
   }
 
   return { requestBody, isVision, hasCurrentImage };
@@ -119,7 +124,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
   }
 
   const { requestBody, isVision, hasCurrentImage } = _buildRequestBody(
-    imageBase64, conversationHistory, currentSystemPrompt, MODEL_NAME, VISION_MODEL_NAME, currentThinkingMode
+    imageBase64, conversationHistory, currentSystemPrompt, MODEL_NAME, VISION_MODEL_NAME, currentThinkingMode, OLLAMA_NUM_CTX
   );
   // Captured once so all three render sites (live loop, final, abort) agree on whether
   // thinking is active for this request. When false, splitThinkingContent is bypassed
@@ -165,8 +170,9 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
       // ---------------------------------------------------------------
       const data = await response.json();
       savedContent = (data.message && data.message.content) || '';
-      const answerHtml = DOMPurify.sanitize(marked.parse(savedContent));
+      const answerHtml = renderMarkdownToHtml(savedContent);
       contentDiv.innerHTML = answerHtml || '<p class="status-muted">No response received.</p>';
+      if (answerHtml) renderMathIn(contentDiv);
 
     } else {
       // ---------------------------------------------------------------
@@ -195,7 +201,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
             if (gotContent) fullResponse += json.message.content;
 
             if (!thinkingActive) {
-              contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(fullResponse));
+              contentDiv.innerHTML = renderMarkdownToHtml(fullResponse);
             } else {
               const { thinking: currentThinking, answer: currentAnswer } =
                 splitThinkingContent(thinkingBuffer, fullResponse);
@@ -205,7 +211,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
                 contentDiv.innerHTML =
                   '<details class="thinking-block" open>' +
                   '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
-                  '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
+                  '<div class="thinking-content">' + renderMarkdownToHtml(currentThinking) + '</div>' +
                   '</details>';
               } else {
                 if (!inAnswerPhase) {
@@ -213,12 +219,12 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
                   contentDiv.innerHTML = (currentThinking
                     ? '<details class="thinking-block" open>' +
                       '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
-                      '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(currentThinking)) + '</div>' +
+                      '<div class="thinking-content">' + renderMarkdownToHtml(currentThinking) + '</div>' +
                       '</details>'
                     : '') + '<div class="answer-content"></div>';
                   answerDiv = contentDiv.querySelector('.answer-content');
                 }
-                if (answerDiv) answerDiv.innerHTML = DOMPurify.sanitize(marked.parse(currentAnswer));
+                if (answerDiv) answerDiv.innerHTML = renderMarkdownToHtml(currentAnswer);
               }
             }
 
@@ -239,17 +245,18 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
         savedContent = fullResponse;
       }
 
-      const answerHtml = DOMPurify.sanitize(marked.parse(savedContent));
+      const answerHtml = renderMarkdownToHtml(savedContent);
       if (finalThinking) {
         contentDiv.innerHTML =
           '<details class="thinking-block">' +
           '<summary aria-label="Toggle AI reasoning">Thinking</summary>' +
-          '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(finalThinking)) + '</div>' +
+          '<div class="thinking-content">' + renderMarkdownToHtml(finalThinking) + '</div>' +
           '</details>' +
           '<div class="answer-content">' + answerHtml + '</div>';
       } else {
         contentDiv.innerHTML = answerHtml;
       }
+      renderMathIn(contentDiv);
     }
 
     // -------------------------------------------------------------------
@@ -298,18 +305,19 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
           timestamp: new Date().toISOString(),
           formattedTimestamp: formatTimestamp(new Date())
         });
-        const partialHtml = DOMPurify.sanitize(marked.parse(savedContent)) +
+        const partialHtml = renderMarkdownToHtml(savedContent) +
           '<p class="status-stopped">[response stopped]</p>';
         if (abortThinking) {
           contentDiv.innerHTML =
             '<details class="thinking-block">' +
             '<summary aria-label="Toggle AI reasoning">Thinking</summary>' +
-            '<div class="thinking-content">' + DOMPurify.sanitize(marked.parse(abortThinking)) + '</div>' +
+            '<div class="thinking-content">' + renderMarkdownToHtml(abortThinking) + '</div>' +
             '</details>' +
             '<div class="answer-content">' + partialHtml + '</div>';
         } else {
           contentDiv.innerHTML = partialHtml;
         }
+        renderMathIn(contentDiv);
         const copyBtn = messageDiv.querySelector('.copy-btn');
         if (copyBtn) copyBtn.dataset.content = savedContent;
         const speakBtn = messageDiv.querySelector('.speak-btn');

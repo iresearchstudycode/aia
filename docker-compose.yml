@@ -78,16 +78,56 @@ services:
       retries: 3
       start_period: 15s
 
+  doc-extract:
+    build:
+      context: ./doc-extract
+      dockerfile: Dockerfile
+    container_name: vpal-doc-extract
+    restart: unless-stopped
+    env_file: .env
+
+    # Security: non-root (uid 65532, Chainguard default), read-only root, no capabilities
+    read_only: true
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          # Higher than auth/voicebox-proxy's 128M — parsing a PDF up to the
+          # 15 MB upload limit needs more headroom than simple JSON/HTTP handling.
+          memory: 256M
+          pids: 30
+
+    # Port exposed only within the Docker network — never published to the host
+    expose:
+      - "8003"
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   web-server:
     image: cgr.dev/chainguard/nginx
     container_name: vpal-nginx
     restart: unless-stopped
 
-    # Nginx starts only after the auth and voicebox-proxy services are healthy
+    # Nginx starts only after the auth, voicebox-proxy, and doc-extract services are healthy
     depends_on:
       auth:
         condition: service_healthy
       voicebox-proxy:
+        condition: service_healthy
+      doc-extract:
         condition: service_healthy
 
     healthcheck:
