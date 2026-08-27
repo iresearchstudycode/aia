@@ -76,6 +76,19 @@ CI runs five jobs automatically on every push and PR to `master` (`.github/workf
 - `frontend-lint` — ESLint (`src/aia/scripts/`) + HTMLHint (`src/aia/index.html`) + Jest (`tests/js/`)
 - `nginx-config-check` — generates dummy TLS certs, mounts `nginx.conf` into `nginx:1.27-alpine`, runs `nginx -t`
 
+## Branching & Release Workflow
+
+Two long-lived branches: **`dev`** (integration) and **`master`** (released — the default branch; CI's `push`/`pull_request` triggers fire only here, and `auth-lint-test`, `frontend-lint`, and `nginx-config-check` are required status checks).
+
+- **All PRs target `dev`** — feature work and Dependabot version updates alike (`.github/dependabot.yml` sets `target-branch: dev`). `master` then only ever moves through a release PR, so `dev` stays strictly ahead of it.
+- **A release is one PR `dev` → `master`, merged with "Create a merge commit"** — never *Squash* or *Rebase*. Those rewrite the commits, orphaning `dev`'s history so that `dev` has to be `git reset --hard origin/master`'d after every release (this is what happened with [#17]). A merge commit leaves `dev`'s commits reachable from `master` and lets the next step be a fast-forward.
+- **Right after merging, fast-forward `dev` up to `master`** so the two never drift:
+  ```bash
+  git checkout dev && git fetch origin && git merge --ff-only origin/master && git push origin dev
+  ```
+  This pulls in only the release merge commit — no force-push, because `dev` was already its ancestor. If `--ff-only` is rejected, a Dependabot *security* PR (which ignores `target-branch` and lands on `master` directly) got in; drop `--ff-only` to make an ordinary merge commit on `dev` and carry on.
+- Bump the `VERSION` file (semver) and add the `- [x]` line(s) to `TODO.md` in the same PR that ships the change.
+
 ## Architecture
 
 ```

@@ -160,6 +160,8 @@
 - [x] Fixed a stale code comment on `VISION_MODEL_NAME` in `config.js` — still read "same model handles text and vision", a leftover from the reverted `gemma4:26b` single-model experiment (`a3cd74f`, reverted in `c017c28`); `MODEL_NAME` (`gemma4:e4b`) and `VISION_MODEL_NAME` (`gemma3:4b`) are distinct models again because `gemma4:e4b` ships no vision encoder in its GGUF
 - [x] Security: bumped `js-yaml` 3.15.0 → 3.15.2 to clear high-severity Dependabot alert #17 (GHSA / CVE-2026-59870 — quadratic CPU consumption in `!!omap` resolution); transitive dev-only dependency via `jest` → `babel-plugin-istanbul` → `@istanbuljs/load-nyc-config`, used only to read coverage config, never untrusted YAML; lockfile-only in-range patch bump (`^3.13.1`), `npm audit` now clean, Jest suite still 101/101
 - [x] Version bumped to 1.15.1
+- [x] Branching & release workflow documented + Dependabot retargeted — `.github/dependabot.yml` now sets `target-branch: dev` on both ecosystems so version-update PRs land on `dev`, keeping `master` moving only through release PRs. New "Branching & Release Workflow" section in `CLAUDE.md` codifies: all PRs target `dev`; a release is a single `dev` → `master` PR merged as a **merge commit** (never squash/rebase — squash orphaned `dev`'s history in #17 and forced a `git reset --hard`); fast-forward `dev` back up to `master` immediately after each release. Fixes the recurring post-release `dev`/`master` divergence.
+- [x] Version bumped to 1.15.2
 
 ## Known Limitations (Accepted Trade-offs)
 
