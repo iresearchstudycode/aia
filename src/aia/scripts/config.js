@@ -1,6 +1,6 @@
 // config.js - Configuration constants and system prompts
 const MODEL_NAME = 'gemma4:e4b';        // text + thinking mode
-const VISION_MODEL_NAME = 'gemma3:4b'; // vision-capable model (same model handles text and vision)
+const VISION_MODEL_NAME = 'gemma3:4b'; // vision-capable model (gemma4:e4b has no vision encoder in its GGUF)
 const OLLAMA_API_URL = 'https://localhost/ollama/api/chat';
 const VOICEBOX_SPEAK_URL = 'https://localhost/voicebox/speak';
 const DOC_EXTRACT_URL = 'https://localhost/doc-extract/extract';
