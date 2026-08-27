@@ -259,9 +259,31 @@ The proxy in [deploy/nginx/nginx.conf](deploy/nginx/nginx.conf) uses **exact-mat
 
 Security headers set on every response: `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy` (no `unsafe-inline`), `Referrer-Policy: no-referrer`, `Permissions-Policy`.
 
-If Ollama or Voicebox changes port, or the model changes, update `deploy/nginx/nginx.conf` and/or `config.js` respectively, then restart the container.
+### `nginx.conf` is generated from a template
 
-Changes to `nginx.conf` are syntax-validated in CI via the `nginx-config-check` job (`nginx -t` inside `nginx:1-alpine`). To validate locally without Docker, reload the running container: `docker exec vpal-nginx /usr/sbin/nginx -s reload`.
+`deploy/nginx/nginx.conf` is **not hand-edited** — it is generated from `deploy/nginx/nginx.conf.template` by `deploy/nginx/render-nginx-conf.sh` (POSIX `sh` + `envsubst` with an explicit variable allowlist, so nginx's own `$host` / `$binary_remote_addr` / etc. are left untouched). The committed `nginx.conf` is the local-default render; the 7 deployment values below become `${...}` placeholders in the template:
+
+| Env var | Default (reproduces the committed file) | Replaces |
+|---|---|---|
+| `AUTH_UPSTREAM` | `auth:9000` | `upstream auth_service` server |
+| `VOICEBOX_PROXY_UPSTREAM` | `voicebox-proxy:8002` | `upstream voicebox_service` server |
+| `DOC_EXTRACT_UPSTREAM` | `doc-extract:8003` | `upstream doc_extract_service` server |
+| `OLLAMA_UPSTREAM` | `host.docker.internal:11434` | `proxy_pass` host:port in `location = /ollama/api/chat` |
+| `SERVER_NAME` | `localhost` | `server_name` in both `server {}` blocks |
+| `SSL_CERT_PATH` | `/etc/nginx/ssl/localhost.pem` | `ssl_certificate` |
+| `SSL_KEY_PATH` | `/etc/nginx/ssl/localhost-key.pem` | `ssl_certificate_key` |
+
+**To change any of these, edit `nginx.conf.template`, then regenerate and commit both files:**
+
+```bash
+sh deploy/nginx/render-nginx-conf.sh > deploy/nginx/nginx.conf   # envsubst via `gettext`; or run it inside nginx:1.27-alpine
+```
+
+CI's `nginx-config-check` job enforces that the committed `nginx.conf` is exactly the default render (drift guard) and that a cloud-value render leaves no `${...}` placeholder unsubstituted, in addition to the existing `nginx -t`. `docker-compose` still mounts the committed `nginx.conf` (the local-default render) directly; full runtime/init-container templating for a non-local deployment is a deferred follow-up (see `docs/cloud-hardening-plan.md` Finding E).
+
+If Ollama or Voicebox changes port, or the model changes, update `deploy/nginx/nginx.conf.template` (then regenerate) and/or `config.js` respectively, then restart the container.
+
+Changes to `nginx.conf` are syntax-validated in CI via the `nginx-config-check` job (`nginx -t` inside `nginx:1.27-alpine`). To validate locally without Docker, reload the running container: `docker exec vpal-nginx /usr/sbin/nginx -s reload`.
 
 ## SSL Certificates
 

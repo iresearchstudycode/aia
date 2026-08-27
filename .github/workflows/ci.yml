@@ -121,6 +121,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Drift guard — committed nginx.conf matches the template render
+        run: |
+          sh deploy/nginx/render-nginx-conf.sh > /tmp/rendered.conf
+          diff /tmp/rendered.conf deploy/nginx/nginx.conf \
+            || { echo "::error::deploy/nginx/nginx.conf is stale — regenerate with deploy/nginx/render-nginx-conf.sh"; exit 1; }
+
+      - name: Cloud-render sanity — placeholders all substitute
+        run: |
+          AUTH_UPSTREAM=vpal-auth.internal:9000 \
+          VOICEBOX_PROXY_UPSTREAM=vpal-vb.internal:8002 \
+          DOC_EXTRACT_UPSTREAM=vpal-de.internal:8003 \
+          OLLAMA_UPSTREAM=ollama.internal:11434 \
+          SERVER_NAME=vpal.example.com \
+          SSL_CERT_PATH=/tls/fullchain.pem \
+          SSL_KEY_PATH=/tls/privkey.pem \
+          sh deploy/nginx/render-nginx-conf.sh > /tmp/cloud.conf
+          if grep -q '\${' /tmp/cloud.conf; then
+            echo "::error::unsubstituted \${...} placeholder left in the cloud render"; exit 1
+          fi
+          grep -q 'vpal.example.com' /tmp/cloud.conf || { echo "::error::SERVER_NAME not substituted"; exit 1; }
+          grep -q 'ollama.internal:11434' /tmp/cloud.conf || { echo "::error::OLLAMA_UPSTREAM not substituted"; exit 1; }
+
       - name: Generate dummy TLS certificates
         run: |
           mkdir -p deploy/certs
