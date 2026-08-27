@@ -317,6 +317,17 @@ body {
   padding: 0;
 }
 
+/* KaTeX display-mode math ($$...$$, \[...\]) — katex.min.css sets
+   white-space: nowrap on these, so a wide equation (long matrix, long sum)
+   needs its own horizontal scrollbar rather than overflowing the bubble,
+   mirroring how .message-content pre already handles wide code blocks. */
+.message-content .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+  margin: 16px 0;
+}
+
 .message-content blockquote {
   border-left: 3px solid #0ea5e9;
   padding-left: 16px;
@@ -847,11 +858,40 @@ body {
   outline-offset: 1px;
 }
 
-/* Attach button active state */
-#attachImageBtn.active {
+/* Attach menu button active state — set when an image or document is pending */
+#attachMenuBtn.active {
   color: #0ea5e9;
   background: rgba(14, 165, 233, 0.12);
   border-color: transparent;
+}
+
+/* Document preview strip — mirrors .image-preview-strip but as a text chip
+   rather than a thumbnail, since there's no useful visual preview for a
+   .txt/.md/.pdf file beyond its name. */
+.document-preview-strip {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(14, 165, 233, 0.1);
+  background: rgba(14, 165, 233, 0.03);
+}
+
+.document-preview-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: #0ea5e9;
+}
+
+.document-preview-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: #334155;
 }
 
 /* Image in user message bubble */
@@ -865,6 +905,35 @@ body {
   display: block;
   margin-bottom: 6px;
   border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* Document chip in user message bubble — shown above the folded-in question;
+   the extracted text itself is sent to the model but not re-shown here. */
+.user-message-document {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  font-size: 13px;
+  color: #334155;
+  max-width: 100%;
+}
+
+.user-message-document svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: #0ea5e9;
+}
+
+.user-message-document span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Placeholder when image not stored in saved file */
@@ -952,7 +1021,8 @@ body {
 #speakerBtn,
 #stopBtn,
 #openInput,
-#imageInput {
+#imageInput,
+#documentInput {
   display: none;
 }
 
@@ -1075,4 +1145,68 @@ body {
   border: none;
   border-top: 1px solid #e2e8f0;
   margin: 4px 0;
+}
+
+/* Attach menu ("+") — positioning wrapper for the toolbar trigger button */
+.attach-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Attach menu dropdown — mirrors .profile-dropdown's look, but anchored with
+   `bottom` instead of `top` since the trigger sits in the bottom input
+   toolbar and the popup must open upward to stay on-screen. */
+.attach-menu-dropdown {
+  display: none;
+  position: fixed;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
+  min-width: 180px;
+  overflow: hidden;
+  z-index: 200;
+}
+
+.attach-menu-dropdown.open {
+  display: block;
+}
+
+.attach-menu-dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: 14px;
+  color: #1e293b;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-weight: normal;
+  transform: none;
+  box-shadow: none;
+}
+
+.attach-menu-dropdown button svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+
+.attach-menu-dropdown button:hover {
+  background: #f0f9ff;
+  color: #0ea5e9;
+}
+
+.attach-menu-dropdown button:hover svg {
+  opacity: 1;
+}
+
+.attach-menu-dropdown button:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: -2px;
+  background: #f0f9ff;
 }

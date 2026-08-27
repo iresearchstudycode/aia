@@ -63,6 +63,34 @@ jobs:
         working-directory: voicebox-proxy
         run: pytest tests/ -v
 
+  doc-extract-lint-test:
+    name: Doc extract — format, lint & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: |
+            doc-extract/requirements.txt
+            doc-extract/requirements-test.txt
+
+      - name: Install dependencies
+        run: pip install -r doc-extract/requirements.txt -r doc-extract/requirements-test.txt
+
+      - name: Format (black --check)
+        run: black doc-extract/main.py doc-extract/tests/ --check --line-length=99
+
+      - name: Lint (flake8)
+        run: flake8 doc-extract/main.py doc-extract/tests/ --max-line-length=99
+
+      - name: Test (pytest)
+        working-directory: doc-extract
+        run: pytest tests/ -v
+
   frontend-lint:
     name: Frontend — ESLint
     runs-on: ubuntu-latest
@@ -106,6 +134,7 @@ jobs:
           docker run --rm \
             --add-host auth:127.0.0.1 \
             --add-host voicebox-proxy:127.0.0.1 \
+            --add-host doc-extract:127.0.0.1 \
             --add-host host.docker.internal:127.0.0.1 \
             -v "${{ github.workspace }}/deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
             -v "${{ github.workspace }}/deploy/certs/localhost.pem:/etc/nginx/ssl/localhost.pem:ro" \

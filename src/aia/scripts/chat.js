@@ -7,6 +7,53 @@ const CHECK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" 
 const SPEAK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
 const STOP_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>';
 const SPINNER_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 0 1 10 10"/></svg>';
+const DOCUMENT_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
+
+// Render $...$, $$...$$, \(...\), \[...\] and AMS environments (\begin{equation}
+// etc.) as typeset math via KaTeX, in place, within the given element. Called
+// after a message's markdown has already been parsed and DOMPurify-sanitized
+// into the DOM — it only ever walks already-inserted text nodes (skipping
+// <pre>/<code>, per auto-render's own default ignoredTags) and never touches
+// raw HTML strings.
+//
+// SECURITY: `trust` is intentionally left at KaTeX's default of `false`. That
+// disables \href, \url, \includegraphics, and the \html* macros — the only
+// mechanisms by which a LaTeX source string could otherwise make KaTeX emit
+// attacker-chosen HTML (e.g. an arbitrary href). Do not pass `trust: true` (or
+// a permissive trust function) here without re-reviewing that decision. A
+// malformed expression falls back to rendering its raw source as plain text
+// rather than throwing — see katex-auto-render.min.js's own per-expression
+// try/catch — so one bad expression can't blank out the rest of a message.
+function renderMathIn(element) {
+  if (typeof renderMathInElement !== 'function') return;
+  renderMathInElement(element, {
+    delimiters: [
+      { left: '$$', right: '$$', display: true },
+      { left: '\\(', right: '\\)', display: false },
+      { left: '\\begin{equation}', right: '\\end{equation}', display: true },
+      { left: '\\begin{align}', right: '\\end{align}', display: true },
+      { left: '\\begin{alignat}', right: '\\end{alignat}', display: true },
+      { left: '\\begin{gather}', right: '\\end{gather}', display: true },
+      { left: '\\begin{CD}', right: '\\end{CD}', display: true },
+      { left: '\\[', right: '\\]', display: true },
+      // Single-dollar inline math — not in KaTeX's own defaults (it can clash
+      // with literal currency amounts), but the most common form AI models
+      // emit. Must stay after '$$' — '$' would otherwise match its first '$'.
+      { left: '$', right: '$', display: false }
+    ],
+    throwOnError: false
+  });
+}
+
+// Markdown-parse + sanitize a message's raw text, with LaTeX delimiters
+// protected from CommonMark's backslash-escape rule (see protectLatexDelimiters
+// in utils.js) — the one function every AI/user content -> innerHTML boundary
+// in api.js and chat.js should go through, so the protect/restore step can
+// never be forgotten at a new call site.
+function renderMarkdownToHtml(text) {
+  const html = marked.parse(protectLatexDelimiters(text));
+  return DOMPurify.sanitize(restoreLatexBackslashes(html));
+}
 
 function createSpeakButton(content) {
   // VoiceBox does not depend on the browser's Web Speech API, so the button
@@ -74,6 +121,19 @@ function updateSystemPromptState() {
 }
 
 // Add a user message bubble. imageDataUrl is a data: URL from FileReader for display.
+// Appends the filename chip shown above a folded-in document question — the
+// full extracted text sent to the model isn't re-displayed here, only the
+// name of what was attached. Shared by addUserMessage and renderConversationHistory.
+function _appendDocumentChip(contentDiv, documentName) {
+  const chip = document.createElement('div');
+  chip.className = 'user-message-document';
+  chip.innerHTML = DOCUMENT_ICON;
+  const nameSpan = document.createElement('span');
+  nameSpan.textContent = documentName;
+  chip.appendChild(nameSpan);
+  contentDiv.appendChild(chip);
+}
+
 function addUserMessage(text, imageDataUrl = null) {
   const messagesDiv = document.getElementById('chatMessages');
   const timestamp = formatTimestamp(new Date());
@@ -95,9 +155,12 @@ function addUserMessage(text, imageDataUrl = null) {
     contentDiv.appendChild(img);
   }
   if (text) {
+    const parsed = parseDocumentMessageContent(text);
+    if (parsed.hasDocument) _appendDocumentChip(contentDiv, parsed.documentName);
     const p = document.createElement('p');
-    p.textContent = text;
+    p.textContent = parsed.hasDocument ? parsed.question : text;
     contentDiv.appendChild(p);
+    renderMathIn(contentDiv);
   }
 
   const tsDiv = document.createElement('div');
@@ -153,6 +216,7 @@ function clearChat() {
     conversationHistory = [];
     document.getElementById('chatMessages').innerHTML = '';
     clearImagePreview();
+    clearDocumentPreview();
     updateSystemPromptState(); // Re-enable system prompt selector
   }
 }
@@ -196,17 +260,30 @@ function updateSystemPrompt() {
 }
 
 // Send message and continue listening (for voice mode)
+// Folds a pending document attachment into the outgoing message text — there
+// is no separate "documents" field in Ollama's chat API the way there is
+// `images` for vision, so the extracted text has to be part of the message
+// itself. Returns rawMessage unchanged when no document is pending.
+function _composeOutgoingMessage(rawMessage) {
+  if (!pendingDocumentText) return rawMessage;
+  return buildDocumentMessageContent(
+    pendingDocumentName, pendingDocumentText, pendingDocumentTruncated, rawMessage
+  );
+}
+
 async function sendMessageAndContinueListening() {
   const input = document.getElementById('userInput');
-  const message = input.value.trim();
-  const hasContent = message || pendingImageBase64;
+  const rawMessage = input.value.trim();
+  const hasContent = rawMessage || pendingImageBase64 || pendingDocumentText;
 
   if (hasContent) {
     accumulatedTranscript = '';
 
     const imageDataUrl = pendingImageDataUrl;
     const imageBase64 = pendingImageBase64;
+    const message = _composeOutgoingMessage(rawMessage);
     clearImagePreview();
+    clearDocumentPreview();
 
     input.value = '';
     input.dispatchEvent(new Event('input'));
@@ -221,8 +298,8 @@ async function sendMessageAndContinueListening() {
 // Send message function
 async function sendMessage() {
   const input = document.getElementById('userInput');
-  const message = input.value.trim();
-  const hasContent = message || pendingImageBase64;
+  const rawMessage = input.value.trim();
+  const hasContent = rawMessage || pendingImageBase64 || pendingDocumentText;
 
   if (hasContent) {
     // If triggered manually (not by voice), stop recording if active
@@ -241,7 +318,9 @@ async function sendMessage() {
 
     const imageDataUrl = pendingImageDataUrl;
     const imageBase64 = pendingImageBase64;
+    const message = _composeOutgoingMessage(rawMessage);
     clearImagePreview();
+    clearDocumentPreview();
 
     addUserMessage(message, imageDataUrl);
     input.value = '';
@@ -423,9 +502,12 @@ function renderConversationHistory() {
         contentDiv.appendChild(p);
       }
       if (msg.content) {
+        const parsed = parseDocumentMessageContent(msg.content);
+        if (parsed.hasDocument) _appendDocumentChip(contentDiv, parsed.documentName);
         const p = document.createElement('p');
-        p.textContent = msg.content;
+        p.textContent = parsed.hasDocument ? parsed.question : msg.content;
         contentDiv.appendChild(p);
+        renderMathIn(contentDiv);
       }
 
       const tsDiv = document.createElement('div');
@@ -438,9 +520,10 @@ function renderConversationHistory() {
     } else {
       messageDiv.innerHTML = `
         <div class="message-label">${label}</div>
-        <div class="message-content">${DOMPurify.sanitize(marked.parse(msg.content))}</div>
+        <div class="message-content">${renderMarkdownToHtml(msg.content)}</div>
         <div class="message-timestamp">${escapeHtml(formatted)}</div>
       `;
+      renderMathIn(messageDiv.querySelector('.message-content'));
       const actionsDiv = document.createElement('div');
       actionsDiv.className = 'message-actions';
       actionsDiv.appendChild(createCopyButton(msg.content));
@@ -503,6 +586,7 @@ function handleOpenFile(event) {
 
       renderConversationHistory();
       clearImagePreview();
+      clearDocumentPreview();
       // updateSystemPromptState() is now called inside renderConversationHistory()
     } catch (err) {
       alert('Failed to open chat: ' + err.message);

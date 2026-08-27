@@ -145,24 +145,29 @@ describe('_buildRequestBody — think field', () => {
 // ─── Options ─────────────────────────────────────────────────────────────────
 
 describe('_buildRequestBody — options', () => {
-  test('text-only, thinking off: sampling options, no thinking_budget', () => {
+  test('text-only, thinking off: sampling options + default num_ctx, no thinking_budget', () => {
     const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'off');
-    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64 });
+    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64, num_ctx: 16384 });
   });
 
   test('text-only, thinking low: sampling options + thinking_budget 1024', () => {
     const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'low');
-    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64, thinking_budget: 1024 });
+    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64, num_ctx: 16384, thinking_budget: 1024 });
   });
 
   test('text-only, thinking medium: sampling options + thinking_budget 4096', () => {
     const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'medium');
-    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64, thinking_budget: 4096 });
+    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64, num_ctx: 16384, thinking_budget: 4096 });
   });
 
   test('text-only, thinking high: sampling options, no budget cap', () => {
     const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'high');
-    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64 });
+    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64, num_ctx: 16384 });
+  });
+
+  test('text-only: honors a custom numCtx when the caller passes one', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'off', 32768);
+    expect(requestBody.options.num_ctx).toBe(32768);
   });
 
   test('initial vision: no options (matches Ollama working sample)', () => {
@@ -173,7 +178,13 @@ describe('_buildRequestBody — options', () => {
   test('follow-up vision: num_ctx hint to prevent context truncation', () => {
     const history = [{ role: 'user', imageBase64: 'img64' }];
     const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'off');
-    expect(requestBody.options).toEqual({ num_ctx: 8192 });
+    expect(requestBody.options).toEqual({ num_ctx: 16384 });
+  });
+
+  test('follow-up vision: honors a custom numCtx when the caller passes one', () => {
+    const history = [{ role: 'user', imageBase64: 'img64' }];
+    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'off', 32768);
+    expect(requestBody.options).toEqual({ num_ctx: 32768 });
   });
 
   test('vision ignores thinking mode: no sampling options or budget on initial vision', () => {

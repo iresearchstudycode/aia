@@ -3,7 +3,7 @@ A secure, voice-enabled AI chat interface that runs entirely on your local machi
 
 ## 📋 Overview
 
-This web application provides a ChatGPT-style chat interface (dark navy header, sky-blue user bubbles, clean card AI responses) with voice input/output, image attachment for multimodal vision queries, and a live collapsible thinking block for reasoning-capable models. It connects to locally-hosted AI models through Ollama's REST API with no external dependencies — protected by TOTP authentication for up to five users.
+This web application provides a ChatGPT-style chat interface (dark navy header, sky-blue user bubbles, clean card AI responses) with voice input/output, a single "+" attach menu for image attachment (multimodal vision queries) and document attachment (.txt/.md/.pdf Q&A), LaTeX math rendering via KaTeX, and a live collapsible thinking block for reasoning-capable models. It connects to locally-hosted AI models through Ollama's REST API with no external dependencies — protected by TOTP authentication for up to five users.
 
 ## 🏗️ Architecture
 
@@ -94,6 +94,40 @@ POST /voicebox/speak, GET /voicebox/audio/{id}
 
 This lets AI responses be spoken through VoiceBox as an alternative to the browser's own Web Speech API — with two extras the browser engine doesn't have: repeat text is served from `vpal-voicebox-proxy`'s in-memory cache instead of being re-synthesized (and re-spoken) from scratch, and the toolbar shows a real "generating" spinner for the full synthesis duration on a cache miss. It's entirely optional — the app works fully without Voicebox running; selecting the VoiceBox engine while it's unreachable just shows a toast error.
 
+### Document Attachment Path
+
+A third route, gated the same way, extracts text from an attached PDF so the model can answer questions about it:
+
+```text
+                 ┌─────────┐
+                 │ Browser │
+                 └─────────┘
+                      │
+            HTTPS (127.0.0.1:443)
+          POST /doc-extract/extract
+                      ▼
+┌────────────────────────────────────────────┐
+│                Host Machine                │
+│   ┌───────────────────────────────────┐    │
+│   │ Docker: vpal-nginx                │    │
+│   │ (same instance as the main flow)  │    │
+│   │ auth_request /auth/verify — same  │    │
+│   │ session gate as every other route │    │
+│   └───────────────────────────────────┘    │
+│                     │                      │
+│         HTTP/REST (Docker network)         │
+│                     ▼                      │
+│  ┌──────────────────────────────────────┐  │
+│  │ Docker: vpal-doc-extract             │  │
+│  │ cgr.dev/chainguard/python, uid=65532 │  │
+│  │ FastAPI + pypdf                      │  │
+│  │ self-contained — no host dependency  │  │
+│  └──────────────────────────────────────┘  │
+└────────────────────────────────────────────┘
+```
+
+Unlike the VoiceBox path, this one is entirely self-contained — no local desktop app, no `host.docker.internal`. `.txt` and `.md` files never reach this service at all: they're read directly in the browser (`file.text()`), since only PDF needs a real parser. The extracted text is folded into the chat message itself (there's no separate "documents" field the way there is `images` for vision), so it's automatically included in every subsequent turn via normal conversation history — no special handling needed for follow-up questions.
+
 ### Technology Stack
 
 | Layer | Technology |
@@ -103,9 +137,11 @@ This lets AI responses be spoken through VoiceBox as an alternative to the brows
 | AI integration | Fetch API → Nginx reverse proxy → Ollama REST API |
 | Markdown | Marked.js (vendored, SRI-pinned) |
 | HTML sanitisation | DOMPurify v3.4.11 (vendored, SRI-pinned) |
+| Math typesetting | KaTeX v0.18.1 + auto-render extension (vendored, SRI-pinned) |
 | Web server | Nginx (`cgr.dev/chainguard/nginx`, distroless, uid=65532) |
 | Auth service | FastAPI + pyotp + itsdangerous (`cgr.dev/chainguard/python:latest`, uid=65532) |
 | VoiceBox proxy (optional) | FastAPI + httpx (`cgr.dev/chainguard/python:latest`, uid=65532) — bridges to a local Voicebox app's REST API; in-memory generation cache |
+| Document text extraction | FastAPI + pypdf (`cgr.dev/chainguard/python:latest`, uid=65532) — self-contained PDF text extraction; `.txt`/`.md` handled entirely client-side |
 | Session | HMAC-signed cookie (`itsdangerous.TimestampSigner`), 8-hour TTL |
 | TOTP | RFC 6238 via `pyotp`, compatible with Google Authenticator |
 | Container | Docker, read-only filesystems, minimal capability sets |
@@ -232,11 +268,22 @@ vpal/
 │   └── tests/
 │       ├── conftest.py             # sys.path setup
 │       └── test_main.py            # 31 pytest tests
+├── doc-extract/                    # PDF text extraction service (self-contained)
+│   ├── main.py                     # FastAPI app + pypdf extraction
+│   ├── requirements.txt
+│   ├── requirements-test.txt       # pytest, flake8, black, httpx
+│   ├── Dockerfile                  # Multi-stage Chainguard build (digest-pinned)
+│   ├── pytest.ini
+│   └── tests/
+│       ├── conftest.py             # sys.path setup
+│       └── test_main.py            # 16 pytest tests
 ├── src/
 │   └── aia/                        # Web application source
 │       ├── index.html              # Main HTML structure
 │       ├── css/
-│       │   └── style.css           # Application styling
+│       │   ├── style.css           # Application styling
+│       │   ├── katex.min.css       # KaTeX math styling (vendored)
+│       │   └── fonts/              # KaTeX math fonts (vendored)
 │       ├── scripts/
 │       │   ├── config.js           # Configuration & system prompts
 │       │   ├── utils.js            # Utility functions
@@ -245,7 +292,9 @@ vpal/
 │       │   ├── api.js              # Ollama API client
 │       │   ├── main.js             # Application initialisation
 │       │   ├── marked.min.js       # Markdown parser (vendored)
-│       │   └── dompurify.min.js    # HTML sanitiser (vendored)
+│       │   ├── dompurify.min.js    # HTML sanitiser (vendored)
+│       │   ├── katex.min.js        # Math typesetting (vendored)
+│       │   └── katex-auto-render.min.js  # KaTeX delimiter scanner (vendored)
 │       └── images/
 │           └── icon.ico
 ├── deploy/
@@ -268,7 +317,7 @@ vpal/
 - **Text + thinking model**: `MODEL_NAME` in `config.js` (default: `gemma4:e4b`)
 - **Vision model**: `VISION_MODEL_NAME` in `config.js` (default: `gemma3:4b`) — used automatically when an image is attached; `gemma4:e4b` has no vision encoder
 - **API URL**: `OLLAMA_API_URL` in `config.js` (default: `https://localhost/ollama/api/chat`)
-- **Context length**: `MAX_HISTORY_MESSAGES` in `config.js` (default: `40`, i.e. 20 exchanges)
+- **Context length**: `OLLAMA_NUM_CTX` in `config.js` (default: `16384`) — must match the Ollama server's actual configured context length (`OLLAMA_CONTEXT_LENGTH` env var, or `PARAMETER num_ctx` in the model's Modelfile); sent explicitly as `num_ctx` on every text/thinking and multi-turn-vision request so behavior never silently depends on Ollama's own default. `MAX_HISTORY_MESSAGES` in `config.js` (default: `40`, i.e. 20 exchanges) additionally bounds how many past messages are kept regardless of their token cost
 
 ### Voice settings
 
@@ -297,6 +346,17 @@ All optional and only needed if you run the Voicebox desktop app locally and wan
 | `VOICEBOX_CLIENT_ID` | `vpal` | Client identifier sent to Voicebox (not a secret — Voicebox has no auth of its own) |
 | `VOICEBOX_TIMEOUT_SECONDS` | `60` | Timeout for both starting and awaiting a voice generation — must cover your slowest expected synthesis |
 
+### Document upload settings (optional)
+
+Self-contained — no external app to configure, and these only bound worst-case behavior server-side (see [Document Attachment Path](#document-attachment-path) for the frontend setting that actually governs how much extracted text gets used):
+
+| Variable | Default | Description |
+|---|---|---|
+| `MAX_UPLOAD_BYTES` | `15728640` (15 MB) | Largest PDF `doc-extract` will accept |
+| `MAX_TEXT_CHARS` | `200000` | Sanity cap on extracted text length returned to the browser — independent of, and much larger than, the frontend's own truncation budget |
+
+- **Client-side** (`src/aia/scripts/config.js`): `MAX_DOCUMENT_UPLOAD_BYTES` (default `15728640`, matches `MAX_UPLOAD_BYTES` above) and `MAX_DOCUMENT_TEXT_CHARS` (default `28000`, ≈7K tokens at ~4 chars/token) — the character budget actually folded into a chat message. Sized against `OLLAMA_NUM_CTX` (16384 tokens, see [Ollama settings](#ollama-settings)): a document at this budget leaves roughly half the context free for the system prompt, conversation history, thinking budget, and the response itself. Raising this without also raising `OLLAMA_NUM_CTX` risks Ollama silently truncating context on longer or thinking-enabled conversations rather than erroring.
+
 ## 🛡️ Security
 
 ### Implemented measures
@@ -306,14 +366,14 @@ All optional and only needed if you run the Voicebox desktop app locally and wan
 | **Authentication** | TOTP (RFC 6238) via Google Authenticator; signed session cookie (HMAC-SHA1, 8-hour TTL); brute-force lockout after 5 failed attempts per username (5-minute window) |
 | **Session** | `HttpOnly`, `Secure`, `SameSite=Strict` cookie; Nginx `auth_request` gates every route before serving content |
 | **Transport** | HTTPS only (TLS 1.2/1.3), HSTS, HTTP→HTTPS redirect |
-| **Browser** | CSP: `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'`; `X-Frame-Options: DENY`; `X-Content-Type-Options: nosniff`; `Referrer-Policy: no-referrer`; `Permissions-Policy` |
-| **XSS prevention** | All AI response content (final answer and thinking block content) sanitised with DOMPurify (SRI-pinned) before rendering; user input escaped with `escapeHtml` before DOM insertion |
-| **Proxy** | Ollama API locked to exact-match `POST /ollama/api/chat` only — all other paths and methods denied; rate-limited to 5 req/min with burst of 5. VoiceBox proxy locked to `POST /voicebox/speak` and `GET /voicebox/audio/{id}` only; also auth-gated (Voicebox itself has no authentication of its own); both rate-limited to 10 req/min with burst of 3 |
-| **Containers** | All three containers: read-only filesystem, non-root user, `cap_drop: ALL`, `no-new-privileges`; Nginx adds `NET_BIND_SERVICE` only |
+| **Browser** | CSP: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'self'`; `X-Frame-Options: DENY`; `X-Content-Type-Options: nosniff`; `Referrer-Policy: no-referrer`; `Permissions-Policy`. `script-src` has no inline/eval exception anywhere; `style-src`'s `'unsafe-inline'` exists solely for KaTeX, which positions glyphs via computed inline `style` attributes with no CSS-class-only alternative — bounded by the rest of the policy (no external hosts allowed anywhere), so it can't be used to exfiltrate data |
+| **XSS prevention** | All AI/user response content sanitised with DOMPurify (SRI-pinned) before rendering; your own message text — including a folded-in document attachment — is inserted via `.textContent`, never parsed as HTML; KaTeX only ever runs on the already-sanitized DOM with `trust: false` (its default), which disables `\href`/`\url`/`\includegraphics`/`\html*` — the only way a LaTeX source string could otherwise make it emit attacker-chosen HTML |
+| **Proxy** | Ollama API locked to exact-match `POST /ollama/api/chat` only — all other paths and methods denied; rate-limited to 5 req/min with burst of 5. VoiceBox proxy locked to `POST /voicebox/speak` and `GET /voicebox/audio/{id}` only; also auth-gated (Voicebox itself has no authentication of its own); both rate-limited to 10 req/min with burst of 3. Doc-extract proxy locked to `POST /doc-extract/extract` only; auth-gated; rate-limited to 10 req/min with burst of 3 |
+| **Containers** | All four containers: read-only filesystem, non-root user, `cap_drop: ALL`, `no-new-privileges`; Nginx adds `NET_BIND_SERVICE` only |
 | **Network** | Loopback-only binding (`127.0.0.1`); auth service port not published to the host (Docker-internal only) |
 | **Secrets** | All credentials in `.env` (gitignored); no hardcoded keys, tokens, or passwords anywhere in source |
-| **Input** | User messages capped at 4,000 characters; Nginx enforces 1 MB request body limit; uploaded chat files capped at 5 MB |
-| **Supply chain** | `marked.min.js` and `dompurify.min.js` pinned with SHA-256 SRI hashes |
+| **Input** | User messages capped at 4,000 characters; Nginx enforces 1 MB request body limit globally, `20 MB` on `/ollama/api/chat`, and `15 MB` on `/doc-extract/extract`; uploaded chat files capped at 5 MB; extracted document text capped at 28,000 characters before being folded into a chat message |
+| **Supply chain** | `marked.min.js`, `dompurify.min.js`, `katex.min.js`, `katex-auto-render.min.js`, and `katex.min.css` all pinned with SHA-256 SRI hashes |
 
 ### Known limitations
 
@@ -327,7 +387,9 @@ All optional and only needed if you run the Voicebox desktop app locally and wan
 - **Persona Selector**: Chevron button next to the heading opens a panel to switch AI personas; selected persona shown as a subtitle; locked during an active conversation; Tab focus trap and Escape to close
 - **Chat Input**: Auto-growing textarea (up to 6 lines); Enter sends, Shift+Enter inserts a newline; circular sky-blue send button activates only when text or an image is pending
 - **Voice Input/Output**: Continuous speech recognition with 3-second silence detection; text-to-speech synthesis with per-message speak buttons; toolbar: mic → auto-speak → TTS engine (Browser / VoiceBox) → stop speaking
-- **Image Attachment**: Paperclip toolbar button opens a file picker; images are resized to ≤ 1024 px before being sent; vision requests are automatically routed to `gemma3:4b`; in-session thumbnails shown in user bubbles; saved chats show an SVG camera icon placeholder where the image was
+- **Attach Menu**: A single ChatGPT-style "+" button in the toolbar opens a popup with "Add photos" and "Add files" options, consolidating what were previously two separate toolbar buttons; Tab focus trap and Escape to close, matching the profile dropdown and persona panel
+- **Image Attachment**: "Add photos" in the "+" attach menu opens a file picker; images are resized to ≤ 1024 px before being sent; vision requests are automatically routed to `gemma3:4b`; in-session thumbnails shown in user bubbles; saved chats show an SVG camera icon placeholder where the image was
+- **Document Attachment**: "Add files" in the "+" attach menu attaches a `.txt`, `.md`, or `.pdf` file to ask questions about; `.txt`/`.md` are read directly in the browser, `.pdf` is extracted server-side (see [Document Attachment Path](#document-attachment-path)); the chat bubble shows a compact filename chip and your question, not the full extracted text; follow-up questions work automatically since the extracted text is part of normal conversation history
 - **Thinking Mode**: Lightbulb toolbar button toggles reasoning ON/OFF; depth selector (Low / Medium / High) appears inline when enabled; live reasoning displayed in a collapsible `<details>` block; collapses when the final answer arrives; thinking content excluded from history, copy, and speech; mode and depth saved to `localStorage` and restored on reload
 - **Dual-model Routing**: Text requests use `gemma4:e4b` (streaming, thinking-capable); image requests and vision follow-ups use `gemma3:4b`; `think: false` sent explicitly to suppress native reasoning when thinking is OFF
 - **Real-time Streaming**: Live token-by-token response display with a stop button
@@ -337,6 +399,7 @@ All optional and only needed if you run the Voicebox desktop app locally and wan
 - **Character Counter**: Remaining count shown as you approach the 4,000-character limit, with warning and danger colour states
 - **Auto-Speak**: Toolbar icon toggles automatic TTS after each AI response; preference saved to `localStorage`
 - **Markdown Support**: Rich text formatting in AI responses and thinking blocks via Marked.js + DOMPurify
+- **Math Rendering**: LaTeX expressions typeset via KaTeX — inline (`$...$`, `\(...\)`) and display (`$$...$$`, `\[...\]`, plus `\begin{equation}`/`\begin{align}`/etc.) — in AI responses, thinking blocks, and your own messages; a malformed expression falls back to showing its raw source rather than breaking the rest of the message; math inside code blocks is left alone
 
 ## 🔍 System Requirements
 
@@ -344,6 +407,17 @@ All optional and only needed if you run the Voicebox desktop app locally and wan
 - **RAM**: 4 GB minimum (8 GB recommended for larger models)
 - **Storage**: 2 GB+ for AI models
 - **Network**: Local loopback only (`127.0.0.1`)
+
+## 🔄 Refreshing After a Code Change
+
+What "picking up a change" requires depends on what changed — there is no single "restart everything" step:
+
+| You changed | What to do |
+|---|---|
+| `src/aia/**` (HTML, CSS, JS — including this feature's vendored KaTeX files) | Nothing on the server side — `vpal-nginx` bind-mounts `src/aia/` straight from disk. Just reload the page (hard-refresh with Ctrl+Shift+R if the browser cached an old script/CSS file) |
+| `deploy/nginx/nginx.conf` (routing, CSP headers, rate limits) | `docker exec vpal-nginx /usr/sbin/nginx -s reload` — nginx reads the file fresh from disk on reload, but keeps running the *old* config in memory until you do this |
+| `auth/**`, `voicebox-proxy/**`, or `doc-extract/**` (Python backend code) | `docker-compose up -d --build auth` (or `voicebox-proxy` / `doc-extract`) — these are baked into their Docker image at build time, so a plain restart isn't enough |
+| `docker-compose.yml` | `docker-compose up -d --build` (rebuilds/recreates whatever changed) |
 
 ## 🐛 Troubleshooting
 
@@ -359,6 +433,10 @@ All optional and only needed if you run the Voicebox desktop app locally and wan
 | Vision/image not working | Run `ollama pull gemma3:4b`; vision uses a separate model from the text model |
 | Image sends but gets no response | Image may exceed context window — the app resizes to ≤ 1024 px automatically, but very complex images can still overload `gemma3:4b` |
 | "VoiceBox is unavailable" toast | The Voicebox desktop app isn't running on the host, or `VOICEBOX_URL` in `.env` doesn't match its port — switch the toolbar TTS engine back to "Browser" as a workaround |
+| LaTeX shows as raw `$...$`/`\(...\)` text, not typeset | Check the browser console for an error loading `katex.min.js`/`katex-auto-render.min.js` (SRI mismatch after an incomplete upgrade, or the container serving a stale copy — see [Refreshing After a Code Change](#refreshing-after-a-code-change)). If only *one* expression in an otherwise-working message shows as raw text, that's expected — a malformed expression falls back to its raw source rather than breaking the rest of the message |
+| "Could not extract text from this PDF" | The PDF is encrypted (not supported) or scanned/image-only (no extractable text — pypdf can't OCR). Try a different PDF, or copy the text into a `.txt`/`.md` file instead |
+| Document attachment shows "Extracting text…" indefinitely | Check `docker logs vpal-doc-extract`; if the container isn't healthy, `docker-compose up -d --build doc-extract` |
+| Document Q&A gives a generic/unrelated answer | The document was likely truncated (a toast appears when this happens) — a very long PDF only has its first `MAX_DOCUMENT_TEXT_CHARS` (28,000 by default) characters included |
 
 ### Debug mode
 
@@ -367,6 +445,7 @@ Open browser developer tools (F12) → **Console**. For container logs:
 docker logs vpal-auth
 docker logs vpal-nginx
 docker logs vpal-voicebox-proxy
+docker logs vpal-doc-extract
 ```
 
 ## 📄 License

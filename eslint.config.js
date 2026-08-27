@@ -9,10 +9,14 @@ const crossModuleGlobals = {
   VISION_MODEL_NAME: 'readonly',
   OLLAMA_API_URL: 'readonly',
   VOICEBOX_SPEAK_URL: 'readonly',
+  DOC_EXTRACT_URL: 'readonly',
+  OLLAMA_NUM_CTX: 'readonly',
   MAX_HISTORY_MESSAGES: 'readonly',
   MAX_INPUT_LENGTH: 'readonly',
   MAX_UPLOAD_FILE_BYTES: 'readonly',
   MAX_IMAGE_SIZE_BYTES: 'readonly',
+  MAX_DOCUMENT_UPLOAD_BYTES: 'readonly',
+  MAX_DOCUMENT_TEXT_CHARS: 'readonly',
   SILENCE_TIMEOUT_MS: 'readonly',
   CHAR_COUNTER_SHOW_THRESHOLD: 'readonly',
   CHAR_COUNTER_WARNING_THRESHOLD: 'readonly',
@@ -26,6 +30,9 @@ const crossModuleGlobals = {
   pendingImageBase64: 'writable',
   currentThinkingMode: 'writable',
   currentTTSEngine: 'writable',
+  pendingDocumentText: 'writable',
+  pendingDocumentName: 'writable',
+  pendingDocumentTruncated: 'writable',
   // utils.js
   formatTimestamp: 'readonly',
   escapeHtml: 'readonly',
@@ -34,6 +41,11 @@ const crossModuleGlobals = {
   calcResizeDims: 'readonly',
   detectVisionContext: 'readonly',
   stripMarkdownForSpeech: 'readonly',
+  protectLatexDelimiters: 'readonly',
+  restoreLatexBackslashes: 'readonly',
+  truncateDocumentText: 'readonly',
+  buildDocumentMessageContent: 'readonly',
+  parseDocumentMessageContent: 'readonly',
   // speech.js — functions
   loadVoices: 'readonly',
   toggleSpeechRecognition: 'readonly',
@@ -65,14 +77,18 @@ const crossModuleGlobals = {
   openChat: 'readonly',
   renderConversationHistory: 'readonly',
   handleOpenFile: 'readonly',
+  renderMathIn: 'readonly',
+  renderMarkdownToHtml: 'readonly',
   // main.js
   clearImagePreview: 'readonly',
+  clearDocumentPreview: 'readonly',
   // api.js
   streamOllamaResponse: 'readonly',
   stopStreaming: 'readonly',
   // vendored libraries (loaded before app scripts)
   marked: 'readonly',
   DOMPurify: 'readonly',
+  renderMathInElement: 'readonly',
 };
 
 module.exports = [

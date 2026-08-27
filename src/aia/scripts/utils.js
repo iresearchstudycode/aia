@@ -58,13 +58,80 @@ function stripMarkdownForSpeech(text) {
     .replace(/\n+/g, '. ');
 }
 
+// CommonMark's backslash-escape rule strips a backslash immediately before
+// ASCII punctuation (e.g. `\(` -> `(`, `\\` -> `\`) — that silently destroys
+// KaTeX's \(...\) / \[...\] delimiters and \\ row separators before KaTeX
+// ever sees them, since marked.parse() always runs first. `\frac`, `\sqrt`,
+// etc. are unaffected (backslash followed by a letter isn't in that
+// punctuation set), so this only needs to cover the punctuation LaTeX
+// actually pairs a backslash with: ( ) [ ] { } and \ itself.
+//
+// Swap the backslash for a placeholder (U+E000, Unicode Private Use Area —
+// never appears in real text, so this can't collide with genuine content)
+// before marked.parse() runs, then swap it back afterward with
+// restoreLatexBackslashes(), once markdown can no longer touch it.
+const _LATEX_BACKSLASH_PLACEHOLDER = '';
+
+function protectLatexDelimiters(text) {
+  return text.replace(/\\([()[\]{}\\])/g, _LATEX_BACKSLASH_PLACEHOLDER + '$1');
+}
+
+function restoreLatexBackslashes(html) {
+  return html.split(_LATEX_BACKSLASH_PLACEHOLDER).join('\\');
+}
+
+// Truncate extracted document text to a safe character budget — the whole
+// conversation history (including this text) is resent to Ollama on every
+// turn, so an unbounded document would make every subsequent message more
+// expensive, not just this one.
+function truncateDocumentText(text, maxChars) {
+  if (text.length <= maxChars) return { text, truncated: false };
+  return { text: text.slice(0, maxChars), truncated: true };
+}
+
+// Wrap extracted document text in a clearly-delimited block followed by the
+// user's question — this is what actually gets sent to the model. There's no
+// separate "documents" field in Ollama's chat API the way there is `images`
+// for vision, so the text has to be folded directly into message content.
+function buildDocumentMessageContent(documentName, documentText, truncated, userQuestion) {
+  const notice = truncated ? ' (truncated)' : '';
+  const question = userQuestion && userQuestion.trim()
+    ? userQuestion.trim()
+    : 'Please review the following document and be ready to answer questions about it.';
+  return (
+    `--- Attached file: ${documentName}${notice} ---\n` +
+    `${documentText}\n` +
+    `--- End of ${documentName} ---\n\n` +
+    question
+  );
+}
+
+// Inverse of buildDocumentMessageContent() — detects whether a message's
+// content was built with a document attached and, if so, splits it back into
+// { documentName, question } for display purposes. Used so the chat bubble
+// can show a compact filename chip + the user's actual question instead of
+// the full (possibly 28,000-character) document block that was sent to the
+// model. Returns { hasDocument: false } for an ordinary message.
+function parseDocumentMessageContent(content) {
+  const match = content.match(
+    /^--- Attached file: (.+?)(?: \(truncated\))? ---\n[\s\S]*?\n--- End of \1 ---\n\n([\s\S]*)$/
+  );
+  if (!match) return { hasDocument: false };
+  return { hasDocument: true, documentName: match[1], question: match[2] };
+}
+
 // Node.js compat — lets Jest import these functions for unit tests; no-op in browser.
 if (typeof module !== 'undefined') {
   module.exports = {
     splitThinkingContent,
     calcResizeDims,
     detectVisionContext,
-    stripMarkdownForSpeech
+    stripMarkdownForSpeech,
+    protectLatexDelimiters,
+    restoreLatexBackslashes,
+    truncateDocumentText,
+    buildDocumentMessageContent,
+    parseDocumentMessageContent
   };
 }
 

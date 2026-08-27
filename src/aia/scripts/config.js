@@ -1,12 +1,16 @@
 // config.js - Configuration constants and system prompts
 const MODEL_NAME = 'gemma4:e4b';        // text + thinking mode
-const VISION_MODEL_NAME = 'gemma3:4b'; // vision-capable model (same model handles text and vision)
+const VISION_MODEL_NAME = 'gemma3:4b'; // vision-capable model (gemma4:e4b has no vision encoder in its GGUF)
 const OLLAMA_API_URL = 'https://localhost/ollama/api/chat';
 const VOICEBOX_SPEAK_URL = 'https://localhost/voicebox/speak';
+const DOC_EXTRACT_URL = 'https://localhost/doc-extract/extract';
+const OLLAMA_NUM_CTX = 16384; // must match the Ollama server's configured context length (OLLAMA_CONTEXT_LENGTH env var or Modelfile `PARAMETER num_ctx`) — sent explicitly on every text/thinking and vision-follow-up request so behavior never silently depends on Ollama's own default
 const MAX_HISTORY_MESSAGES = 40; // 20 user/assistant exchanges
 const MAX_INPUT_LENGTH = 4000;
 const MAX_UPLOAD_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_DOCUMENT_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB — matches doc-extract's own limit (PDF only; .txt/.md read client-side)
+const MAX_DOCUMENT_TEXT_CHARS = 28000; // budget for extracted text folded into a chat message — ~7K tokens at ~4 chars/token, leaving headroom in OLLAMA_NUM_CTX (16384) for the system prompt, conversation history, thinking budget, and the response itself
 const SILENCE_TIMEOUT_MS = 3000;
 const CHAR_COUNTER_SHOW_THRESHOLD = 500;
 const CHAR_COUNTER_WARNING_THRESHOLD = 200;
@@ -37,3 +41,6 @@ let pendingImageDataUrl = null; // data: URL for in-chat thumbnail display
 let pendingImageBase64 = null;  // raw base64 for the Ollama API images field
 let currentThinkingMode = 'off'; // 'off' | 'low' | 'medium' | 'high'
 let currentTTSEngine = 'voicebox'; // 'browser' | 'voicebox'
+let pendingDocumentText = null; // extracted text, folded into the next outgoing message
+let pendingDocumentName = null; // original filename, shown in the preview chip and user bubble
+let pendingDocumentTruncated = false; // true when extracted text exceeded MAX_DOCUMENT_TEXT_CHARS
