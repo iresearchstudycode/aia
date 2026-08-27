@@ -46,33 +46,33 @@ http {
 
     # Auth service upstream — keepalive pool for efficient auth_request sub-requests
     upstream auth_service {
-        server auth:9000;
+        server ${AUTH_UPSTREAM};
         keepalive 4;
     }
 
     # Voicebox proxy upstream — bridges to the local Voicebox app's REST API
     upstream voicebox_service {
-        server voicebox-proxy:8002;
+        server ${VOICEBOX_PROXY_UPSTREAM};
         keepalive 4;
     }
 
     # Document text extraction upstream — self-contained, no external host dependency
     upstream doc_extract_service {
-        server doc-extract:8003;
+        server ${DOC_EXTRACT_UPSTREAM};
         keepalive 4;
     }
 
     # HTTP Server: Redirect to HTTPS
     server {
         listen 80;
-        server_name localhost;
+        server_name ${SERVER_NAME};
         return 301 https://$host$request_uri;
     }
 
     # HTTPS Server
     server {
         listen       443 ssl;
-        server_name  localhost;
+        server_name  ${SERVER_NAME};
 
         # Hardened Security Headers
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
@@ -90,8 +90,8 @@ http {
         add_header Permissions-Policy "geolocation=(), payment=(), usb=(), camera=(), microphone=(self)" always;
 
         # Linux-compatible volume paths matching your docker setup
-        ssl_certificate      /etc/nginx/ssl/localhost.pem;
-        ssl_certificate_key  /etc/nginx/ssl/localhost-key.pem;
+        ssl_certificate      ${SSL_CERT_PATH};
+        ssl_certificate_key  ${SSL_KEY_PATH};
 
         # TLS Session and Protocol Hardening
         ssl_session_cache    shared:SSL:10m;
@@ -208,7 +208,7 @@ http {
             client_max_body_size 20m;
 
             # Upstream host:port is set from the OLLAMA_UPSTREAM env var by render-nginx-conf.sh (default host.docker.internal:11434).
-            proxy_pass http://host.docker.internal:11434/api/chat;
+            proxy_pass http://${OLLAMA_UPSTREAM}/api/chat;
 
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

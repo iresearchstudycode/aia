@@ -182,7 +182,11 @@ services:
         source: ./deploy/certs
         target: /etc/nginx/ssl
         read_only: true
-      # Local Nginx configuration file
+      # Local Nginx configuration file — the local-default render of
+      # deploy/nginx/nginx.conf.template (via deploy/nginx/render-nginx-conf.sh).
+      # Edit the .template and regenerate; do not hand-edit nginx.conf.
+      # Full runtime/init-container templating for cloud is a deferred follow-up
+      # (docs/cloud-hardening-plan.md, Finding E).
       - type: bind
         source: ./deploy/nginx/nginx.conf
         target: /etc/nginx/nginx.conf
