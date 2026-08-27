@@ -23,6 +23,7 @@
 - [x] `microphone=(self)` added to nginx `Permissions-Policy` header
 - [x] Chainguard base image digests pinned in `auth/Dockerfile` — both `FROM` lines use `@sha256:...` for reproducible, supply-chain-safe builds
 - [x] Non-HttpOnly `vpal_user` cookie set at login for the JS profile widget; carries only the display username (no authentication capability); cleared on logout
+- [x] Cloud-hardening plan produced — `docs/cloud-hardening-plan.md` (analysis only, no code/config changes); 15 prioritized findings, P0 blockers B/C/D/E/F/N to resolve before any internet exposure
 
 ## Testing
 
