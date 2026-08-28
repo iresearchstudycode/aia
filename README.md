@@ -3,7 +3,7 @@ A secure, voice-enabled AI chat interface that runs entirely on your local machi
 
 ## 📋 Overview
 
-This web application provides a ChatGPT-style chat interface (dark navy header, sky-blue user bubbles, clean card AI responses) with voice input/output, a single "+" attach menu for image attachment (multimodal vision queries) and document attachment (.txt/.md/.pdf Q&A), LaTeX math rendering via KaTeX, and a live collapsible thinking block for reasoning-capable models. It connects to locally-hosted AI models through Ollama's REST API with no external dependencies — protected by TOTP authentication for up to five users.
+This web application provides a ChatGPT-style chat interface (dark navy header, sky-blue user bubbles, clean card AI responses) with voice input/output, a single "+" attach menu for image attachment (multimodal vision queries) and document attachment (.txt/.md/.pdf Q&A), LaTeX math rendering via KaTeX, syntax-highlighted code blocks (highlight.js) and Mermaid diagram rendering, and a live collapsible thinking block for reasoning-capable models. It connects to locally-hosted AI models through Ollama's REST API with no external dependencies — protected by TOTP authentication for up to five users.
 
 ## 🏗️ Architecture
 
@@ -138,6 +138,8 @@ Unlike the VoiceBox path, this one is entirely self-contained — no local deskt
 | Markdown | Marked.js (vendored, SRI-pinned) |
 | HTML sanitisation | DOMPurify v3.4.11 (vendored, SRI-pinned) |
 | Math typesetting | KaTeX v0.18.1 + auto-render extension (vendored, SRI-pinned) |
+| Syntax highlighting | highlight.js v11.11.1, "common" build (vendored, SRI-pinned); hljs output re-sanitised through DOMPurify |
+| Diagrams | Mermaid v10.9.3 UMD bundle (vendored, SRI-pinned); `securityLevel: 'strict'`, SVG output DOMPurify-sanitised |
 | Web server | Nginx (`cgr.dev/chainguard/nginx`, distroless, uid=65532) |
 | Auth service | FastAPI + pyotp + itsdangerous (`cgr.dev/chainguard/python:latest`, uid=65532) |
 | VoiceBox proxy (optional) | FastAPI + httpx (`cgr.dev/chainguard/python:latest`, uid=65532) — bridges to a local Voicebox app's REST API; in-memory generation cache |
@@ -283,6 +285,7 @@ vpal/
 │       ├── css/
 │       │   ├── style.css           # Application styling
 │       │   ├── katex.min.css       # KaTeX math styling (vendored)
+│       │   ├── highlight.min.css   # highlight.js dark theme (vendored, atom-one-dark)
 │       │   └── fonts/              # KaTeX math fonts (vendored)
 │       ├── scripts/
 │       │   ├── config.js           # Configuration & system prompts
@@ -293,8 +296,11 @@ vpal/
 │       │   ├── main.js             # Application initialisation
 │       │   ├── marked.min.js       # Markdown parser (vendored)
 │       │   ├── dompurify.min.js    # HTML sanitiser (vendored)
+│       │   ├── highlight.min.js    # Syntax highlighting (vendored, highlight.js v11)
 │       │   ├── katex.min.js        # Math typesetting (vendored)
-│       │   └── katex-auto-render.min.js  # KaTeX delimiter scanner (vendored)
+│       │   ├── katex-auto-render.min.js  # KaTeX delimiter scanner (vendored)
+│       │   ├── diff-match-patch.js # Word-level diff for the English Editor (vendored)
+│       │   └── mermaid.min.js      # Diagram rendering (vendored, Mermaid v10.9.x)
 │       └── images/
 │           └── icon.ico
 ├── deploy/
@@ -373,7 +379,7 @@ Self-contained — no external app to configure, and these only bound worst-case
 | **Network** | Loopback-only binding (`127.0.0.1`); auth service port not published to the host (Docker-internal only) |
 | **Secrets** | All credentials in `.env` (gitignored); no hardcoded keys, tokens, or passwords anywhere in source |
 | **Input** | User messages capped at 4,000 characters; Nginx enforces 1 MB request body limit globally, `20 MB` on `/ollama/api/chat`, and `15 MB` on `/doc-extract/extract`; uploaded chat files capped at 5 MB; extracted document text capped at 28,000 characters before being folded into a chat message |
-| **Supply chain** | `marked.min.js`, `dompurify.min.js`, `katex.min.js`, `katex-auto-render.min.js`, and `katex.min.css` all pinned with SHA-256 SRI hashes |
+| **Supply chain** | `marked.min.js`, `dompurify.min.js`, `highlight.min.js`, `katex.min.js`, `katex-auto-render.min.js`, `diff-match-patch.js`, `mermaid.min.js`, `katex.min.css`, and `highlight.min.css` all pinned with SHA-256 SRI hashes; `npm run check:sri` (also a CI gate) re-verifies every pin on a clean checkout |
 
 ### Known limitations
 
@@ -400,6 +406,8 @@ Self-contained — no external app to configure, and these only bound worst-case
 - **Auto-Speak**: Toolbar icon toggles automatic TTS after each AI response; preference saved to `localStorage`
 - **Markdown Support**: Rich text formatting in AI responses and thinking blocks via Marked.js + DOMPurify
 - **Math Rendering**: LaTeX expressions typeset via KaTeX — inline (`$...$`, `\(...\)`) and display (`$$...$$`, `\[...\]`, plus `\begin{equation}`/`\begin{align}`/etc.) — in AI responses, thinking blocks, and your own messages; a malformed expression falls back to showing its raw source rather than breaking the rest of the message; math inside code blocks is left alone
+- **Code Highlighting**: Fenced code blocks in AI responses are syntax-highlighted via highlight.js (vendored, ~40 common languages, dark theme matched to the app's slate `<pre>` background); highlight.js output is re-sanitised through DOMPurify; an unrecognised language falls back to plain monospace
+- **Diagram Rendering**: A ` ```mermaid ` fenced block in an AI response renders as an SVG diagram via Mermaid (vendored v10.9.x, `securityLevel: 'strict'`, dark theme; SVG output DOMPurify-sanitised); a malformed diagram leaves the code block visible rather than breaking the message
 
 ## 🔍 System Requirements
 
