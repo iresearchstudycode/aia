@@ -1,4 +1,5 @@
-// speech.js - Speech recognition and synthesis functions
+// speech.js - Speech recognition (Web Speech API) and speech synthesis (Piper
+// or VoiceBox, via same-origin proxies). No browser Web Speech *synthesis*.
 
 // Speech recognition
 let recognition = null;
@@ -7,10 +8,11 @@ let silenceTimer = null;
 let accumulatedTranscript = '';
 
 // Text to speech
-let currentUtterance = null;
 let isSpeaking = false;
-let availableVoices = [];
 let activeSpeakBtn = null;
+// Object URL for the current Piper WAV blob — tracked so stopSpeaking() and the
+// audio 'ended'/'error' handlers can revoke it and not leak.
+let _ttsObjectUrl = null;
 
 function resetActiveSpeakBtn() {
   if (activeSpeakBtn) {
@@ -124,24 +126,6 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
   console.warn('Speech recognition not supported in this browser');
 }
 
-// Load available voices — guarded so it is safe to call even when TTS is absent
-function loadVoices() {
-  if (!('speechSynthesis' in window)) return;
-  availableVoices = window.speechSynthesis.getVoices();
-}
-
-// Wire onvoiceschanged only when TTS is present; otherwise disable the UI control
-// once the DOM is ready (this code runs at parse time, before <body> exists).
-if ('speechSynthesis' in window) {
-  window.speechSynthesis.onvoiceschanged = loadVoices;
-} else {
-  console.warn('Text-to-speech not supported in this browser');
-  document.addEventListener('DOMContentLoaded', function () {
-    const el = document.getElementById('autoTTSBtn');
-    if (el) { el.disabled = true; el.classList.remove('tts-on'); el.setAttribute('aria-pressed', 'false'); }
-  });
-}
-
 // Speech to Text function
 function toggleSpeechRecognition() {
   if (!recognition) {
@@ -179,25 +163,133 @@ function toggleSpeechRecognition() {
   }
 }
 
-// Text to Speech function — routes to the browser's Web Speech API or the
+// Text to Speech function — routes to the Piper proxy (default) or the
 // VoiceBox proxy depending on currentTTSEngine (config.js / ttsEngineSelect).
 function speakText(text, sourceBtn) {
   if (currentTTSEngine === 'voicebox') {
     speakTextViaVoicebox(text, sourceBtn);
     return;
   }
-  speakTextViaBrowser(text, sourceBtn);
+  speakTextViaPiper(text, sourceBtn);
 }
 
-function speakTextViaBrowser(text, sourceBtn) {
-  if (!('speechSynthesis' in window)) {
-    return;
+// Pause speech recognition (if active) while the AI is speaking, so the mic
+// doesn't pick up the synthesised audio playing through the system output.
+function _pauseRecognitionForSpeech() {
+  if (isRecording) {
+    recognition.stop();
+    document.getElementById('micBtn').classList.remove('recording');
+    document.getElementById('micBtn').classList.add('paused');
   }
+}
 
-  // Stop any ongoing speech (also resets the previous activeSpeakBtn)
-  stopSpeaking();
+// Resume speech recognition after speech ends, if it was left in the paused
+// (recording-but-stopped) state.
+function _resumeRecognitionAfterSpeech() {
+  if (isRecording && !isSpeaking) {
+    document.getElementById('micBtn').classList.remove('paused');
+    document.getElementById('micBtn').classList.add('recording');
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error('Failed to resume recognition after TTS:', e);
+    }
+  }
+}
 
-  // Wire the per-message button that triggered this call
+// Speak text through the local Piper proxy (POST /piper/speak, gated by the
+// session cookie like every other authenticated route). Piper returns raw
+// audio/wav; this page plays it through the shared <audio> element, so it has
+// a real stop control (unlike a fresh VoiceBox generation). The pending fetch
+// doubles as the "generating" indicator — the button (or the header speaker
+// icon, for auto-TTS with no button) shows a spinner until audio starts.
+function speakTextViaPiper(text, sourceBtn) {
+  stopSpeaking(); // stop any in-progress playback and reset the previous button
+
+  const cleanText = stripMarkdownForSpeech(text);
+  if (!cleanText.trim()) return;
+
+  const btn = sourceBtn || null;
+  const speakerBtn = document.getElementById('speakerBtn');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = SPINNER_ICON;
+    btn.classList.add('generating');
+    btn.title = 'Generating voice…';
+    btn.setAttribute('aria-label', 'Generating voice');
+  }
+  speakerBtn.style.display = 'flex';
+  speakerBtn.classList.add('generating');
+
+  // Set speaking flag BEFORE pausing recognition so onend can't auto-restart it.
+  isSpeaking = true;
+  _pauseRecognitionForSpeech();
+
+  fetch(PIPER_SPEAK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: cleanText })
+  })
+    .then(function (response) {
+      if (!response.ok) throw new Error('Piper request failed (' + response.status + ')');
+      return response.blob();
+    })
+    .then(function (blob) {
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove('generating');
+      }
+      speakerBtn.classList.remove('generating');
+      _playTtsBlob(blob, btn);
+    })
+    .catch(function () {
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove('generating');
+        btn.innerHTML = SPEAK_ICON;
+        btn.title = 'Speak this response';
+        btn.setAttribute('aria-label', 'Speak this response');
+      }
+      speakerBtn.classList.remove('generating');
+      speakerBtn.style.display = 'none';
+      isSpeaking = false;
+      _resumeRecognitionAfterSpeech();
+      showToast('Piper TTS is unavailable');
+    });
+}
+
+// Shared <audio> element — plays Piper WAV blobs and replays cached VoiceBox
+// generations. Created lazily so pages that never speak don't pay for it.
+let ttsAudio = null;
+
+function getTtsAudio() {
+  if (!ttsAudio) {
+    ttsAudio = new Audio();
+    ttsAudio.addEventListener('ended', onTtsAudioFinished);
+    ttsAudio.addEventListener('error', onTtsAudioFinished);
+  }
+  return ttsAudio;
+}
+
+function onTtsAudioFinished() {
+  if (_ttsObjectUrl) {
+    URL.revokeObjectURL(_ttsObjectUrl);
+    _ttsObjectUrl = null;
+  }
+  isSpeaking = false;
+  resetActiveSpeakBtn();
+  document.getElementById('speakerBtn').style.display = 'none';
+  document.getElementById('speakerBtn').classList.remove('speaking');
+  _resumeRecognitionAfterSpeech();
+}
+
+// Play a Piper WAV blob through the shared <audio> element, wiring the same
+// stop/speaking state a cached VoiceBox replay uses.
+function _playTtsBlob(blob, sourceBtn) {
+  const audio = getTtsAudio();
+  const speakerBtn = document.getElementById('speakerBtn');
+
   activeSpeakBtn = sourceBtn || null;
   if (activeSpeakBtn) {
     activeSpeakBtn.innerHTML = STOP_ICON;
@@ -207,108 +299,25 @@ function speakTextViaBrowser(text, sourceBtn) {
     activeSpeakBtn.classList.add('speaking');
   }
 
-  // Set speaking flag BEFORE stopping recognition to prevent auto-restart
   isSpeaking = true;
+  speakerBtn.style.display = 'flex';
+  speakerBtn.classList.add('speaking');
 
-  // Pause speech recognition while AI is speaking to avoid picking up AI voice
-  const wasRecording = isRecording;
-  if (isRecording) {
-    recognition.stop();
-    // Keep the recording state and visual indicator
-    // Show paused state on microphone button
-    document.getElementById('micBtn').classList.remove('recording');
-    document.getElementById('micBtn').classList.add('paused');
-  }
-
-  const cleanText = stripMarkdownForSpeech(text);
-
-  // Select a specific voice
-  const aussieVoice = availableVoices.find(voice =>
-    voice.name.includes('Microsoft Catherine')
-  );
-  currentUtterance = new SpeechSynthesisUtterance(cleanText);
-  currentUtterance.rate = 1.5;
-  currentUtterance.pitch = 1.0;
-  currentUtterance.volume = 1.0;
-  currentUtterance.voice = aussieVoice || availableVoices[0];
-
-  currentUtterance.onstart = () => {
-    // Already set above, but reinforce it
-    isSpeaking = true;
-    document.getElementById('speakerBtn').style.display = 'flex';
-    document.getElementById('speakerBtn').classList.add('speaking');
-  };
-
-  currentUtterance.onend = () => {
-    isSpeaking = false;
-    resetActiveSpeakBtn();
-    document.getElementById('speakerBtn').style.display = 'none';
-    document.getElementById('speakerBtn').classList.remove('speaking');
-    currentUtterance = null;
-
-    // Resume speech recognition if it was active before AI started speaking
-    if (wasRecording && isRecording) {
-      document.getElementById('micBtn').classList.remove('paused');
-      document.getElementById('micBtn').classList.add('recording');
-      try {
-        recognition.start();
-      } catch (e) {
-        console.error('Failed to resume recognition after TTS:', e);
-      }
-    }
-  };
-
-  currentUtterance.onerror = () => {
-    isSpeaking = false;
-    resetActiveSpeakBtn();
-    document.getElementById('speakerBtn').style.display = 'none';
-    document.getElementById('speakerBtn').classList.remove('speaking');
-    currentUtterance = null;
-
-    // Resume speech recognition if it was active before AI started speaking
-    if (wasRecording && isRecording) {
-      document.getElementById('micBtn').classList.remove('paused');
-      document.getElementById('micBtn').classList.add('recording');
-      try {
-        recognition.start();
-      } catch (e) {
-        console.error('Failed to resume recognition after TTS error:', e);
-      }
-    }
-  };
-
-  speechSynthesis.speak(currentUtterance);
-}
-
-// Shared <audio> element used only to replay a cached VoiceBox generation —
-// created lazily so pages that never touch VoiceBox don't pay for it. A
-// *fresh* generation is played by Voicebox itself through the host's
-// speakers (no audio element involved); this element only ever plays back
-// clips VoiceBox already generated earlier, fetched via GET /voicebox/audio/{id}.
-let voiceboxAudio = null;
-
-function getVoiceboxAudio() {
-  if (!voiceboxAudio) {
-    voiceboxAudio = new Audio();
-    voiceboxAudio.addEventListener('ended', onVoiceboxAudioFinished);
-    voiceboxAudio.addEventListener('error', onVoiceboxAudioFinished);
-  }
-  return voiceboxAudio;
-}
-
-function onVoiceboxAudioFinished() {
-  isSpeaking = false;
-  resetActiveSpeakBtn();
-  document.getElementById('speakerBtn').style.display = 'none';
-  document.getElementById('speakerBtn').classList.remove('speaking');
+  if (_ttsObjectUrl) URL.revokeObjectURL(_ttsObjectUrl);
+  _ttsObjectUrl = URL.createObjectURL(blob);
+  audio.src = _ttsObjectUrl;
+  audio.play().catch(function () {
+    onTtsAudioFinished();
+    showToast('Could not play synthesised audio.');
+  });
 }
 
 // Play a cached VoiceBox generation and wire up real stop/speaking state —
 // unlike a fresh generation (which VoiceBox plays itself with no signal back
 // to this page), a cache hit is played entirely by this page, so it can be
-// stopped like the browser engine can.
+// stopped like the Piper engine can.
 function playVoiceboxAudio(audioUrl, sourceBtn) {
-  const audio = getVoiceboxAudio();
+  const audio = getTtsAudio();
   const speakerBtn = document.getElementById('speakerBtn');
 
   activeSpeakBtn = sourceBtn || null;
@@ -326,7 +335,7 @@ function playVoiceboxAudio(audioUrl, sourceBtn) {
 
   audio.src = audioUrl;
   audio.play().catch(function () {
-    onVoiceboxAudioFinished();
+    onTtsAudioFinished();
     showToast('Could not play VoiceBox audio.');
   });
 }
@@ -340,7 +349,7 @@ function playVoiceboxAudio(audioUrl, sourceBtn) {
 // host's speakers; a cache hit is replayed by this page via
 // playVoiceboxAudio(), which does support a real stop control.
 function speakTextViaVoicebox(text, sourceBtn) {
-  stopSpeaking(); // stop any in-progress browser speech or cached VoiceBox playback
+  stopSpeaking(); // stop any in-progress Piper or cached VoiceBox playback
 
   const cleanText = stripMarkdownForSpeech(text);
   if (!cleanText.trim()) return;
@@ -406,29 +415,34 @@ function speakTextViaVoicebox(text, sourceBtn) {
     });
 }
 
-// Stop speaking function
+// Stop speaking function — halts Piper or cached-VoiceBox playback through the
+// shared <audio> element (a fresh VoiceBox generation plays on the host and
+// can't be stopped from here) and resumes paused recognition.
 function stopSpeaking() {
   resetActiveSpeakBtn();
-  if ('speechSynthesis' in window && speechSynthesis.speaking) {
-    speechSynthesis.cancel();
-
-    // Resume speech recognition if it was active before stopping
-    if (isRecording && !isSpeaking) {
-      document.getElementById('micBtn').classList.remove('paused');
-      document.getElementById('micBtn').classList.add('recording');
-      try {
-        recognition.start();
-      } catch (e) {
-        console.error('Failed to resume recognition after stopping TTS:', e);
-      }
-    }
+  if (ttsAudio && !ttsAudio.paused) {
+    ttsAudio.pause();
+    ttsAudio.currentTime = 0;
   }
-  if (voiceboxAudio && !voiceboxAudio.paused) {
-    voiceboxAudio.pause();
-    voiceboxAudio.currentTime = 0;
+  if (_ttsObjectUrl) {
+    URL.revokeObjectURL(_ttsObjectUrl);
+    _ttsObjectUrl = null;
   }
   isSpeaking = false;
   document.getElementById('speakerBtn').style.display = 'none';
   document.getElementById('speakerBtn').classList.remove('speaking', 'generating');
-  currentUtterance = null;
+
+  // Resume speech recognition if it was active before playback stopped.
+  _resumeRecognitionAfterSpeech();
+}
+
+// Node.js compat — lets Jest import these for unit tests; no-op in the browser
+// (mirrors utils.js / chat.js / api.js).
+if (typeof module !== 'undefined') {
+  module.exports = {
+    speakText,
+    speakTextViaPiper,
+    speakTextViaVoicebox,
+    stopSpeaking,
+  };
 }
