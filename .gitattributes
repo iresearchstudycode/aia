@@ -7,7 +7,10 @@
 # pinned file on a clean checkout and fails on any mismatch.
 src/aia/scripts/marked.min.js             binary
 src/aia/scripts/dompurify.min.js          binary
+src/aia/scripts/highlight.min.js          binary
 src/aia/scripts/katex.min.js              binary
 src/aia/scripts/katex-auto-render.min.js  binary
 src/aia/scripts/diff-match-patch.js       binary
+src/aia/scripts/mermaid.min.js            binary
 src/aia/css/katex.min.css                 binary
+src/aia/css/highlight.min.css             binary

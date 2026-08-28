@@ -45,6 +45,74 @@ function renderMathIn(element) {
   });
 }
 
+// Syntax-highlight fenced code blocks in place, within the given element, via
+// highlight.js. Runs after a message's markdown has been parsed and
+// DOMPurify-sanitized into the DOM: marked turns ```js ... ``` into
+// <pre><code class="language-js">…</code></pre>, and highlight.js then replaces
+// that block's innerHTML with class-only <span> tokens.
+//
+// SECURITY: highlight.js emits only class-annotated <span>s (no attributes, no
+// URLs), but its output is fed straight back through DOMPurify.sanitize() anyway
+// so the "every AI content -> innerHTML boundary is sanitized" invariant holds
+// with no special-casing. A block that throws is left as the plain (already
+// sanitized) text it was. ```mermaid``` blocks are skipped here — renderMermaidIn
+// owns them.
+function highlightCodeIn(element) {
+  if (typeof hljs === 'undefined') return;
+  element.querySelectorAll('pre code').forEach((block) => {
+    if (block.classList.contains('language-mermaid')) return;
+    if (block.dataset.hljsDone) return;
+    try {
+      hljs.highlightElement(block);
+      block.innerHTML = DOMPurify.sanitize(block.innerHTML);
+      block.dataset.hljsDone = '1';
+    } catch { /* leave the block as plain text */ }
+  });
+}
+
+// Render ```mermaid``` fenced blocks as SVG diagrams in place, within the given
+// element. mermaid.render() returns a Promise in v10, so this is async and is
+// called fire-and-forget at the render sites (the diagram pops in a moment
+// later) — the same non-blocking treatment renderMathIn / highlightCodeIn get.
+//
+// SECURITY: mermaid runs at securityLevel: 'strict' (HTML labels off, no click
+// handlers, no external resource fetches — see the initialize() call at the
+// bottom of this file), and its generated SVG string is still passed through
+// DOMPurify.sanitize() with the SVG profile before it reaches innerHTML. A block
+// that fails to parse keeps its raw (already sanitized) source visible and is
+// marked .mermaid-error rather than blanking the message.
+async function renderMermaidIn(element) {
+  if (typeof mermaid === 'undefined') return;
+  const blocks = element.querySelectorAll('pre code.language-mermaid');
+  for (const code of blocks) {
+    const pre = code.closest('pre');
+    if (!pre || pre.dataset.mermaidDone) continue;
+    pre.dataset.mermaidDone = '1';
+    const src = code.textContent;
+    const id = 'mmd-' + Math.random().toString(36).slice(2);
+    try {
+      const { svg } = await mermaid.render(id, src);
+      const wrapper = document.createElement('div');
+      wrapper.className = 'mermaid-diagram';
+      wrapper.innerHTML = DOMPurify.sanitize(svg, {
+        USE_PROFILES: { svg: true, svgFilters: true }
+      });
+      pre.replaceWith(wrapper);
+    } catch {
+      pre.classList.add('mermaid-error');
+    }
+  }
+}
+
+// Every post-render enrichment pass in one place, so a new render site in
+// api.js / chat.js can't silently forget one. renderMathIn and highlightCodeIn
+// are synchronous; renderMermaidIn is async and deliberately not awaited.
+function enrichRenderedContent(element) {
+  renderMathIn(element);
+  highlightCodeIn(element);
+  renderMermaidIn(element);
+}
+
 // Markdown-parse + sanitize a message's raw text, with LaTeX delimiters
 // protected from CommonMark's backslash-escape rule (see protectLatexDelimiters
 // in utils.js) — the one function every AI/user content -> innerHTML boundary
@@ -93,7 +161,7 @@ function renderEditorReply(container, originalText, revisedText, view) {
 
   // 'clean' — render the polished text like a normal reply.
   container.innerHTML = renderMarkdownToHtml(revisedText);
-  renderMathIn(container);
+  enrichRenderedContent(container);
 }
 
 // Build the small Original/Changes/Clean selector shown alongside an editor
@@ -232,7 +300,7 @@ function addUserMessage(text, imageDataUrl = null) {
     const p = document.createElement('p');
     p.textContent = parsed.hasDocument ? parsed.question : text;
     contentDiv.appendChild(p);
-    renderMathIn(contentDiv);
+    enrichRenderedContent(contentDiv);
   }
 
   const tsDiv = document.createElement('div');
@@ -607,7 +675,7 @@ function renderConversationHistory() {
         const p = document.createElement('p');
         p.textContent = parsed.hasDocument ? parsed.question : msg.content;
         contentDiv.appendChild(p);
-        renderMathIn(contentDiv);
+        enrichRenderedContent(contentDiv);
       }
 
       const tsDiv = document.createElement('div');
@@ -638,7 +706,7 @@ function renderConversationHistory() {
         renderEditorReply(contentEl, editorOriginal, msg.content, msg.editorView);
       } else {
         contentEl.innerHTML = renderMarkdownToHtml(msg.content);
-        renderMathIn(contentEl);
+        enrichRenderedContent(contentEl);
       }
 
       const actionsDiv = document.createElement('div');
@@ -722,4 +790,29 @@ function handleOpenFile(event) {
   };
 
   reader.readAsText(file);
+}
+
+// One-time load configuration for the vendored render libraries (loaded as
+// classic <script>s before this file). Guarded so this file can also be
+// CommonJS-required in Jest without either global present.
+if (typeof hljs !== 'undefined') {
+  // We only ever hand highlight.js already-sanitized DOM, so silence its
+  // "unescaped HTML" console warning.
+  hljs.configure({ ignoreUnescapedHTML: true });
+}
+if (typeof mermaid !== 'undefined') {
+  // strict: HTML labels off, no click handlers, no external resource fetches.
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
+}
+
+// Node.js compat — lets Jest import the render helpers for unit tests; no-op in
+// the browser (module is undefined there). Mirrors utils.js / api.js.
+if (typeof module !== 'undefined') {
+  module.exports = {
+    renderMathIn,
+    highlightCodeIn,
+    renderMermaidIn,
+    enrichRenderedContent,
+    renderMarkdownToHtml
+  };
 }

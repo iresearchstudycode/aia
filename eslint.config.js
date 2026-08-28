@@ -85,6 +85,9 @@ const crossModuleGlobals = {
   renderConversationHistory: 'readonly',
   handleOpenFile: 'readonly',
   renderMathIn: 'readonly',
+  highlightCodeIn: 'readonly',
+  renderMermaidIn: 'readonly',
+  enrichRenderedContent: 'readonly',
   renderMarkdownToHtml: 'readonly',
   _resolveSystemPrompt: 'readonly',
   renderEditorReply: 'readonly',
@@ -100,6 +103,8 @@ const crossModuleGlobals = {
   DOMPurify: 'readonly',
   renderMathInElement: 'readonly',
   diff_match_patch: 'readonly',
+  hljs: 'readonly',
+  mermaid: 'readonly',
 };
 
 module.exports = [
