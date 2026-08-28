@@ -22,6 +22,7 @@ const crossModuleGlobals = {
   CHAR_COUNTER_WARNING_THRESHOLD: 'readonly',
   CHAR_COUNTER_DANGER_THRESHOLD: 'readonly',
   SPEECH_RECOGNITION_LANG: 'readonly',
+  PERSONA_PREFS_KEY: 'readonly',
   systemPrompts: 'readonly',
   // config.js — mutable state
   conversationHistory: 'writable',
@@ -46,6 +47,8 @@ const crossModuleGlobals = {
   truncateDocumentText: 'readonly',
   buildDocumentMessageContent: 'readonly',
   parseDocumentMessageContent: 'readonly',
+  readPersonaPref: 'readonly',
+  writePersonaPref: 'readonly',
   // speech.js — functions
   loadVoices: 'readonly',
   toggleSpeechRecognition: 'readonly',

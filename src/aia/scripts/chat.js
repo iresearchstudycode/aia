@@ -241,10 +241,23 @@ function closeWindow() {
   }
 }
 
+// Resolve the option value to the actual prompt text. `englishEditor` has two
+// variants — the silent/output-only one and the "Explain changes" one — chosen
+// by the #editorExplainToggle checkbox in the persona panel.
+function _resolveSystemPrompt(optionValue) {
+  if (optionValue === 'englishEditor') {
+    const explain = document.getElementById('editorExplainToggle');
+    return explain && explain.checked
+      ? systemPrompts.englishEditorExplained
+      : systemPrompts.englishEditor;
+  }
+  return systemPrompts[optionValue];
+}
+
 // Update system prompt
 function updateSystemPrompt() {
   const select = document.getElementById('systemPromptSelect');
-  currentSystemPrompt = systemPrompts[select.value];
+  currentSystemPrompt = _resolveSystemPrompt(select.value);
 
   // If conversation has started, warn user
   if (conversationHistory.length > 0) {
@@ -253,8 +266,18 @@ function updateSystemPrompt() {
       document.getElementById('chatMessages').innerHTML = '';
       updateSystemPromptState(); // Update state after clearing
     } else {
-      // Revert selection
-      select.value = Object.keys(systemPrompts).find(key => systemPrompts[key] === currentSystemPrompt);
+      // Revert selection. Both editor variants map back to the single
+      // `englishEditor` option — a raw key lookup would yield
+      // `englishEditorExplained`, which is not a valid <option> value and would
+      // silently blank the select.
+      if (
+        currentSystemPrompt === systemPrompts.englishEditor ||
+        currentSystemPrompt === systemPrompts.englishEditorExplained
+      ) {
+        select.value = 'englishEditor';
+      } else {
+        select.value = Object.keys(systemPrompts).find(key => systemPrompts[key] === currentSystemPrompt);
+      }
     }
   }
 }

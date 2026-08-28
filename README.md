@@ -384,7 +384,7 @@ Self-contained — no external app to configure, and these only bound worst-case
 - **TOTP Authentication**: Google Authenticator login for up to five users
 - **ChatGPT-style UI**: Dark navy header, sky-blue user message bubbles (right-aligned), clean card AI responses; all controls use inline SVG line icons with no emoji
 - **Profile Menu**: SVG user icon + logged-in username in the header; dropdown (Save, Open, Clear, Close, Sign out) opens as a fixed overlay with Tab focus trap and Escape to close
-- **Persona Selector**: Chevron button next to the heading opens a panel to switch AI personas; selected persona shown as a subtitle; locked during an active conversation; Tab focus trap and Escape to close
+- **Persona Selector**: Chevron button next to the heading opens a panel to switch AI personas; selected persona shown as a subtitle; locked during an active conversation; Tab focus trap and Escape to close. The English Editor persona has an "Explain changes" checkbox (shown only for that persona) that swaps between the silent output-only prompt and one that explains its edits, persisted to `localStorage`. Switching persona also restores that persona's last-used thinking on/off + depth and TTS engine (per-persona settings memory, `localStorage` key `personaPrefs`)
 - **Chat Input**: Auto-growing textarea (up to 6 lines); Enter sends, Shift+Enter inserts a newline; circular sky-blue send button activates only when text or an image is pending
 - **Voice Input/Output**: Continuous speech recognition with 3-second silence detection; text-to-speech synthesis with per-message speak buttons; toolbar: mic → auto-speak → TTS engine (Browser / VoiceBox) → stop speaking
 - **Attach Menu**: A single ChatGPT-style "+" button in the toolbar opens a popup with "Add photos" and "Add files" options, consolidating what were previously two separate toolbar buttons; Tab focus trap and Escape to close, matching the profile dropdown and persona panel
@@ -393,7 +393,7 @@ Self-contained — no external app to configure, and these only bound worst-case
 - **Thinking Mode**: Lightbulb toolbar button toggles reasoning ON/OFF; depth selector (Low / Medium / High) appears inline when enabled; live reasoning displayed in a collapsible `<details>` block; collapses when the final answer arrives; thinking content excluded from history, copy, and speech; mode and depth saved to `localStorage` and restored on reload
 - **Dual-model Routing**: Text requests use `gemma4:e4b` (streaming, thinking-capable); image requests and vision follow-ups use `gemma3:4b`; `think: false` sent explicitly to suppress native reasoning when thinking is OFF
 - **Real-time Streaming**: Live token-by-token response display with a stop button
-- **Multiple Personas**: 13 pre-configured AI personalities
+- **Multiple Personas**: 11 pre-configured AI personalities
 - **Per-message Actions**: Copy and speak SVG icon buttons appear on successful AI responses only; target the final answer (thinking content excluded)
 - **Chat History**: Save/load conversation history as JSON; filename format `YYYYMMDD-HHMMss-vpal-<Topic>.json`; base64 image data stripped on save (preserves `hasImage` flag for routing and placeholder display)
 - **Character Counter**: Remaining count shown as you approach the 4,000-character limit, with warning and danger colour states

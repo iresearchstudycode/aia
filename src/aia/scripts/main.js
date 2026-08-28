@@ -57,6 +57,59 @@ function clearDocumentPreview() {
   document.getElementById('sendBtn').disabled = textarea.value.trim().length === 0 && !pendingImageBase64;
 }
 
+// --- Per-persona settings memory -------------------------------------------
+// The persona `change` event fires after #systemPromptSelect.value has already
+// changed, so the key of the persona being switched *away from* is tracked here.
+// Persona switching is disabled during an active conversation, so `change` only
+// ever fires from an empty conversation — no mid-chat handling is needed.
+let _activePersonaKey = null;
+let _personaPrefsJson = '{}';
+
+// Single source of truth for the thinking-mode button + depth-select DOM state
+// (shared by the toggle handler, the session restore, and per-persona restore).
+function _setThinkingUI(isOn, depth) {
+  const btn = document.getElementById('thinkingModeBtn');
+  const depthSelect = document.getElementById('thinkingDepthSelect');
+  btn.classList.toggle('thinking-on', isOn);
+  btn.setAttribute('aria-pressed', String(isOn));
+  btn.setAttribute('aria-label', isOn ? 'Thinking mode: On' : 'Thinking mode: Off');
+  btn.title = isOn
+    ? 'Thinking mode: On — click to disable'
+    : 'Enable thinking mode — model reasons before answering';
+  depthSelect.style.display = isOn ? 'inline-block' : 'none';
+  if (depth) depthSelect.value = depth;
+  currentThinkingMode = isOn ? depthSelect.value : 'off';
+}
+
+// Single source of truth for the TTS-engine select DOM state + global.
+function _setTTSUI(engine) {
+  document.getElementById('ttsEngineSelect').value = engine;
+  currentTTSEngine = engine;
+}
+
+// Read the live thinking/TTS control state as a persona-pref patch.
+function _snapshotPersonaSettings() {
+  return {
+    thinkingOn: document.getElementById('thinkingModeBtn').classList.contains('thinking-on'),
+    thinkingDepth: document.getElementById('thinkingDepthSelect').value,
+    ttsEngine: document.getElementById('ttsEngineSelect').value,
+  };
+}
+
+// Apply a stored persona-pref entry to the thinking/TTS controls.
+function _applyPersonaSettings(s) {
+  if (!s) return;
+  if (typeof s.thinkingOn === 'boolean') _setThinkingUI(s.thinkingOn, s.thinkingDepth);
+  if (s.ttsEngine) _setTTSUI(s.ttsEngine);
+}
+
+// Merge a patch into the current persona's stored prefs and persist to localStorage.
+function _persistPersonaPref(patch) {
+  if (!_activePersonaKey) return;
+  _personaPrefsJson = writePersonaPref(_personaPrefsJson, _activePersonaKey, patch);
+  localStorage.setItem(PERSONA_PREFS_KEY, _personaPrefsJson);
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   // Inject the CSRF token into the logout form (double-submit cookie pattern).
   // vpal_csrf is non-HttpOnly so JS can read it; the server verifies it matches
@@ -219,8 +272,35 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Sync JS state with whichever option is marked selected in the HTML
   const select = document.getElementById('systemPromptSelect');
-  currentSystemPrompt = systemPrompts[select.value];
+
+  // "Explain changes" toggle — only meaningful for the English Editor persona,
+  // where it swaps between the silent and the change-explaining prompt variant.
+  const editorExplainToggle = document.getElementById('editorExplainToggle');
+  const editorExplainRow = document.getElementById('editorExplainToggleRow');
+
+  function _updateEditorExplainVisibility() {
+    editorExplainRow.style.display = select.value === 'englishEditor' ? '' : 'none';
+  }
+
+  editorExplainToggle.checked = localStorage.getItem('editorExplainChanges') === 'true';
+  editorExplainToggle.addEventListener('change', function () {
+    localStorage.setItem('editorExplainChanges', String(this.checked));
+    if (select.value === 'englishEditor') {
+      currentSystemPrompt = this.checked
+        ? systemPrompts.englishEditorExplained
+        : systemPrompts.englishEditor;
+    }
+  });
+  _updateEditorExplainVisibility();
+
+  currentSystemPrompt = select.value === 'englishEditor'
+    ? (editorExplainToggle.checked ? systemPrompts.englishEditorExplained : systemPrompts.englishEditor)
+    : systemPrompts[select.value];
   updateSystemPromptState();
+
+  // Per-persona settings memory — load the store and record the starting persona.
+  _personaPrefsJson = localStorage.getItem(PERSONA_PREFS_KEY) || '{}';
+  _activePersonaKey = select.value;
 
   // Restore autoTTS preference across sessions
   const autoTTSBtn = document.getElementById('autoTTSBtn');
@@ -237,12 +317,11 @@ document.addEventListener('DOMContentLoaded', function () {
   // TTS engine selector (Browser vs VoiceBox) — applies to both auto-TTS and
   // the per-message speak button; persisted to localStorage like autoTTS.
   const ttsEngineSelect = document.getElementById('ttsEngineSelect');
-  const savedTTSEngine = localStorage.getItem('ttsEngine') || 'voicebox';
-  ttsEngineSelect.value = savedTTSEngine;
-  currentTTSEngine = savedTTSEngine;
+  _setTTSUI(localStorage.getItem('ttsEngine') || 'voicebox');
   ttsEngineSelect.addEventListener('change', function () {
-    currentTTSEngine = this.value;
+    _setTTSUI(this.value);
     localStorage.setItem('ttsEngine', this.value);
+    _persistPersonaPref({ ttsEngine: this.value });
   });
 
   // Chat input
@@ -284,6 +363,13 @@ document.addEventListener('DOMContentLoaded', function () {
   // Persona selector: run existing logic first (may revert selection on cancel),
   // then update the header label and close the panel with the final value.
   document.getElementById('systemPromptSelect').addEventListener('change', updateSystemPrompt);
+  document.getElementById('systemPromptSelect').addEventListener('change', function () {
+    // Save the persona being left, then restore the one being entered.
+    _persistPersonaPref(_snapshotPersonaSettings());
+    _activePersonaKey = this.value;
+    _applyPersonaSettings(readPersonaPref(_personaPrefsJson, _activePersonaKey));
+    _updateEditorExplainVisibility();
+  });
   document.getElementById('systemPromptSelect').addEventListener('change', function () {
     _applyCurrentPersonaLabel();
     closePersonaPanel();
@@ -438,32 +524,28 @@ document.addEventListener('DOMContentLoaded', function () {
   const thinkingDepthSelect = document.getElementById('thinkingDepthSelect');
 
   thinkingModeBtn.addEventListener('click', function () {
-    const isOn = this.classList.toggle('thinking-on');
-    this.setAttribute('aria-pressed', String(isOn));
-    this.setAttribute('aria-label', isOn ? 'Thinking mode: On' : 'Thinking mode: Off');
-    this.title = isOn
-      ? 'Thinking mode: On — click to disable'
-      : 'Enable thinking mode — model reasons before answering';
-    thinkingDepthSelect.style.display = isOn ? 'inline-block' : 'none';
-    currentThinkingMode = isOn ? thinkingDepthSelect.value : 'off';
+    const isOn = !this.classList.contains('thinking-on');
+    _setThinkingUI(isOn, thinkingDepthSelect.value);
     localStorage.setItem('thinkingOn', String(isOn));
+    _persistPersonaPref({ thinkingOn: isOn, thinkingDepth: thinkingDepthSelect.value });
   });
 
   thinkingDepthSelect.addEventListener('change', function () {
-    currentThinkingMode = this.value;
+    _setThinkingUI(thinkingModeBtn.classList.contains('thinking-on'), this.value);
     localStorage.setItem('thinkingDepth', this.value);
+    _persistPersonaPref({
+      thinkingOn: thinkingModeBtn.classList.contains('thinking-on'),
+      thinkingDepth: this.value,
+    });
   });
 
   // Restore thinking mode preference across sessions (mirrors autoTTS persistence).
-  const savedThinkingDepth = localStorage.getItem('thinkingDepth') || 'medium';
-  const savedThinkingOn = localStorage.getItem('thinkingOn') === 'true';
-  thinkingDepthSelect.value = savedThinkingDepth;
-  if (savedThinkingOn) {
-    thinkingModeBtn.classList.add('thinking-on');
-    thinkingModeBtn.setAttribute('aria-pressed', 'true');
-    thinkingModeBtn.setAttribute('aria-label', 'Thinking mode: On');
-    thinkingModeBtn.title = 'Thinking mode: On — click to disable';
-    thinkingDepthSelect.style.display = 'inline-block';
-    currentThinkingMode = savedThinkingDepth;
-  }
+  _setThinkingUI(
+    localStorage.getItem('thinkingOn') === 'true',
+    localStorage.getItem('thinkingDepth') || 'medium'
+  );
+
+  // Per-persona settings win over the global restore above when present for the
+  // persona that's active on load.
+  _applyPersonaSettings(readPersonaPref(_personaPrefsJson, _activePersonaKey));
 });
