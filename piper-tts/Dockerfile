@@ -43,7 +43,18 @@ FROM python:3.12-slim@sha256:09f7da3bc104798d0afb40bc08d23ab2da20a76130cec1f2ef1
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/packages \
-    PIPER_MODEL_DIR=/app/voices
+    PIPER_MODEL_DIR=/app/voices \
+    # Pin every native thread pool to 1. onnxruntime / OpenMP / OpenBLAS
+    # otherwise size their pools to the host core count, which under a
+    # container CPU quota + PID ceiling can deadlock during pool creation.
+    # main.py also caps onnxruntime via SessionOptions; these cover the rest
+    # (and make `docker run` without compose safe too).
+    OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 \
+    ORT_NUM_THREADS=1 \
+    PIPER_ORT_THREADS=1
 
 WORKDIR /app
 

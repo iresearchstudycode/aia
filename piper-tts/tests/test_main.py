@@ -8,11 +8,12 @@ or ``_synthesize`` itself (exercising the route layer).
 
 from unittest.mock import MagicMock
 
+import onnxruntime
 import pytest
 from fastapi.testclient import TestClient
 
 import main
-from main import SynthesisError, _sanitize, _synthesize, app
+from main import SynthesisError, _capped_session_options, _sanitize, _synthesize, app
 
 
 @pytest.fixture()
@@ -142,3 +143,72 @@ class TestSpeakRoute:
         response = client.post("/piper/speak", json={"text": "Hello world."})
         assert response.status_code == 500
         assert response.json() == {"ok": False, "error": "Speech synthesis failed."}
+
+    def test_speak_route_is_sync_so_it_runs_off_the_event_loop(self) -> None:
+        # A blocking sync route must NOT be registered as a coroutine, or one
+        # slow synthesis would stall /health and every other request.
+        import inspect
+
+        route = next(r for r in app.routes if getattr(r, "path", None) == "/piper/speak")
+        assert not inspect.iscoroutinefunction(route.endpoint)
+
+    def test_health_stays_responsive_during_a_slow_synthesis(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Prove the event loop isn't blocked: a synth that sleeps 1s in its
+        # worker thread must not delay a concurrent /health call.
+        import threading
+        import time
+
+        def _slow_synth(_text: str) -> bytes:
+            time.sleep(1.0)
+            return b"RIFF\x00\x00\x00\x00WAVE"
+
+        monkeypatch.setattr(main, "_synthesize", _slow_synth)
+
+        results: dict[str, float] = {}
+
+        def _fire_speak() -> None:
+            start = time.monotonic()
+            client.post("/piper/speak", json={"text": "slow one"})
+            results["speak"] = time.monotonic() - start
+
+        t = threading.Thread(target=_fire_speak)
+        t.start()
+        time.sleep(0.1)  # let the synth get going
+
+        health_start = time.monotonic()
+        assert client.get("/health").status_code == 200
+        results["health"] = time.monotonic() - health_start
+
+        t.join()
+        assert results["health"] < 0.5  # health returned well before the 1s synth
+        assert results["speak"] >= 1.0
+
+
+# ---------------------------------------------------------------------------
+# _capped_session_options — onnxruntime thread-pool cap
+# ---------------------------------------------------------------------------
+
+
+class TestCappedSessionOptions:
+    def test_hands_out_capped_options_then_restores_the_factory(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(main, "_ORT_THREADS", 1)
+        original = onnxruntime.SessionOptions
+
+        with _capped_session_options():
+            opts = onnxruntime.SessionOptions()
+            assert opts.intra_op_num_threads == 1
+            assert opts.inter_op_num_threads == 1
+            assert opts.execution_mode == onnxruntime.ExecutionMode.ORT_SEQUENTIAL
+
+        assert onnxruntime.SessionOptions is original
+
+    def test_factory_is_restored_even_on_error(self) -> None:
+        original = onnxruntime.SessionOptions
+        with pytest.raises(RuntimeError):
+            with _capped_session_options():
+                raise RuntimeError("boom")
+        assert onnxruntime.SessionOptions is original

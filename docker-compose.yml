@@ -127,9 +127,20 @@ services:
     # Self-contained — the voice model is baked into the image; no host service
     # to reach, so (unlike voicebox-proxy) no extra_hosts entry.
 
-    # onnxruntime writes a cache/telemetry marker on first run; give it a home.
     environment:
+      # onnxruntime writes a cache/telemetry marker on first run; give it a home.
       - HOME=/tmp
+      # Pin every native thread pool to 1 (also set in the Dockerfile — kept
+      # here too so it's visible/overridable at the compose layer). Without
+      # this, onnxruntime/OpenMP size their pools to the host core count,
+      # which under the cpus + pids limits below deadlocks during pool
+      # creation — the request never returns and eventually /health hangs.
+      - OMP_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - NUMEXPR_NUM_THREADS=1
+      - ORT_NUM_THREADS=1
+      - PIPER_ORT_THREADS=1
 
     # Security: non-root (uid 65532), read-only root, no capabilities
     read_only: true
@@ -144,10 +155,13 @@ services:
       resources:
         limits:
           cpus: '1.00'
-          # ONNX voice model (~63 MB) is held in memory alongside onnxruntime
-          # and numpy; 512M leaves headroom for a few-sentence synthesis.
-          memory: 512M
-          pids: 30
+          # ONNX voice model (~63 MB) held in memory alongside onnxruntime +
+          # numpy; measured peak RSS is ~220 MB, so 768M is generous margin.
+          memory: 768M
+          # onnxruntime + uvicorn's threadpool spawn a handful of native
+          # threads each (all counted against this ceiling on Linux); 30 was
+          # too tight and contributed to the thread-pool-init hang.
+          pids: 128
 
     # Port exposed only within the Docker network — never published to the host
     expose:
@@ -159,7 +173,9 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      # Eager model load (PIPER_EAGER_LOAD) runs during startup, so give the
+      # first healthcheck room before counting failures.
+      start_period: 40s
 
   web-server:
     image: cgr.dev/chainguard/nginx
