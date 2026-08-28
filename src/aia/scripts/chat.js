@@ -196,9 +196,8 @@ function _precedingUserText(history, idx) {
 }
 
 function createSpeakButton(content) {
-  // VoiceBox does not depend on the browser's Web Speech API, so the button
-  // is created even when speechSynthesis is absent — speakText() itself
-  // no-ops for the 'browser' engine on unsupported browsers.
+  // Both TTS engines (Piper, VoiceBox) run through same-origin proxies and
+  // don't depend on any browser speech API, so the button is always functional.
   const btn = document.createElement('button');
   btn.className = 'action-btn speak-btn';
   btn.title = 'Speak this response';

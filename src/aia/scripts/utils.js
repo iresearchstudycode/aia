@@ -46,8 +46,8 @@ function detectVisionContext(imageBase64, history) {
 }
 
 // Strip markdown formatting from AI response text so it reads naturally when
-// spoken aloud — shared by both the browser (Web Speech API) and VoiceBox
-// text-to-speech paths in speech.js.
+// spoken aloud — shared by the Piper and VoiceBox text-to-speech paths in
+// speech.js.
 function stripMarkdownForSpeech(text) {
   return text
     // Must run before the char-strip below, which would otherwise remove the
@@ -126,7 +126,14 @@ function parseDocumentMessageContent(content) {
 // localStorage under PERSONA_PREFS_KEY, so main.js owns all storage I/O.
 
 const _THINKING_DEPTHS = ['low', 'medium', 'high'];
-const _TTS_ENGINES = ['browser', 'voicebox'];
+const _TTS_ENGINES = ['piper', 'voicebox'];
+
+// Normalise a stored/legacy TTS-engine value to a currently-supported one.
+// The removed 'browser' (Web Speech synthesis) engine, and anything
+// unrecognised, map to the default 'piper'; a valid value passes through.
+function normalizeTtsEngine(value) {
+  return _TTS_ENGINES.includes(value) ? value : 'piper';
+}
 
 // Parse the persona-prefs JSON and return the stored entry for `personaKey`
 // as { thinkingOn, thinkingDepth, ttsEngine } — or null when the JSON is
@@ -148,7 +155,7 @@ function readPersonaPref(prefsJson, personaKey) {
 // Merge `patch` into `personaKey`'s entry and return the new JSON string.
 // Malformed input JSON is treated as an empty object. Only the known keys with
 // valid values are applied: thinkingOn (boolean), thinkingDepth (low|medium|
-// high), ttsEngine (browser|voicebox); anything else in `patch` is ignored.
+// high), ttsEngine (piper|voicebox); anything else in `patch` is ignored.
 function writePersonaPref(prefsJson, personaKey, patch) {
   let prefs;
   try {
@@ -257,6 +264,7 @@ if (typeof module !== 'undefined') {
     parseDocumentMessageContent,
     readPersonaPref,
     writePersonaPref,
+    normalizeTtsEngine,
     migrateEditorModeValue,
     diffWords
   };

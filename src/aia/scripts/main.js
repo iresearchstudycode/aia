@@ -82,9 +82,12 @@ function _setThinkingUI(isOn, depth) {
 }
 
 // Single source of truth for the TTS-engine select DOM state + global.
+// Normalises legacy/unknown values (e.g. the removed 'browser' engine) to the
+// current default so old localStorage / personaPrefs entries can't break it.
 function _setTTSUI(engine) {
-  document.getElementById('ttsEngineSelect').value = engine;
-  currentTTSEngine = engine;
+  const normalized = normalizeTtsEngine(engine);
+  document.getElementById('ttsEngineSelect').value = normalized;
+  currentTTSEngine = normalized;
 }
 
 // Read the live thinking/TTS control state as a persona-pref patch.
@@ -268,8 +271,6 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById(id).addEventListener('click', closeProfileDropdown);
   });
 
-  loadVoices();
-
   // Sync JS state with whichever option is marked selected in the HTML
   const select = document.getElementById('systemPromptSelect');
 
@@ -314,9 +315,10 @@ document.addEventListener('DOMContentLoaded', function () {
   _personaPrefsJson = localStorage.getItem(PERSONA_PREFS_KEY) || '{}';
   _activePersonaKey = select.value;
 
-  // Restore autoTTS preference across sessions
+  // Restore autoTTS preference across sessions. No Web Speech API guard —
+  // auto-speak now works via the Piper proxy regardless of browser support.
   const autoTTSBtn = document.getElementById('autoTTSBtn');
-  if ('speechSynthesis' in window && localStorage.getItem('autoTTS') === 'true') {
+  if (localStorage.getItem('autoTTS') === 'true') {
     autoTTSBtn.classList.add('tts-on');
     autoTTSBtn.setAttribute('aria-pressed', 'true');
   }
@@ -326,10 +328,15 @@ document.addEventListener('DOMContentLoaded', function () {
     localStorage.setItem('autoTTS', String(isOn));
   });
 
-  // TTS engine selector (Browser vs VoiceBox) — applies to both auto-TTS and
+  // TTS engine selector (Piper vs VoiceBox) — applies to both auto-TTS and
   // the per-message speak button; persisted to localStorage like autoTTS.
   const ttsEngineSelect = document.getElementById('ttsEngineSelect');
-  _setTTSUI(localStorage.getItem('ttsEngine') || 'voicebox');
+  const _storedTtsEngine = localStorage.getItem('ttsEngine');
+  _setTTSUI(_storedTtsEngine || 'piper');
+  // Migrate a pre-Piper stored value (notably the removed 'browser' engine).
+  if (_storedTtsEngine && _storedTtsEngine !== currentTTSEngine) {
+    localStorage.setItem('ttsEngine', currentTTSEngine);
+  }
   ttsEngineSelect.addEventListener('change', function () {
     _setTTSUI(this.value);
     localStorage.setItem('ttsEngine', this.value);
