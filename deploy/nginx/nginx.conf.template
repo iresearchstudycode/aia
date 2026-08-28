@@ -93,10 +93,13 @@ http {
         # (fraction bars, radicals, sub/superscripts) via computed inline `style`
         # attributes on the spans it generates — there's no CSS-class-only way to
         # do this. script-src stays strict ('self' only, no inline/eval anywhere).
+        # media-src 'self' blob: lets the page play the Piper TTS WAV it fetched
+        # from /piper/speak via URL.createObjectURL — 'blob:' only permits the
+        # page's own client-generated blobs, no external load and no exfil path.
         # Residual risk is bounded by the rest of this policy: default-src 'self',
         # connect-src 'self', and img-src without a wildcard host mean an inline
         # style still can't exfiltrate data or load an external resource.
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'self';" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; form-action 'self';" always;
         add_header Referrer-Policy "no-referrer" always;
         add_header Permissions-Policy "geolocation=(), payment=(), usb=(), camera=(), microphone=(self)" always;
 
