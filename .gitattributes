@@ -1,6 +1,11 @@
-# diff-match-patch.js is vendored verbatim and SRI-pinned in src/aia/index.html.
-# Mark it binary so git never rewrites its line endings on any platform: the
-# docker-compose bind mount serves the working-copy bytes straight to the
-# browser, which verifies them against the integrity= hash. (The file is
-# committed with LF endings; the hash is computed from those bytes.)
+# SRI-pinned vendored assets whose committed integrity= hash is the LF-bytes
+# hash: mark them `binary` so git never rewrites line endings on any platform.
+# The docker-compose bind mount serves the working-copy bytes straight to the
+# browser, which verifies them against the integrity= attribute in
+# src/aia/index.html, so the served bytes must equal the committed blob.
+#
+# (marked.min.js / dompurify.min.js are deliberately NOT listed here — their
+# committed hashes match a CRLF working copy on this autocrlf=true repo;
+# normalising those two + adding a CI guard is a tracked follow-up.)
 src/aia/scripts/diff-match-patch.js  binary
+src/aia/css/katex.min.css            binary
