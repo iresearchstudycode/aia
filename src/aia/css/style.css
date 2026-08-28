@@ -161,6 +161,22 @@ body {
   cursor: not-allowed;
 }
 
+/* "Explain changes" toggle — shown only when the English Editor persona is
+   active (visibility handled in main.js). Sits directly below the select. */
+.persona-explain-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: #4a5568;
+  cursor: pointer;
+}
+
+.persona-explain-toggle input {
+  cursor: pointer;
+}
+
 .chat-messages {
   padding: 28px 30px;
   overflow-y: auto;

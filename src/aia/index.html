@@ -285,20 +285,21 @@
     <div class="persona-panel-header" id="personaPanelHeader">Persona</div>
     <div id="personaPanelNotice" class="persona-panel-notice">Clear the conversation to switch persona</div>
     <select id="systemPromptSelect" aria-labelledby="personaPanelHeader">
-      <option value="auEnglishEditor" selected>Australian English Editor</option>
+      <option value="assistant">Assistant</option>
       <option value="casual">Casual Friend</option>
       <option value="claudePromptCompressor">Claude Prompt Compressor</option>
       <option value="creative">Creative Writer</option>
-      <option value="default">Default Assistant</option>
-      <option value="helpful">Helpful &amp; Concise</option>
+      <option value="englishEditor" selected>English Editor (Australian)</option>
       <option value="legal">Legal Assistant</option>
       <option value="medical">Medical Expert</option>
       <option value="teacher">Patient Teacher</option>
       <option value="professional">Professional Consultant</option>
-      <option value="quickwrite">Quick Write</option>
       <option value="technical">Technical Expert</option>
       <option value="transcriptai">Transcript-Based Assistant</option>
     </select>
+    <label id="editorExplainToggleRow" class="persona-explain-toggle">
+      <input type="checkbox" id="editorExplainToggle"> Explain changes
+    </label>
   </div>
 
 </body>

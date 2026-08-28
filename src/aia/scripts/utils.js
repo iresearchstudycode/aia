@@ -120,6 +120,58 @@ function parseDocumentMessageContent(content) {
   return { hasDocument: true, documentName: match[1], question: match[2] };
 }
 
+// Per-persona settings memory — switching persona restores that persona's
+// last-used thinking on/off + depth and TTS engine. Both helpers are pure:
+// they take (and return, for the writer) the raw JSON string held in
+// localStorage under PERSONA_PREFS_KEY, so main.js owns all storage I/O.
+
+const _THINKING_DEPTHS = ['low', 'medium', 'high'];
+const _TTS_ENGINES = ['browser', 'voicebox'];
+
+// Parse the persona-prefs JSON and return the stored entry for `personaKey`
+// as { thinkingOn, thinkingDepth, ttsEngine } — or null when the JSON is
+// malformed, is not an object, or has no (object) entry for that key. Never
+// throws.
+function readPersonaPref(prefsJson, personaKey) {
+  let parsed;
+  try {
+    parsed = JSON.parse(prefsJson);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const entry = parsed[personaKey];
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+  return entry;
+}
+
+// Merge `patch` into `personaKey`'s entry and return the new JSON string.
+// Malformed input JSON is treated as an empty object. Only the known keys with
+// valid values are applied: thinkingOn (boolean), thinkingDepth (low|medium|
+// high), ttsEngine (browser|voicebox); anything else in `patch` is ignored.
+function writePersonaPref(prefsJson, personaKey, patch) {
+  let prefs;
+  try {
+    prefs = JSON.parse(prefsJson);
+  } catch {
+    prefs = {};
+  }
+  if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs)) prefs = {};
+
+  const existing = prefs[personaKey];
+  const entry =
+    existing && typeof existing === 'object' && !Array.isArray(existing) ? { ...existing } : {};
+
+  if (patch && typeof patch === 'object') {
+    if (typeof patch.thinkingOn === 'boolean') entry.thinkingOn = patch.thinkingOn;
+    if (_THINKING_DEPTHS.includes(patch.thinkingDepth)) entry.thinkingDepth = patch.thinkingDepth;
+    if (_TTS_ENGINES.includes(patch.ttsEngine)) entry.ttsEngine = patch.ttsEngine;
+  }
+
+  prefs[personaKey] = entry;
+  return JSON.stringify(prefs);
+}
+
 // Node.js compat — lets Jest import these functions for unit tests; no-op in browser.
 if (typeof module !== 'undefined') {
   module.exports = {
@@ -131,7 +183,9 @@ if (typeof module !== 'undefined') {
     restoreLatexBackslashes,
     truncateDocumentText,
     buildDocumentMessageContent,
-    parseDocumentMessageContent
+    parseDocumentMessageContent,
+    readPersonaPref,
+    writePersonaPref
   };
 }
 
