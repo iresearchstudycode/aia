@@ -161,8 +161,9 @@ body {
   cursor: not-allowed;
 }
 
-/* "Explain changes" toggle — shown only when the English Editor persona is
-   active (visibility handled in main.js). Sits directly below the select. */
+/* English Editor "Editor output" mode row — shown only when the English Editor
+   persona is active (visibility handled in main.js). Sits directly below the
+   persona select. */
 .persona-explain-toggle {
   display: flex;
   align-items: center;
@@ -170,11 +171,19 @@ body {
   margin-top: 10px;
   font-size: 13px;
   color: #4a5568;
-  cursor: pointer;
 }
 
-.persona-explain-toggle input {
-  cursor: pointer;
+.persona-explain-toggle label {
+  cursor: default;
+}
+
+/* Override .persona-panel select's full-width block styling for this compact
+   inline mode selector. */
+.editor-mode-select {
+  flex: 1 1 auto;
+  width: auto;
+  padding: 6px 8px;
+  font-size: 13px;
 }
 
 .chat-messages {
@@ -627,6 +636,57 @@ body {
 }
 
 .tts-engine-select:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
+}
+
+/* English Editor "Changes" view — word-level tracked changes. pre-wrap keeps
+   the submitted line breaks; deletions read as struck-through red, insertions
+   as underlined green, both muted to sit within the app's light slate palette. */
+.message-content.editor-diff {
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+.editor-diff del {
+  text-decoration: line-through;
+  color: #c53030;
+  background: #fed7d7;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.editor-diff ins {
+  text-decoration: underline;
+  color: #276749;
+  background: #c6f6d5;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+/* Per-message Original/Changes/Clean switch — matches .tts-engine-select sizing,
+   sits unobtrusively alongside the copy/speak actions. */
+.editor-view-switch {
+  height: 28px;
+  margin-left: 6px;
+  padding: 0 4px 0 6px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.editor-view-switch:hover {
+  background: #f0f9ff;
+  border-color: #0ea5e9;
+  color: #0ea5e9;
+}
+
+.editor-view-switch:focus-visible {
   outline: 2px solid #0ea5e9;
   outline-offset: 2px;
 }

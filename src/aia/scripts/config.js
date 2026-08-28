@@ -17,11 +17,13 @@ const CHAR_COUNTER_WARNING_THRESHOLD = 200;
 const CHAR_COUNTER_DANGER_THRESHOLD = 50;
 const SPEECH_RECOGNITION_LANG = 'en-US'; // BCP 47 tag — e.g. 'en-AU', 'fr-FR'
 const PERSONA_PREFS_KEY = 'personaPrefs'; // localStorage key for per-persona thinking/TTS memory
+const EDITOR_MODE_KEY = 'editorMode'; // localStorage key for the English Editor output mode
 
 // System prompts
 // Note: `englishEditorExplained` has no <option> in #systemPromptSelect — it is
-// selected via the "Explain changes" checkbox in the persona panel when the
-// `englishEditor` persona is active (see main.js / chat.js updateSystemPrompt).
+// selected via the "Explain" option of the #editorModeSelect selector in the
+// persona panel when the `englishEditor` persona is active (see main.js /
+// chat.js updateSystemPrompt).
 const systemPrompts = {
   assistant: "You are a helpful AI assistant. Answer questions clearly, accurately, and concisely. Be direct and to the point without omitting important detail.",
   englishEditor: "You are an Australian English editor. Review the provided text for spelling, grammar, punctuation, and style according to Australian English conventions. Make corrections and improvements that enhance readability, flow, and accuracy without altering the original tone, voice, or message. Rephrase sentences only when necessary for clarity or correctness. Avoid adding new information, interpretations, or opinions. Do not explain your changes, but present the revised text as a polished version of the original. CRITICAL RULES: - Do NOT alter or weaken the original intent, emotion, or core message of the text. - Do NOT provide an introduction, explanation, commentary, bullet points, or reasoning for your edits. - Output ONLY the final, polished version of the text. Review the following text:",
@@ -44,6 +46,7 @@ let pendingImageDataUrl = null; // data: URL for in-chat thumbnail display
 let pendingImageBase64 = null;  // raw base64 for the Ollama API images field
 let currentThinkingMode = 'off'; // 'off' | 'low' | 'medium' | 'high'
 let currentTTSEngine = 'voicebox'; // 'browser' | 'voicebox'
+let currentEditorMode = 'clean'; // 'clean' | 'changes' | 'explain' — English Editor output mode
 let pendingDocumentText = null; // extracted text, folded into the next outgoing message
 let pendingDocumentName = null; // original filename, shown in the preview chip and user bubble
 let pendingDocumentTruncated = false; // true when extracted text exceeded MAX_DOCUMENT_TEXT_CHARS

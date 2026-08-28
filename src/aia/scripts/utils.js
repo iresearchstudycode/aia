@@ -172,6 +172,77 @@ function writePersonaPref(prefsJson, personaKey, patch) {
   return JSON.stringify(prefs);
 }
 
+// Resolve the English Editor output mode on load, migrating the pre-1.18.0
+// boolean `editorExplainChanges` flag when no `editorMode` value is stored yet.
+// Pure: the caller (main.js) reads both localStorage values, passes them here,
+// and is responsible for persisting the result / clearing the legacy key.
+//
+// @param {?string} editorMode           - current localStorage['editorMode'] (or null)
+// @param {?string} editorExplainChanges - legacy localStorage['editorExplainChanges'] (or null)
+// @returns {string} one of 'clean' | 'changes' | 'explain'
+function migrateEditorModeValue(editorMode, editorExplainChanges) {
+  if (editorMode) return editorMode;
+  if (editorExplainChanges === 'true') return 'explain';
+  return 'clean';
+}
+
+// Word-level tracked-changes diff between two strings, using the diff-match-patch
+// "word mode" recipe: tokenize on whitespace boundaries (whitespace runs are
+// their own tokens, so concatenating every token reproduces the input exactly),
+// map each unique token to a single BMP code point, diff the resulting char
+// strings, run cleanupSemantic, then expand each char run back to token text.
+//
+// @param {string} original - the "before" text (rendered struck-through)
+// @param {string} revised  - the "after" text (rendered underlined)
+// @param {Function} [DMP]   - the diff_match_patch constructor; defaults to the
+//   browser global. Passed explicitly by the Jest suite, where the vendored
+//   library is CommonJS-required rather than a global. Kept as a parameter (not
+//   a module-level require) so utils.js has no hard Node dependency on the
+//   vendored file at load time in the browser.
+// @returns {Array<{op: -1|0|1, text: string}>} delete / equal / insert segments
+function diffWords(original, revised, DMP) {
+  const Ctor = DMP || (typeof diff_match_patch !== 'undefined' ? diff_match_patch : null);
+  if (typeof Ctor !== 'function') {
+    throw new Error('diffWords: diff_match_patch constructor is not available');
+  }
+  const dmp = new Ctor();
+
+  // tokenArray[0] is reserved as '' (mirrors diff-match-patch's own line-mode
+  // recipe) so real tokens start at code point 1 and code point 0 stays unused.
+  const tokenArray = [''];
+  const tokenHash = Object.create(null);
+
+  const encode = (text) => {
+    let chars = '';
+    const tokens = text.match(/\s+|\S+/g) || [];
+    for (const tok of tokens) {
+      let id = tokenHash[tok];
+      if (id === undefined) {
+        id = tokenArray.length;
+        tokenArray.push(tok);
+        tokenHash[tok] = id;
+      }
+      chars += String.fromCharCode(id);
+    }
+    return chars;
+  };
+
+  const diffs = dmp.diff_main(encode(original), encode(revised), false);
+  dmp.diff_cleanupSemantic(diffs);
+
+  // diff-match-patch returns an array of 2-tuples ([op, text]) — index access
+  // rather than destructuring, since this build's tuple objects are not iterable.
+  const segments = [];
+  for (const tuple of diffs) {
+    const op = tuple[0];
+    const data = tuple[1];
+    let text = '';
+    for (const ch of data) text += tokenArray[ch.charCodeAt(0)];
+    if (text) segments.push({ op, text });
+  }
+  return segments;
+}
+
 // Node.js compat — lets Jest import these functions for unit tests; no-op in browser.
 if (typeof module !== 'undefined') {
   module.exports = {
@@ -185,7 +256,9 @@ if (typeof module !== 'undefined') {
     buildDocumentMessageContent,
     parseDocumentMessageContent,
     readPersonaPref,
-    writePersonaPref
+    writePersonaPref,
+    migrateEditorModeValue,
+    diffWords
   };
 }
 

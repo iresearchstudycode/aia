@@ -1,0 +1,11 @@
+# Vendored third-party assets are SRI-pinned in src/aia/index.html — their bytes
+# must be identical on every checkout regardless of the platform's autocrlf
+# setting, or the browser will refuse to load them. Force LF so the working-copy
+# file (served directly by the docker-compose bind mount) always matches the
+# committed blob the integrity hash was computed from.
+src/aia/scripts/marked.min.js            text eol=lf
+src/aia/scripts/dompurify.min.js         text eol=lf
+src/aia/scripts/katex.min.js             text eol=lf
+src/aia/scripts/katex-auto-render.min.js text eol=lf
+src/aia/scripts/diff-match-patch.js      text eol=lf
+src/aia/css/katex.min.css                text eol=lf
