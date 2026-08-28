@@ -1,0 +1,11 @@
+# SRI-pinned vendored assets whose committed integrity= hash is the LF-bytes
+# hash: mark them `binary` so git never rewrites line endings on any platform.
+# The docker-compose bind mount serves the working-copy bytes straight to the
+# browser, which verifies them against the integrity= attribute in
+# src/aia/index.html, so the served bytes must equal the committed blob.
+#
+# (marked.min.js / dompurify.min.js are deliberately NOT listed here — their
+# committed hashes match a CRLF working copy on this autocrlf=true repo;
+# normalising those two + adding a CI guard is a tracked follow-up.)
+src/aia/scripts/diff-match-patch.js  binary
+src/aia/css/katex.min.css            binary

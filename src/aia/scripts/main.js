@@ -273,29 +273,41 @@ document.addEventListener('DOMContentLoaded', function () {
   // Sync JS state with whichever option is marked selected in the HTML
   const select = document.getElementById('systemPromptSelect');
 
-  // "Explain changes" toggle — only meaningful for the English Editor persona,
-  // where it swaps between the silent and the change-explaining prompt variant.
-  const editorExplainToggle = document.getElementById('editorExplainToggle');
-  const editorExplainRow = document.getElementById('editorExplainToggleRow');
+  // English Editor output mode — only meaningful for the English Editor persona.
+  // 'clean'/'changes' use the silent prompt (the 'changes' tracked-changes view
+  // is derived client-side from that output); 'explain' swaps in the
+  // change-explaining prompt variant.
+  const editorModeSelect = document.getElementById('editorModeSelect');
+  const editorModeRow = document.getElementById('editorModeRow');
 
-  function _updateEditorExplainVisibility() {
-    editorExplainRow.style.display = select.value === 'englishEditor' ? '' : 'none';
+  function _updateEditorModeVisibility() {
+    editorModeRow.style.display = select.value === 'englishEditor' ? '' : 'none';
   }
 
-  editorExplainToggle.checked = localStorage.getItem('editorExplainChanges') === 'true';
-  editorExplainToggle.addEventListener('change', function () {
-    localStorage.setItem('editorExplainChanges', String(this.checked));
+  // Migrate the pre-1.18.0 boolean `editorExplainChanges` flag the first time
+  // the app loads after this upgrade, then never look at it again.
+  const _hadEditorMode = localStorage.getItem(EDITOR_MODE_KEY) !== null;
+  const _legacyEditorExplain = localStorage.getItem('editorExplainChanges');
+  currentEditorMode = migrateEditorModeValue(
+    localStorage.getItem(EDITOR_MODE_KEY),
+    _legacyEditorExplain
+  );
+  if (!_hadEditorMode && _legacyEditorExplain !== null) {
+    localStorage.setItem(EDITOR_MODE_KEY, currentEditorMode);
+    localStorage.removeItem('editorExplainChanges');
+  }
+  editorModeSelect.value = currentEditorMode;
+
+  editorModeSelect.addEventListener('change', function () {
+    currentEditorMode = this.value;
+    localStorage.setItem(EDITOR_MODE_KEY, this.value);
     if (select.value === 'englishEditor') {
-      currentSystemPrompt = this.checked
-        ? systemPrompts.englishEditorExplained
-        : systemPrompts.englishEditor;
+      currentSystemPrompt = _resolveSystemPrompt('englishEditor');
     }
   });
-  _updateEditorExplainVisibility();
+  _updateEditorModeVisibility();
 
-  currentSystemPrompt = select.value === 'englishEditor'
-    ? (editorExplainToggle.checked ? systemPrompts.englishEditorExplained : systemPrompts.englishEditor)
-    : systemPrompts[select.value];
+  currentSystemPrompt = _resolveSystemPrompt(select.value);
   updateSystemPromptState();
 
   // Per-persona settings memory — load the store and record the starting persona.
@@ -368,7 +380,7 @@ document.addEventListener('DOMContentLoaded', function () {
     _persistPersonaPref(_snapshotPersonaSettings());
     _activePersonaKey = this.value;
     _applyPersonaSettings(readPersonaPref(_personaPrefsJson, _activePersonaKey));
-    _updateEditorExplainVisibility();
+    _updateEditorModeVisibility();
   });
   document.getElementById('systemPromptSelect').addEventListener('change', function () {
     _applyCurrentPersonaLabel();

@@ -19,6 +19,8 @@
     integrity="sha256-aLkRVRC4ztuZCaEN53mclMBwdIEpb3VcCoiIy4/N4hY="></script>
   <script type="application/javascript" src="./scripts/katex-auto-render.min.js"
     integrity="sha256-5TctGZvNrotN5x0PfOunKkuhJ3SifGCm8fd9A7MijuQ="></script>
+  <script type="application/javascript" src="./scripts/diff-match-patch.js"
+    integrity="sha256-mnnPAxrHwuNmQWGBBRrLPm0srPecU1QUj0xx6iDH5KM="></script>
   <script type="application/javascript" src="./scripts/config.js"></script>
   <script type="application/javascript" src="./scripts/utils.js"></script>
   <script type="application/javascript" src="./scripts/speech.js"></script>
@@ -297,9 +299,14 @@
       <option value="technical">Technical Expert</option>
       <option value="transcriptai">Transcript-Based Assistant</option>
     </select>
-    <label id="editorExplainToggleRow" class="persona-explain-toggle">
-      <input type="checkbox" id="editorExplainToggle"> Explain changes
-    </label>
+    <div id="editorModeRow" class="persona-explain-toggle">
+      <label for="editorModeSelect">Editor output</label>
+      <select id="editorModeSelect" class="editor-mode-select">
+        <option value="clean" selected>Clean</option>
+        <option value="changes">Show changes</option>
+        <option value="explain">Explain</option>
+      </select>
+    </div>
   </div>
 
 </body>
