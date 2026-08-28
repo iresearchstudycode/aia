@@ -26,6 +26,7 @@
 - [x] Cloud-hardening plan produced — `docs/cloud-hardening-plan.md` (analysis only, no code/config changes); 15 prioritized findings, P0 blockers B/C/D/E/F/N to resolve before any internet exposure
 - [x] Finding E (P0) — `deploy/nginx/nginx.conf` parametrized via `deploy/nginx/nginx.conf.template` + `deploy/nginx/render-nginx-conf.sh` (POSIX `sh` + `envsubst` with an explicit allowlist so nginx's own `$host`/`$binary_remote_addr` stay literal). 7 deployment placeholders: `AUTH_UPSTREAM`, `VOICEBOX_PROXY_UPSTREAM`, `DOC_EXTRACT_UPSTREAM`, `OLLAMA_UPSTREAM`, `SERVER_NAME`, `SSL_CERT_PATH`, `SSL_KEY_PATH` — defaults reproduce the committed file byte-for-byte (round-trip verified). `nginx-config-check` CI job extended with a drift guard (committed `nginx.conf` == default render) and a cloud-value render sanity check (no `${...}` left unsubstituted). `docker-compose` still mounts the committed local-default `nginx.conf`; **deferred follow-up: docker-compose init-container render for a fully template-driven runtime** (plus Findings D/F template values — `real_ip`, `TLS_MODE`, HSTS flags — deliberately out of scope here).
 - [x] Version bumped to 1.16.0
+- [x] Security hardening **paused** after Finding E — status & handoff captured in `docs/hardening-status.md` (session summary, completed work, remaining P0/P1/P2 tasks in dependency order with per-task sub-agent model recommendations, resume instructions). Detailed spec remains `docs/cloud-hardening-plan.md`.
 
 ## Testing
 
