@@ -4,6 +4,7 @@
   "scripts": {
     "lint:js": "eslint src/aia/scripts",
     "lint:html": "htmlhint src/aia/index.html",
+    "check:sri": "node scripts/check-sri.mjs",
     "test:js": "jest"
   },
   "devDependencies": {

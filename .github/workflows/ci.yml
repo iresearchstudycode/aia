@@ -112,6 +112,9 @@ jobs:
       - name: Lint (htmlhint)
         run: npm run lint:html
 
+      - name: SRI check — pinned vendored assets match index.html on a clean checkout
+        run: npm run check:sri
+
       - name: Test (jest)
         run: npm run test:js
 
