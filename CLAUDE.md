@@ -295,20 +295,18 @@ Self-signed certs are in `deploy/certs/` (generated via mkcert). Nginx is config
 
 ## Updating Vendored Libraries
 
-`marked.min.js`, `dompurify.min.js`, `katex.min.js`, `katex-auto-render.min.js`, `diff-match-patch.js`, and `css/katex.min.css` are all pinned with SHA-256 SRI hashes in `index.html`. When upgrading any of them, recompute the hash and update the corresponding `integrity=` attribute:
+`marked.min.js`, `dompurify.min.js`, `katex.min.js`, `katex-auto-render.min.js`, `diff-match-patch.js`, and `css/katex.min.css` are all pinned with SHA-256 SRI hashes in `index.html`.
+
+The docker-compose bind mount serves the working-copy bytes straight to the browser, so the served file must hash to exactly the `integrity=` value — a line-ending conversion between commit and checkout would be enough to break it. **All six assets are marked `binary` in `.gitattributes`**, so git applies no clean/smudge filter: the working copy, the committed blob, and every fresh checkout are byte-identical on any platform and under any `core.autocrlf` setting. Recompute the hash straight from the file and update the corresponding `integrity=` attribute:
 
 ```powershell
 $bytes = [IO.File]::ReadAllBytes('src\aia\scripts\<filename>.js')   # or src\aia\css\<filename>.css
 "sha256-" + [Convert]::ToBase64String([Security.Cryptography.SHA256]::Create().ComputeHash($bytes))
 ```
 
-The docker-compose bind mount serves the working-copy bytes straight to the browser, so the served file must hash to exactly the `integrity=` value — a line-ending conversion between commit and checkout is enough to break it, and this repo's dev machine runs `core.autocrlf=true`. Current state, asset by asset:
+`npm run check:sri` (`scripts/check-sri.mjs`) re-hashes every `integrity=`-pinned file referenced from `index.html` and fails on any mismatch; CI runs it in the `frontend-lint` job on the clean Linux checkout, so a stale hash — or a re-vendored file whose `integrity=` wasn't updated — is caught before it can reach a browser. Run it locally after changing any vendored asset.
 
-- `diff-match-patch.js`, `css/katex.min.css` — marked **`binary`** in `.gitattributes`, so git never converts their endings on any platform. Their `integrity=` is the committed (LF) bytes' hash and stays valid everywhere. Compute new hashes from the committed bytes (`git show HEAD:<path> | sha256sum`).
-- `katex.min.js`, `katex-auto-render.min.js` — single-line, no newline to convert, so `autocrlf` is a no-op; their `integrity=` matches as-is.
-- `marked.min.js`, `dompurify.min.js` — multi-line, and their committed `integrity=` values match a **CRLF** working copy (they were hashed on this Windows repo). Leave them alone unless you're doing the tracked follow-up (normalise all vendored assets to `binary` + LF-recomputed hashes, add a CI guard that fails when a served asset's hash ≠ its `integrity=`).
-
-If you see a browser SRI error, compare `git show HEAD:<path> | sha256sum`, the working-copy `sha256sum`, and the `integrity=` value — all three must agree.
+If you see a browser SRI error, run `npm run check:sri`; for each mismatch it prints the `integrity=` value from `index.html` alongside the freshly computed hash (and flags any CR bytes in the file) so you can see what disagrees.
 
 KaTeX's font files (`src/aia/css/fonts/`) are referenced by `katex.min.css` via relative `url(fonts/...)` and are **not** individually SRI-pinned — SRI only covers the top-level `<script>`/`<link>` tag it's attached to, not resources that tag's content goes on to fetch. To re-vendor KaTeX from scratch (e.g. to bump its version): `npm pack katex@<version>` in a scratch directory, then copy `dist/katex.min.js` → `scripts/katex.min.js`, `dist/contrib/auto-render.min.js` → `scripts/katex-auto-render.min.js`, `dist/katex.min.css` → `css/katex.min.css`, and the entire `dist/fonts/` directory → `css/fonts/`.
 
