@@ -179,6 +179,8 @@
 - [x] `tests/js/code-render.test.js` — 7 Jest tests (jsdom env): `renderMarkdownToHtml` keeps ` ```mermaid ` as `<pre><code class="language-mermaid">` and ` ```js ` as `language-js`; `highlightCodeIn` adds `hljs` + `hljs-*` spans + `data-hljs-done` to a `pre code`, leaves `language-mermaid` untouched, is idempotent, no-ops on codeless input; `renderMermaidIn` no-ops without the `mermaid` global. New devDependency `jest-environment-jsdom@^30` (jest's own official DOM env — jest 30 no longer bundles jsdom) for this one file's `@jest-environment jsdom` docblock; the other 16 test files stay on the fast `node` env. Full suite 275 tests green.
 - [x] `CLAUDE.md` — new "Code Highlighting (highlight.js)" and "Diagrams (Mermaid)" sections; JS Module Architecture rows for both vendored files + `enrichRenderedContent`; Security Invariants entries (hljs output re-sanitised; Mermaid `strict` + SVG-profile sanitise; CSP unchanged); "Updating Vendored Libraries" entries with source URLs/versions. `README.md` — feature list, tech-stack table, supply-chain row, file tree.
 - [x] Version bumped to 1.19.0
+- [x] Technical Expert persona prompt — added a line instructing it to emit diagrams as Mermaid inside a fence tagged exactly ` ```mermaid ` (never a bare fence or other label), so `renderMermaidIn()` picks them up. `gemma4:e4b` was intermittently tagging sequence-diagram fences ` ```sequence ` / bare, which rendered as plain code.
+- [x] Version bumped to 1.19.1
 
 ## Known Limitations (Accepted Trade-offs)
 
