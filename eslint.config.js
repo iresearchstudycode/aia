@@ -22,6 +22,8 @@ const crossModuleGlobals = {
   CHAR_COUNTER_WARNING_THRESHOLD: 'readonly',
   CHAR_COUNTER_DANGER_THRESHOLD: 'readonly',
   SPEECH_RECOGNITION_LANG: 'readonly',
+  PERSONA_PREFS_KEY: 'readonly',
+  EDITOR_MODE_KEY: 'readonly',
   systemPrompts: 'readonly',
   // config.js — mutable state
   conversationHistory: 'writable',
@@ -30,6 +32,7 @@ const crossModuleGlobals = {
   pendingImageBase64: 'writable',
   currentThinkingMode: 'writable',
   currentTTSEngine: 'writable',
+  currentEditorMode: 'writable',
   pendingDocumentText: 'writable',
   pendingDocumentName: 'writable',
   pendingDocumentTruncated: 'writable',
@@ -46,6 +49,10 @@ const crossModuleGlobals = {
   truncateDocumentText: 'readonly',
   buildDocumentMessageContent: 'readonly',
   parseDocumentMessageContent: 'readonly',
+  readPersonaPref: 'readonly',
+  writePersonaPref: 'readonly',
+  migrateEditorModeValue: 'readonly',
+  diffWords: 'readonly',
   // speech.js — functions
   loadVoices: 'readonly',
   toggleSpeechRecognition: 'readonly',
@@ -79,6 +86,9 @@ const crossModuleGlobals = {
   handleOpenFile: 'readonly',
   renderMathIn: 'readonly',
   renderMarkdownToHtml: 'readonly',
+  _resolveSystemPrompt: 'readonly',
+  renderEditorReply: 'readonly',
+  _buildEditorViewSwitch: 'readonly',
   // main.js
   clearImagePreview: 'readonly',
   clearDocumentPreview: 'readonly',
@@ -89,13 +99,16 @@ const crossModuleGlobals = {
   marked: 'readonly',
   DOMPurify: 'readonly',
   renderMathInElement: 'readonly',
+  diff_match_patch: 'readonly',
 };
 
 module.exports = [
-  // Global ignore — never lint vendored minified files regardless of how ESLint
-  // is invoked (glob or directory). A standalone ignores block without `files`
-  // applies globally in ESLint v9 flat config.
-  { ignores: ['**/*.min.js'] },
+  // Global ignore — never lint vendored third-party files regardless of how
+  // ESLint is invoked (glob or directory). A standalone ignores block without
+  // `files` applies globally in ESLint v9 flat config. diff-match-patch.js is
+  // Google's official uncompressed build, vendored verbatim (see index.html /
+  // CLAUDE.md "Updating Vendored Libraries") — it is not renamed to *.min.js.
+  { ignores: ['**/*.min.js', 'src/aia/scripts/diff-match-patch.js'] },
   {
     files: ['src/aia/scripts/*.js'],
     ...js.configs.recommended,

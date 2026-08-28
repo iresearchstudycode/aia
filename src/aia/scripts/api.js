@@ -76,6 +76,20 @@ function stopStreaming() {
   if (streamAbortController) streamAbortController.abort();
 }
 
+// True when a completed reply on this turn should be rendered as an English
+// Editor exchange (polished text + Original/Changes/Clean view switch): the
+// English Editor persona is active, the output mode is 'clean' or 'changes'
+// (never 'explain' — that reply is prose + revision, not pure revised text),
+// and the turn carries no document attachment. Image turns are excluded by the
+// caller (they take the non-streaming vision path).
+function _isEditorExchangeTurn(userMessage) {
+  const sel = document.getElementById('systemPromptSelect');
+  if (!sel || sel.value !== 'englishEditor') return false;
+  if (currentEditorMode !== 'clean' && currentEditorMode !== 'changes') return false;
+  if (parseDocumentMessageContent(userMessage).hasDocument) return false;
+  return true;
+}
+
 function setStreamingUI(isStreaming) {
   const sendBtn = document.getElementById('sendBtn');
   if (isStreaming) {
@@ -132,6 +146,11 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
   // returns { thinking: fullResponse, answer: '' }, which would render the answer inside
   // the thinking block.
   const thinkingActive = !isVision && currentThinkingMode !== 'off';
+
+  // Editor-exchange rendering is mutually exclusive with the thinking-block UI
+  // (an editor reply is meant to be just the polished text) — gate on
+  // !thinkingActive so a <details> block and the diff view never mix.
+  const isEditorExchange = !isVision && !thinkingActive && _isEditorExchangeTurn(userMessage);
 
   streamAbortController = new AbortController();
   setStreamingUI(true);
@@ -245,18 +264,23 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
         savedContent = fullResponse;
       }
 
-      const answerHtml = renderMarkdownToHtml(savedContent);
-      if (finalThinking) {
+      if (isEditorExchange) {
+        // Polished text + Original/Changes/Clean switch, diffed against the
+        // user's just-sent text. The raw model output is still stored verbatim
+        // in conversationHistory below; the diff is always derived, never stored.
+        renderEditorReply(contentDiv, userMessage, savedContent, currentEditorMode);
+      } else if (finalThinking) {
         contentDiv.innerHTML =
           '<details class="thinking-block">' +
           '<summary aria-label="Toggle AI reasoning">Thinking</summary>' +
           '<div class="thinking-content">' + renderMarkdownToHtml(finalThinking) + '</div>' +
           '</details>' +
-          '<div class="answer-content">' + answerHtml + '</div>';
+          '<div class="answer-content">' + renderMarkdownToHtml(savedContent) + '</div>';
+        renderMathIn(contentDiv);
       } else {
-        contentDiv.innerHTML = answerHtml;
+        contentDiv.innerHTML = renderMarkdownToHtml(savedContent);
+        renderMathIn(contentDiv);
       }
-      renderMathIn(contentDiv);
     }
 
     // -------------------------------------------------------------------
@@ -264,22 +288,34 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
     // -------------------------------------------------------------------
     const assistantTsISO = new Date().toISOString();
     const assistantTsFmt = formatTimestamp(new Date());
-    conversationHistory.push({
+    const assistantEntry = {
       role: 'assistant',
       content: savedContent,
       timestamp: assistantTsISO,
       formattedTimestamp: assistantTsFmt
-    });
+    };
+    if (isEditorExchange) {
+      assistantEntry.editorExchange = true;
+      assistantEntry.editorView = currentEditorMode; // 'clean' | 'changes'
+    }
+    conversationHistory.push(assistantEntry);
 
     const tsElem = messageDiv.querySelector('.message-timestamp');
     if (tsElem) tsElem.textContent = assistantTsFmt;
 
+    // Copy/speak act on the clean revised text (savedContent), never the diff
+    // markup or the original — same as any other reply.
     const copyBtn = messageDiv.querySelector('.copy-btn');
     if (copyBtn) copyBtn.dataset.content = savedContent;
     const speakBtn = messageDiv.querySelector('.speak-btn');
     if (speakBtn) speakBtn.dataset.content = savedContent;
     const actionsDiv = messageDiv.querySelector('.message-actions');
     if (actionsDiv) actionsDiv.style.display = '';
+    if (isEditorExchange && actionsDiv) {
+      actionsDiv.appendChild(
+        _buildEditorViewSwitch(assistantEntry, contentDiv, userMessage, savedContent)
+      );
+    }
 
     if (document.getElementById('autoTTSBtn').classList.contains('tts-on')) {
       speakText(savedContent);

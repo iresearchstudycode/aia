@@ -1,13 +1,19 @@
 version: 2
 updates:
+  # All version-update PRs target `dev`, not the default branch, so `master`
+  # only ever advances through a `dev` -> `master` release PR (see the
+  # "Branching & Release Workflow" section in CLAUDE.md). Note: Dependabot
+  # *security* PRs still open against the default branch and ignore this.
   - package-ecosystem: "npm"
     directory: "/"
+    target-branch: "dev"
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 5
 
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "dev"
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 5

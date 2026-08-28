@@ -55,6 +55,78 @@ function renderMarkdownToHtml(text) {
   return DOMPurify.sanitize(restoreLatexBackslashes(html));
 }
 
+// English Editor replies: the model returns just the polished text, and the
+// reader can view it three ways — 'original' (their submitted text, verbatim),
+// 'changes' (a word-level tracked-changes diff), or 'clean' (the polished text
+// rendered like any other reply). `revisedText` is the raw model output stored
+// in conversationHistory; the diff is always derived here, never stored.
+//
+// SECURITY: the 'changes' view is assembled entirely with createElement /
+// createTextNode / textContent — no innerHTML, no string concatenation — so it
+// introduces no new sanitisation boundary. (<ins>/<del> are in DOMPurify's
+// default allowlist regardless.) The 'clean' view reuses renderMarkdownToHtml(),
+// the same sanitised boundary every other reply goes through.
+const EDITOR_VIEW_LABELS = { original: 'Original', changes: 'Changes', clean: 'Clean' };
+
+function renderEditorReply(container, originalText, revisedText, view) {
+  container.classList.remove('editor-diff');
+  container.innerHTML = '';
+
+  if (view === 'original') {
+    container.textContent = originalText;
+    return;
+  }
+
+  if (view === 'changes') {
+    container.classList.add('editor-diff');
+    diffWords(originalText, revisedText).forEach((seg) => {
+      if (seg.op === 0) {
+        container.appendChild(document.createTextNode(seg.text));
+        return;
+      }
+      const el = document.createElement(seg.op === -1 ? 'del' : 'ins');
+      el.textContent = seg.text;
+      container.appendChild(el);
+    });
+    return;
+  }
+
+  // 'clean' — render the polished text like a normal reply.
+  container.innerHTML = renderMarkdownToHtml(revisedText);
+  renderMathIn(container);
+}
+
+// Build the small Original/Changes/Clean selector shown alongside an editor
+// reply's copy/speak actions. Mutates `entry.editorView` on change (so the
+// choice persists into conversationHistory and the saved-chat JSON) and
+// re-renders `container` in place — no re-send.
+function _buildEditorViewSwitch(entry, container, originalText, revisedText) {
+  const select = document.createElement('select');
+  select.className = 'editor-view-switch';
+  select.setAttribute('aria-label', 'Editor reply view');
+  ['original', 'changes', 'clean'].forEach((v) => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = EDITOR_VIEW_LABELS[v];
+    select.appendChild(opt);
+  });
+  select.value = entry.editorView || 'clean';
+  select.addEventListener('change', function () {
+    entry.editorView = this.value;
+    renderEditorReply(container, originalText, revisedText, this.value);
+  });
+  return select;
+}
+
+// The user turn an editor reply revised — the nearest preceding 'user' entry.
+// Returns null when there is none (shouldn't happen for a tagged exchange).
+function _precedingUserText(history, idx) {
+  for (let i = idx - 1; i >= 0; i--) {
+    if (history[i].role === 'user') return history[i].content;
+  }
+  return null;
+}
+
 function createSpeakButton(content) {
   // VoiceBox does not depend on the browser's Web Speech API, so the button
   // is created even when speechSynthesis is absent — speakText() itself
@@ -241,10 +313,24 @@ function closeWindow() {
   }
 }
 
+// Resolve the option value to the actual prompt text. `englishEditor` has two
+// prompt variants — the silent/output-only one and the change-explaining one —
+// chosen by the #editorModeSelect selector in the persona panel: mode 'explain'
+// uses the explaining prompt, modes 'clean'/'changes' use the silent one (the
+// 'changes' diff view is derived client-side from that silent output).
+function _resolveSystemPrompt(optionValue) {
+  if (optionValue === 'englishEditor') {
+    return currentEditorMode === 'explain'
+      ? systemPrompts.englishEditorExplained
+      : systemPrompts.englishEditor;
+  }
+  return systemPrompts[optionValue];
+}
+
 // Update system prompt
 function updateSystemPrompt() {
   const select = document.getElementById('systemPromptSelect');
-  currentSystemPrompt = systemPrompts[select.value];
+  currentSystemPrompt = _resolveSystemPrompt(select.value);
 
   // If conversation has started, warn user
   if (conversationHistory.length > 0) {
@@ -253,8 +339,18 @@ function updateSystemPrompt() {
       document.getElementById('chatMessages').innerHTML = '';
       updateSystemPromptState(); // Update state after clearing
     } else {
-      // Revert selection
-      select.value = Object.keys(systemPrompts).find(key => systemPrompts[key] === currentSystemPrompt);
+      // Revert selection. Both editor variants map back to the single
+      // `englishEditor` option — a raw key lookup would yield
+      // `englishEditorExplained`, which is not a valid <option> value and would
+      // silently blank the select.
+      if (
+        currentSystemPrompt === systemPrompts.englishEditor ||
+        currentSystemPrompt === systemPrompts.englishEditorExplained
+      ) {
+        select.value = 'englishEditor';
+      } else {
+        select.value = Object.keys(systemPrompts).find(key => systemPrompts[key] === currentSystemPrompt);
+      }
     }
   }
 }
@@ -366,11 +462,15 @@ function saveChat() {
   // Export conversationHistory as JSON — strip in-memory image data (imageBase64,
   // imageDataUrl) to keep files small; preserve hasImage so loaded history can show
   // a placeholder where an image was attached.
-  const exportData = conversationHistory.map(({ role, content, timestamp, hasImage }) => {
-    const entry = { role, content, timestamp };
-    if (hasImage) entry.hasImage = true;
-    return entry;
-  });
+  const exportData = conversationHistory.map(
+    ({ role, content, timestamp, hasImage, editorExchange, editorView }) => {
+      const entry = { role, content, timestamp };
+      if (hasImage) entry.hasImage = true;
+      if (editorExchange) entry.editorExchange = true;
+      if (editorView) entry.editorView = editorView;
+      return entry;
+    }
+  );
   const json = JSON.stringify(exportData, null, 2);
 
   const blob = new Blob([json], { type: 'application/json' });
@@ -464,7 +564,7 @@ function renderConversationHistory() {
   const messagesDiv = document.getElementById('chatMessages');
   messagesDiv.innerHTML = '';
 
-  conversationHistory.forEach(msg => {
+  conversationHistory.forEach((msg, idx) => {
     const roleClass = msg.role === 'user' ? 'user-message' : 'ai-message';
     const label = msg.role === 'user' ? 'You' : 'AI Assistant';
     const formatted = msg.formattedTimestamp || formatTimestamp(new Date(msg.timestamp || Date.now()));
@@ -520,15 +620,37 @@ function renderConversationHistory() {
     } else {
       messageDiv.innerHTML = `
         <div class="message-label">${label}</div>
-        <div class="message-content">${renderMarkdownToHtml(msg.content)}</div>
+        <div class="message-content"></div>
         <div class="message-timestamp">${escapeHtml(formatted)}</div>
       `;
-      renderMathIn(messageDiv.querySelector('.message-content'));
+      const contentEl = messageDiv.querySelector('.message-content');
+
+      // An English Editor exchange (tagged in api.js, or loaded from a saved
+      // chat) renders as the polished text with an Original/Changes/Clean view
+      // switch, diffed against the user turn it revised — instead of the plain
+      // markdown render. Falls back to normal rendering if the paired user turn
+      // is somehow missing.
+      const editorOriginal =
+        msg.editorExchange === true ? _precedingUserText(conversationHistory, idx) : null;
+
+      if (msg.editorExchange === true && editorOriginal !== null) {
+        if (!msg.editorView) msg.editorView = 'clean';
+        renderEditorReply(contentEl, editorOriginal, msg.content, msg.editorView);
+      } else {
+        contentEl.innerHTML = renderMarkdownToHtml(msg.content);
+        renderMathIn(contentEl);
+      }
+
       const actionsDiv = document.createElement('div');
       actionsDiv.className = 'message-actions';
       actionsDiv.appendChild(createCopyButton(msg.content));
       const speakBtnH = createSpeakButton(msg.content);
       if (speakBtnH) actionsDiv.appendChild(speakBtnH);
+      if (msg.editorExchange === true && editorOriginal !== null) {
+        actionsDiv.appendChild(
+          _buildEditorViewSwitch(msg, contentEl, editorOriginal, msg.content)
+        );
+      }
       messageDiv.appendChild(actionsDiv);
     }
 
@@ -581,6 +703,8 @@ function handleOpenFile(event) {
           formattedTimestamp: formatTimestamp(tsDate)
         };
         if (item.hasImage) entry.hasImage = true;
+        if (item.editorExchange === true) entry.editorExchange = true;
+        if (typeof item.editorView === 'string') entry.editorView = item.editorView;
         return entry;
       });
 
