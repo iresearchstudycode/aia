@@ -2,6 +2,8 @@
 const MODEL_NAME = 'gemma4:e4b';        // text + thinking mode
 const VISION_MODEL_NAME = 'gemma3:4b'; // vision-capable model (gemma4:e4b has no vision encoder in its GGUF)
 const OLLAMA_API_URL = 'https://localhost/ollama/api/chat';
+const OLLAMA_TAGS_URL = 'https://localhost/ollama/api/tags'; // GET — lists models installed in Ollama, for the model selector
+const OLLAMA_MODEL_KEY = 'ollamaModel'; // localStorage key for the user's selected model
 const VOICEBOX_SPEAK_URL = 'https://localhost/voicebox/speak';
 const PIPER_SPEAK_URL = 'https://localhost/piper/speak';
 const DOC_EXTRACT_URL = 'https://localhost/doc-extract/extract';
@@ -45,6 +47,7 @@ let currentSystemPrompt = systemPrompts.englishEditor;
 let conversationHistory = [];
 let pendingImageDataUrl = null; // data: URL for in-chat thumbnail display
 let pendingImageBase64 = null;  // raw base64 for the Ollama API images field
+let currentModel = MODEL_NAME; // model sent to Ollama for text/thinking turns; MODEL_NAME is the built-in default/fallback, overridden by the toolbar model selector (persisted to localStorage[OLLAMA_MODEL_KEY])
 let currentThinkingMode = 'off'; // 'off' | 'low' | 'medium' | 'high'
 let currentTTSEngine = 'piper'; // 'piper' | 'voicebox'
 let currentEditorMode = 'clean'; // 'clean' | 'changes' | 'explain' — English Editor output mode

@@ -24,7 +24,7 @@ This web application provides a ChatGPT-style chat interface (dark navy header, 
 │  │          │◄────────────────────────│  uid=65532  ·  read-only FS      │  (Docker net)    │    uid=65532                 │ │
 │  └──────────┘                         │                                  │                  │    FastAPI + pyotp           │ │
 │                                       │  GET/HEAD /*  →  static files    │                  │                              │ │
-│                                       │  POST /ollama/api/chat           │                  │    /auth/verify              │ │
+│                                       │  POST /api/chat · GET /api/tags  │                  │    /auth/verify              │ │
 │                                       └────────────────┬─────────────────┘                  │    /auth/login               │ │
 │                                                        │                                    │    /auth/logout              │ │
 │                              HTTP/REST · streaming     │                                    │    /auth/setup               │ │
@@ -367,9 +367,9 @@ vpal/
 
 ### Ollama settings
 
-- **Text + thinking model**: `MODEL_NAME` in `config.js` (default: `gemma4:e4b`)
-- **Vision model**: `VISION_MODEL_NAME` in `config.js` (default: `gemma3:4b`) — used automatically when an image is attached; `gemma4:e4b` has no vision encoder
-- **API URL**: `OLLAMA_API_URL` in `config.js` (default: `https://localhost/ollama/api/chat`)
+- **Text + thinking model**: `MODEL_NAME` in `config.js` (default: `gemma4:e4b`) — the *default*; the model actually sent is whatever is chosen in the toolbar model selector (any model from `ollama list`), remembered in `localStorage` (`ollamaModel`) and restored on reload if still installed
+- **Vision model**: `VISION_MODEL_NAME` in `config.js` (default: `gemma3:4b`) — used automatically when an image is attached (not selectable); `gemma4:e4b` has no vision encoder
+- **API URLs**: `OLLAMA_API_URL` (chat, default `https://localhost/ollama/api/chat`) and `OLLAMA_TAGS_URL` (model list, default `https://localhost/ollama/api/tags`) in `config.js`
 - **Context length**: `OLLAMA_NUM_CTX` in `config.js` (default: `16384`) — must match the Ollama server's actual configured context length (`OLLAMA_CONTEXT_LENGTH` env var, or `PARAMETER num_ctx` in the model's Modelfile); sent explicitly as `num_ctx` on every text/thinking and multi-turn-vision request so behavior never silently depends on Ollama's own default. `MAX_HISTORY_MESSAGES` in `config.js` (default: `40`, i.e. 20 exchanges) additionally bounds how many past messages are kept regardless of their token cost
 
 ### Voice settings
@@ -432,7 +432,7 @@ Self-contained — no external app to configure, and these only bound worst-case
 | **Transport** | HTTPS only (TLS 1.2/1.3), HSTS, HTTP→HTTPS redirect |
 | **Browser** | CSP: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; form-action 'self'`; `X-Frame-Options: DENY`; `X-Content-Type-Options: nosniff`; `Referrer-Policy: no-referrer`; `Permissions-Policy`. `script-src` has no inline/eval exception anywhere; `style-src`'s `'unsafe-inline'` exists solely for KaTeX, which positions glyphs via computed inline `style` attributes with no CSS-class-only alternative; `media-src`'s `blob:` lets the page play the Piper TTS audio it generates client-side via `URL.createObjectURL` (own blobs only, no external load) — all bounded by the rest of the policy (no external hosts allowed anywhere), so none can be used to exfiltrate data |
 | **XSS prevention** | All AI/user response content sanitised with DOMPurify (SRI-pinned) before rendering; your own message text — including a folded-in document attachment — is inserted via `.textContent`, never parsed as HTML; KaTeX only ever runs on the already-sanitized DOM with `trust: false` (its default), which disables `\href`/`\url`/`\includegraphics`/`\html*` — the only way a LaTeX source string could otherwise make it emit attacker-chosen HTML |
-| **Proxy** | Ollama API locked to exact-match `POST /ollama/api/chat` only — all other paths and methods denied; rate-limited to 5 req/min with burst of 5. Piper TTS locked to `POST /piper/speak` only; auth-gated; rate-limited to 10 req/min with burst of 3. VoiceBox proxy locked to `POST /voicebox/speak` and `GET /voicebox/audio/{id}` only; also auth-gated (Voicebox itself has no authentication of its own); both rate-limited to 10 req/min with burst of 3. Doc-extract proxy locked to `POST /doc-extract/extract` only; auth-gated; rate-limited to 10 req/min with burst of 3 |
+| **Proxy** | Ollama API locked to exact-match `POST /ollama/api/chat` and GET-only `/ollama/api/tags` (installed-model list for the model selector — read-only metadata, no generation) — all other Ollama paths and methods denied; `/api/chat` rate-limited to 5 req/min burst 5, `/api/tags` to 12 req/min burst 3. Piper TTS locked to `POST /piper/speak` only; auth-gated; rate-limited to 10 req/min with burst of 3. VoiceBox proxy locked to `POST /voicebox/speak` and `GET /voicebox/audio/{id}` only; also auth-gated (Voicebox itself has no authentication of its own); both rate-limited to 10 req/min with burst of 3. Doc-extract proxy locked to `POST /doc-extract/extract` only; auth-gated; rate-limited to 10 req/min with burst of 3 |
 | **Containers** | All five containers: read-only filesystem, non-root user (uid 65532), `cap_drop: ALL`, `no-new-privileges`; Nginx adds `NET_BIND_SERVICE` only. `vpal-piper-tts` runs on `python:3.12-slim` (digest-pinned) rather than Chainguard distroless — `onnxruntime` segfaults under distroless — but keeps every other hardening property |
 | **Network** | Loopback-only binding (`127.0.0.1`); auth service port not published to the host (Docker-internal only) |
 | **Secrets** | All credentials in `.env` (gitignored); no hardcoded keys, tokens, or passwords anywhere in source |
@@ -442,6 +442,7 @@ Self-contained — no external app to configure, and these only bound worst-case
 ### Known limitations
 
 - **In-memory auth state** — brute-force lockout counters and TOTP replay protection are stored in process memory. Restarting the `vpal-auth` container (`docker-compose restart auth`) clears this state, giving an attacker a fresh attempt window within the 90-second TOTP validity period. For a local-only, 1–5-user deployment this is an accepted trade-off; adding a persistent backing store (Redis, SQLite) would close the gap if the threat model requires it.
+- **Model selector ignores per-model context length, and the vision model isn't selectable** — `options.num_ctx` is always sent as `OLLAMA_NUM_CTX` (16384) regardless of which model the toolbar selector picks, so choosing a model with a smaller context window lets Ollama silently clamp/truncate context rather than erroring. Image turns always use `VISION_MODEL_NAME` (`gemma3:4b`) no matter what's selected. Per-model context detection and a selectable vision model were left out of scope.
 
 ## 🎯 Features
 
@@ -455,7 +456,8 @@ Self-contained — no external app to configure, and these only bound worst-case
 - **Image Attachment**: "Add photos" in the "+" attach menu opens a file picker; images are resized to ≤ 1024 px before being sent; vision requests are automatically routed to `gemma3:4b`; in-session thumbnails shown in user bubbles; saved chats show an SVG camera icon placeholder where the image was
 - **Document Attachment**: "Add files" in the "+" attach menu attaches a `.txt`, `.md`, or `.pdf` file to ask questions about; `.txt`/`.md` are read directly in the browser, `.pdf` is extracted server-side (see [Document Attachment Path](#document-attachment-path)); the chat bubble shows a compact filename chip and your question, not the full extracted text; follow-up questions work automatically since the extracted text is part of normal conversation history
 - **Thinking Mode**: Lightbulb toolbar button toggles reasoning ON/OFF; depth selector (Low / Medium / High) appears inline when enabled; live reasoning displayed in a collapsible `<details>` block; collapses when the final answer arrives; thinking content excluded from history, copy, and speech; mode and depth saved to `localStorage` and restored on reload
-- **Dual-model Routing**: Text requests use `gemma4:e4b` (streaming, thinking-capable); image requests and vision follow-ups use `gemma3:4b`; `think: false` sent explicitly to suppress native reasoning when thinking is OFF
+- **Model Selector**: A compact `<select>` at the left of the bottom toolbar (before the mic) shows the current Ollama model and lists every model installed locally (read from Ollama's `GET /api/tags`); pick a different one at any time — it applies to the next and all subsequent messages and is remembered across reloads (`localStorage`), with no conversation reset. Falls back to the default model with a toast if Ollama's model list can't be loaded. Image turns always use the vision model regardless of the selection
+- **Dual-model Routing**: Text/thinking requests use the model chosen in the toolbar selector (default `gemma4:e4b`, streaming, thinking-capable); image requests and vision follow-ups always use `gemma3:4b`; `think: false` sent explicitly to suppress native reasoning when thinking is OFF
 - **Real-time Streaming**: Live token-by-token response display with a stop button
 - **Multiple Personas**: 11 pre-configured AI personalities
 - **Per-message Actions**: Copy and speak SVG icon buttons appear on successful AI responses only; target the final answer (thinking content excluded)

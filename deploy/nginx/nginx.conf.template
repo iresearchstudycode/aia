@@ -28,6 +28,11 @@ http {
     # Rate limit zone for the Ollama proxy — prevents rapid-fire requests
     limit_req_zone $binary_remote_addr zone=ollama_chat:1m rate=5r/m;
 
+    # Rate limit zone for the Ollama model-list proxy (GET /api/tags) — polled
+    # once on page load to populate the model selector, plus the odd manual
+    # refresh, so a slightly higher cap than ollama_chat is comfortable.
+    limit_req_zone $binary_remote_addr zone=ollama_tags:1m rate=12r/m;
+
     # Rate limit zone for auth API endpoints — throttles brute-force login
     # attempts and constrains /auth/me polling at the network layer,
     # independent of the in-process per-username lockout in the auth service.
@@ -204,9 +209,10 @@ http {
         }
 
         # ------------------------------------------------------------------
-        # Ollama API Reverse Proxy — restricted to the single endpoint the
-        # browser needs.  Also gated by session authentication.
-        # Exact match prevents access to /api/tags, /api/delete, /api/pull, etc.
+        # Ollama API Reverse Proxy — restricted to the two endpoints the
+        # browser needs (/api/chat here, /api/tags below).  Also gated by
+        # session authentication. Exact match prevents access to /api/generate,
+        # /api/pull, /api/delete, /api/create, /api/copy, /api/push, etc.
         # ------------------------------------------------------------------
         location = /ollama/api/chat {
             auth_request /auth/verify;
@@ -232,6 +238,33 @@ http {
             # Streaming support — disable buffering so chunks reach the browser in real time
             proxy_buffering off;
             proxy_read_timeout 300s;
+        }
+
+        # ------------------------------------------------------------------
+        # Ollama model list — GET /api/tags, read by the model selector to
+        # populate its options. Session-gated and rate-limited like every
+        # other route; GET-only (no body) so the global 1m cap and default
+        # buffering are fine. This is the only Ollama path allowed besides
+        # /api/chat — it exposes model metadata only, never generation.
+        # ------------------------------------------------------------------
+        location = /ollama/api/tags {
+            auth_request /auth/verify;
+            error_page 401 = @login_redirect;
+
+            limit_except GET {
+                deny all;
+            }
+            limit_req zone=ollama_tags burst=3 nodelay;
+
+            # Upstream host:port is set from the OLLAMA_UPSTREAM env var by render-nginx-conf.sh (default host.docker.internal:11434).
+            proxy_pass http://${OLLAMA_UPSTREAM}/api/tags;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            proxy_read_timeout 30s;
         }
 
         # ------------------------------------------------------------------
