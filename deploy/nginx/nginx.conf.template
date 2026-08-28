@@ -28,6 +28,11 @@ http {
     # Rate limit zone for the Ollama proxy — prevents rapid-fire requests
     limit_req_zone $binary_remote_addr zone=ollama_chat:1m rate=5r/m;
 
+    # Rate limit zone for the Ollama model-list proxy (GET /api/tags) — polled
+    # once on page load to populate the model selector, plus the odd manual
+    # refresh, so a slightly higher cap than ollama_chat is comfortable.
+    limit_req_zone $binary_remote_addr zone=ollama_tags:1m rate=12r/m;
+
     # Rate limit zone for auth API endpoints — throttles brute-force login
     # attempts and constrains /auth/me polling at the network layer,
     # independent of the in-process per-username lockout in the auth service.
@@ -37,6 +42,10 @@ http {
     # (plus occasional manual replays), so a modest cap is enough to stop
     # runaway/abusive use of the host's speakers.
     limit_req_zone $binary_remote_addr zone=voicebox_speak:1m rate=10r/m;
+
+    # Rate limit zone for the Piper TTS speak proxy — one call per AI response
+    # (plus occasional manual replays); same modest cap as voicebox_speak.
+    limit_req_zone $binary_remote_addr zone=piper_speak:1m rate=10r/m;
 
     # Rate limit zone for document text extraction — one call per file attached.
     limit_req_zone $binary_remote_addr zone=doc_extract:1m rate=10r/m;
@@ -54,6 +63,13 @@ http {
     upstream voicebox_service {
         server ${VOICEBOX_PROXY_UPSTREAM};
         keepalive 4;
+    }
+
+    # Piper TTS upstream — self-contained (voice model baked into the image),
+    # no external host dependency
+    upstream piper_service {
+        server ${PIPER_UPSTREAM};
+        keepalive 8;
     }
 
     # Document text extraction upstream — self-contained, no external host dependency
@@ -82,10 +98,13 @@ http {
         # (fraction bars, radicals, sub/superscripts) via computed inline `style`
         # attributes on the spans it generates — there's no CSS-class-only way to
         # do this. script-src stays strict ('self' only, no inline/eval anywhere).
+        # media-src 'self' blob: lets the page play the Piper TTS WAV it fetched
+        # from /piper/speak via URL.createObjectURL — 'blob:' only permits the
+        # page's own client-generated blobs, no external load and no exfil path.
         # Residual risk is bounded by the rest of this policy: default-src 'self',
         # connect-src 'self', and img-src without a wildcard host mean an inline
         # style still can't exfiltrate data or load an external resource.
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'self';" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; form-action 'self';" always;
         add_header Referrer-Policy "no-referrer" always;
         add_header Permissions-Policy "geolocation=(), payment=(), usb=(), camera=(), microphone=(self)" always;
 
@@ -190,9 +209,10 @@ http {
         }
 
         # ------------------------------------------------------------------
-        # Ollama API Reverse Proxy — restricted to the single endpoint the
-        # browser needs.  Also gated by session authentication.
-        # Exact match prevents access to /api/tags, /api/delete, /api/pull, etc.
+        # Ollama API Reverse Proxy — restricted to the two endpoints the
+        # browser needs (/api/chat here, /api/tags below).  Also gated by
+        # session authentication. Exact match prevents access to /api/generate,
+        # /api/pull, /api/delete, /api/create, /api/copy, /api/push, etc.
         # ------------------------------------------------------------------
         location = /ollama/api/chat {
             auth_request /auth/verify;
@@ -218,6 +238,33 @@ http {
             # Streaming support — disable buffering so chunks reach the browser in real time
             proxy_buffering off;
             proxy_read_timeout 300s;
+        }
+
+        # ------------------------------------------------------------------
+        # Ollama model list — GET /api/tags, read by the model selector to
+        # populate its options. Session-gated and rate-limited like every
+        # other route; GET-only (no body) so the global 1m cap and default
+        # buffering are fine. This is the only Ollama path allowed besides
+        # /api/chat — it exposes model metadata only, never generation.
+        # ------------------------------------------------------------------
+        location = /ollama/api/tags {
+            auth_request /auth/verify;
+            error_page 401 = @login_redirect;
+
+            limit_except GET {
+                deny all;
+            }
+            limit_req zone=ollama_tags burst=3 nodelay;
+
+            # Upstream host:port is set from the OLLAMA_UPSTREAM env var by render-nginx-conf.sh (default host.docker.internal:11434).
+            proxy_pass http://${OLLAMA_UPSTREAM}/api/tags;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            proxy_read_timeout 30s;
         }
 
         # ------------------------------------------------------------------
@@ -269,6 +316,35 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ------------------------------------------------------------------
+        # Piper TTS speak proxy — synthesises speech locally and returns raw
+        # audio/wav. Session-gated and rate-limited like every other route.
+        # Exact match keeps the surface to the single endpoint the browser
+        # needs. Buffered proxying is fine (a paragraph of WAV is small) and
+        # the default 1m body cap easily covers the tiny JSON request body;
+        # proxy_read_timeout is bumped only modestly since CPU synthesis of a
+        # few sentences takes at most a few seconds.
+        # ------------------------------------------------------------------
+        location = /piper/speak {
+            auth_request /auth/verify;
+            error_page 401 = @login_redirect;
+
+            limit_except POST {
+                deny all;
+            }
+            limit_req zone=piper_speak burst=3 nodelay;
+
+            proxy_pass http://piper_service;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            proxy_read_timeout 60s;
         }
 
         # ------------------------------------------------------------------

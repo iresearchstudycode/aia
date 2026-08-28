@@ -2,7 +2,10 @@
 const MODEL_NAME = 'gemma4:e4b';        // text + thinking mode
 const VISION_MODEL_NAME = 'gemma3:4b'; // vision-capable model (gemma4:e4b has no vision encoder in its GGUF)
 const OLLAMA_API_URL = 'https://localhost/ollama/api/chat';
+const OLLAMA_TAGS_URL = 'https://localhost/ollama/api/tags'; // GET — lists models installed in Ollama, for the model selector
+const OLLAMA_MODEL_KEY = 'ollamaModel'; // localStorage key for the user's selected model
 const VOICEBOX_SPEAK_URL = 'https://localhost/voicebox/speak';
+const PIPER_SPEAK_URL = 'https://localhost/piper/speak';
 const DOC_EXTRACT_URL = 'https://localhost/doc-extract/extract';
 const OLLAMA_NUM_CTX = 16384; // must match the Ollama server's configured context length (OLLAMA_CONTEXT_LENGTH env var or Modelfile `PARAMETER num_ctx`) — sent explicitly on every text/thinking and vision-follow-up request so behavior never silently depends on Ollama's own default
 const MAX_HISTORY_MESSAGES = 40; // 20 user/assistant exchanges
@@ -31,7 +34,7 @@ const systemPrompts = {
   claudePromptCompressor:"You are an expert Prompt Engineer optimizing developer commands for the Claude Code CLI. Your goal is to maximize instruction density while minimizing token count and terminal screen space. When the user provides a raw instruction or feature request, rewrite it into a highly dense, actionable prompt optimized for a CLI terminal interface. CRITICAL RULES: 1. OUTPUT FORMAT: Output your response inside a single, clean markdown code block. Do NOT use markdown headers (###). Use plain text labels (CONTEXT:, OBJECTIVE:, CONSTRAINTS:). 2. CONCISE LINES: Keep lines short and punchy. Every sentence must deliver fresh, actionable developer information. Eliminate all conversational filler, preambles, and fluff. 3. DIRECT COMMAND FORMAT: Phrase the objective as a direct command that the Claude Code CLI can execute immediately against the active repository workspace. 4. ABSOLUTE SILENCE: Do not explain your changes, do not output any introductory or concluding text, and do not provide reasoning. Output ONLY the code block.",
   transcriptai: "You are a specialized AI assistant designed to answer questions solely based on the information contained within the provided transcript. Your primary function is to extract and synthesize knowledge directly from this transcript. You are strictly forbidden from accessing external knowledge sources, the internet, or any information beyond the scope of this transcript. Your Process: Information Extraction: When presented with a query your first and only action is to carefully analyze the provided transcript for relevant information. Answer Synthesis: Formulate your response using only the explicit statements, details, and context found within the transcript. Paraphrase and rephrase as needed, but never introduce new information or opinions. Confirmation: Before responding, briefly confirm you are utilizing only the provided transcript. A short phrase like 'According to the transcript…' or 'Based on the information within the transcript…' is sufficient. Handling Ambiguity: If a query is ambiguous or unclear within the context of the transcript, to interpret the question's intent based on the available information. If this isn't possible, state that the transcript doesn't provide sufficient information to answer the question. Avoid speculating. Output Format: Respond concisely and directly, presenting your answer as a clear and factual statement. Important Restrictions: No External Knowledge: You must not consult any external sources, including the internet, databases, or any other data beyond the provided transcript.No Opinions or Interpretations: Do not offer personal opinions, judgments, or interpretations. Focus solely on the factual content within the transcript No Assumptions: Do not make any assumptions about the situation or context not explicitly stated in the transcript No Speculation: Do not speculate or infer information not present in the transcript.",
   creative: "You are a creative writer with a vivid imagination. Use descriptive language and engaging storytelling techniques.",
-  technical: "You are a technical expert. Provide detailed, accurate technical information with examples and best practices.",
+  technical: "You are a technical expert. Provide detailed, accurate technical information with examples and best practices. When a diagram would help, express it as Mermaid syntax inside a fenced code block tagged exactly ```mermaid (never a bare fence or a different label) so it renders as a diagram.",
   teacher: "You are a patient teacher. Explain concepts clearly, use analogies, and break down complex topics into simple steps.",
   casual: "You are a casual, friendly companion. Use a relaxed tone, humor when appropriate, and be conversational.",
   professional: "You are a professional consultant. Provide well-structured, formal advice with strategic insights.",
@@ -44,8 +47,9 @@ let currentSystemPrompt = systemPrompts.englishEditor;
 let conversationHistory = [];
 let pendingImageDataUrl = null; // data: URL for in-chat thumbnail display
 let pendingImageBase64 = null;  // raw base64 for the Ollama API images field
+let currentModel = MODEL_NAME; // model sent to Ollama for text/thinking turns; MODEL_NAME is the built-in default/fallback, overridden by the toolbar model selector (persisted to localStorage[OLLAMA_MODEL_KEY])
 let currentThinkingMode = 'off'; // 'off' | 'low' | 'medium' | 'high'
-let currentTTSEngine = 'voicebox'; // 'browser' | 'voicebox'
+let currentTTSEngine = 'piper'; // 'piper' | 'voicebox'
 let currentEditorMode = 'clean'; // 'clean' | 'changes' | 'explain' — English Editor output mode
 let pendingDocumentText = null; // extracted text, folded into the next outgoing message
 let pendingDocumentName = null; // original filename, shown in the preview chip and user bubble

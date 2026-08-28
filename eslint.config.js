@@ -8,7 +8,10 @@ const crossModuleGlobals = {
   MODEL_NAME: 'readonly',
   VISION_MODEL_NAME: 'readonly',
   OLLAMA_API_URL: 'readonly',
+  OLLAMA_TAGS_URL: 'readonly',
+  OLLAMA_MODEL_KEY: 'readonly',
   VOICEBOX_SPEAK_URL: 'readonly',
+  PIPER_SPEAK_URL: 'readonly',
   DOC_EXTRACT_URL: 'readonly',
   OLLAMA_NUM_CTX: 'readonly',
   MAX_HISTORY_MESSAGES: 'readonly',
@@ -28,6 +31,7 @@ const crossModuleGlobals = {
   // config.js — mutable state
   conversationHistory: 'writable',
   currentSystemPrompt: 'writable',
+  currentModel: 'writable',
   pendingImageDataUrl: 'writable',
   pendingImageBase64: 'writable',
   currentThinkingMode: 'writable',
@@ -51,10 +55,11 @@ const crossModuleGlobals = {
   parseDocumentMessageContent: 'readonly',
   readPersonaPref: 'readonly',
   writePersonaPref: 'readonly',
+  normalizeTtsEngine: 'readonly',
   migrateEditorModeValue: 'readonly',
   diffWords: 'readonly',
+  parseOllamaModels: 'readonly',
   // speech.js — functions
-  loadVoices: 'readonly',
   toggleSpeechRecognition: 'readonly',
   speakText: 'readonly',
   stopSpeaking: 'readonly',
@@ -85,6 +90,9 @@ const crossModuleGlobals = {
   renderConversationHistory: 'readonly',
   handleOpenFile: 'readonly',
   renderMathIn: 'readonly',
+  highlightCodeIn: 'readonly',
+  renderMermaidIn: 'readonly',
+  enrichRenderedContent: 'readonly',
   renderMarkdownToHtml: 'readonly',
   _resolveSystemPrompt: 'readonly',
   renderEditorReply: 'readonly',
@@ -100,6 +108,8 @@ const crossModuleGlobals = {
   DOMPurify: 'readonly',
   renderMathInElement: 'readonly',
   diff_match_patch: 'readonly',
+  hljs: 'readonly',
+  mermaid: 'readonly',
 };
 
 module.exports = [

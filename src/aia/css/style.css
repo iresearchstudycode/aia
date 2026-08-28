@@ -342,6 +342,34 @@ body {
   padding: 0;
 }
 
+/* highlight.js (atom-one-dark theme, vendored): highlightElement() adds the
+   .hljs class to each <code> block. Override the theme's own #282c34 ground so
+   a highlighted block sits on the same #1e293b slate as an unhighlighted one
+   (.message-content pre); token colours from the vendored stylesheet are left
+   as-is. Same "adapt vendored CSS to the app's chrome" move as .katex-display. */
+.message-content .hljs {
+  background: #1e293b;
+}
+
+/* Mermaid diagrams: a wide diagram scrolls in its own container rather than
+   overflowing the chat bubble — mirrors .message-content pre / .katex-display.
+   .mermaid-error marks a block whose source failed to parse (its raw text
+   stays visible). */
+.mermaid-diagram {
+  overflow-x: auto;
+  margin: 16px 0;
+  text-align: center;
+}
+
+.mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  border-left: 3px solid #c53030;
+}
+
 /* KaTeX display-mode math ($$...$$, \[...\]) — katex.min.css sets
    white-space: nowrap on these, so a wide equation (long matrix, long sum)
    needs its own horizontal scrollbar rather than overflowing the bubble,
@@ -636,6 +664,38 @@ body {
 }
 
 .tts-engine-select:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
+}
+
+/* Ollama model selector — first control in .toolbar-left. Mirrors
+   .tts-engine-select's neutral/hover styling (it has no on/off state of its
+   own), but capped in width so a long tag like
+   "qwen2.5-coder:32b-instruct-q4_K_M" can't blow out the toolbar. */
+.model-select {
+  height: 32px;
+  max-width: 160px;
+  padding: 0 4px 0 6px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.model-select:hover {
+  background: #f0f9ff;
+  border-color: #0ea5e9;
+  color: #0ea5e9;
+}
+
+.model-select:focus-visible {
   outline: 2px solid #0ea5e9;
   outline-offset: 2px;
 }

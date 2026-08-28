@@ -39,6 +39,26 @@ describe('_buildRequestBody — model selection', () => {
     expect(off.model).toBe(MODEL);
     expect(high.model).toBe(MODEL);
   });
+
+  test('a user-selected model (currentModel) lands in requestBody.model for the text path', () => {
+    const picked = 'qwen2.5-coder:32b-instruct-q4_K_M';
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, picked, VISION, 'off');
+    expect(requestBody.model).toBe(picked);
+  });
+
+  test('vision turns ignore the selected model and use the vision model', () => {
+    const picked = 'qwen2.5-coder:32b';
+    // initial vision (new image attached)
+    const initial = _buildRequestBody('img64', [], SYSTEM, picked, VISION, 'off');
+    expect(initial.requestBody.model).toBe(VISION);
+    // follow-up text after an image in history
+    const history = [
+      { role: 'user', content: 'describe this', imageBase64: 'img64' },
+      { role: 'assistant', content: 'a street at dusk' },
+    ];
+    const followUp = _buildRequestBody(null, history, SYSTEM, picked, VISION, 'off');
+    expect(followUp.requestBody.model).toBe(VISION);
+  });
 });
 
 // ─── Stream mode ──────────────────────────────────────────────────────────────

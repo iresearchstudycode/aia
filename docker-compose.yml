@@ -116,18 +116,82 @@ services:
       retries: 3
       start_period: 15s
 
+  piper-tts:
+    build:
+      context: ./piper-tts
+      dockerfile: Dockerfile
+    container_name: vpal-piper-tts
+    restart: unless-stopped
+    env_file: .env
+
+    # Self-contained — the voice model is baked into the image; no host service
+    # to reach, so (unlike voicebox-proxy) no extra_hosts entry.
+
+    environment:
+      # onnxruntime writes a cache/telemetry marker on first run; give it a home.
+      - HOME=/tmp
+      # Pin every native thread pool to 1 (also set in the Dockerfile — kept
+      # here too so it's visible/overridable at the compose layer). Without
+      # this, onnxruntime/OpenMP size their pools to the host core count,
+      # which under the cpus + pids limits below deadlocks during pool
+      # creation — the request never returns and eventually /health hangs.
+      - OMP_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - NUMEXPR_NUM_THREADS=1
+      - ORT_NUM_THREADS=1
+      - PIPER_ORT_THREADS=1
+
+    # Security: non-root (uid 65532), read-only root, no capabilities
+    read_only: true
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          # ONNX voice model (~63 MB) held in memory alongside onnxruntime +
+          # numpy; measured peak RSS is ~220 MB, so 768M is generous margin.
+          memory: 768M
+          # onnxruntime + uvicorn's threadpool spawn a handful of native
+          # threads each (all counted against this ceiling on Linux); 30 was
+          # too tight and contributed to the thread-pool-init hang.
+          pids: 128
+
+    # Port exposed only within the Docker network — never published to the host
+    expose:
+      - "8004"
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Eager model load (PIPER_EAGER_LOAD) runs during startup, so give the
+      # first healthcheck room before counting failures.
+      start_period: 40s
+
   web-server:
     image: cgr.dev/chainguard/nginx
     container_name: vpal-nginx
     restart: unless-stopped
 
-    # Nginx starts only after the auth, voicebox-proxy, and doc-extract services are healthy
+    # Nginx starts only after the auth, voicebox-proxy, doc-extract, and
+    # piper-tts services are healthy
     depends_on:
       auth:
         condition: service_healthy
       voicebox-proxy:
         condition: service_healthy
       doc-extract:
+        condition: service_healthy
+      piper-tts:
         condition: service_healthy
 
     healthcheck:

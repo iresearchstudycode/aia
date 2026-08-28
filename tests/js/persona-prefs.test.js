@@ -5,12 +5,12 @@ const { readPersonaPref, writePersonaPref } = require('../../src/aia/scripts/uti
 describe('readPersonaPref', () => {
   test('returns the stored entry for a known persona key', () => {
     const json = JSON.stringify({
-      legal: { thinkingOn: true, thinkingDepth: 'high', ttsEngine: 'browser' },
+      legal: { thinkingOn: true, thinkingDepth: 'high', ttsEngine: 'piper' },
     });
     expect(readPersonaPref(json, 'legal')).toEqual({
       thinkingOn: true,
       thinkingDepth: 'high',
-      ttsEngine: 'browser',
+      ttsEngine: 'piper',
     });
   });
 
@@ -46,13 +46,13 @@ describe('writePersonaPref', () => {
 
   test('merges a patch into an existing entry without dropping other keys', () => {
     const start = JSON.stringify({
-      legal: { thinkingOn: false, thinkingDepth: 'low', ttsEngine: 'browser' },
+      legal: { thinkingOn: false, thinkingDepth: 'low', ttsEngine: 'piper' },
     });
     const out = writePersonaPref(start, 'legal', { thinkingDepth: 'high' });
     expect(JSON.parse(out).legal).toEqual({
       thinkingOn: false,
       thinkingDepth: 'high',
-      ttsEngine: 'browser',
+      ttsEngine: 'piper',
     });
   });
 
