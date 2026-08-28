@@ -8,6 +8,8 @@ const crossModuleGlobals = {
   MODEL_NAME: 'readonly',
   VISION_MODEL_NAME: 'readonly',
   OLLAMA_API_URL: 'readonly',
+  OLLAMA_TAGS_URL: 'readonly',
+  OLLAMA_MODEL_KEY: 'readonly',
   VOICEBOX_SPEAK_URL: 'readonly',
   PIPER_SPEAK_URL: 'readonly',
   DOC_EXTRACT_URL: 'readonly',
@@ -29,6 +31,7 @@ const crossModuleGlobals = {
   // config.js — mutable state
   conversationHistory: 'writable',
   currentSystemPrompt: 'writable',
+  currentModel: 'writable',
   pendingImageDataUrl: 'writable',
   pendingImageBase64: 'writable',
   currentThinkingMode: 'writable',
@@ -55,6 +58,7 @@ const crossModuleGlobals = {
   normalizeTtsEngine: 'readonly',
   migrateEditorModeValue: 'readonly',
   diffWords: 'readonly',
+  parseOllamaModels: 'readonly',
   // speech.js — functions
   toggleSpeechRecognition: 'readonly',
   speakText: 'readonly',

@@ -180,6 +180,10 @@
           placeholder="Message AI Assistant — Shift+Enter for new line..."></textarea>
         <div class="chat-input-toolbar">
           <div class="toolbar-left">
+            <!-- Ollama model selector — shows the current model and picks the
+                 one used for this conversation; changeable at any time. -->
+            <select id="modelSelect" class="model-select" aria-label="Ollama model"
+              title="Model used for this conversation"></select>
             <!-- Microphone -->
             <button type="button" class="voice-btn toolbar-icon-btn" id="micBtn"
               aria-label="Toggle voice input" aria-pressed="false"

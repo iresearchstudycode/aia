@@ -343,6 +343,55 @@ document.addEventListener('DOMContentLoaded', function () {
     _persistPersonaPref({ ttsEngine: this.value });
   });
 
+  // Ollama model selector — lists the models installed in Ollama (GET
+  // /api/tags) and picks the one used for text/thinking turns. Changeable at
+  // any time with no conversation reset and no lock (unlike the persona
+  // selector); the choice is a global preference (not per-persona) persisted
+  // to localStorage. Vision turns always route to VISION_MODEL_NAME regardless.
+  const modelSelect = document.getElementById('modelSelect');
+
+  function _populateModelSelect(names) {
+    modelSelect.innerHTML = '';
+    names.forEach(function (name) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      modelSelect.appendChild(opt);
+    });
+  }
+
+  fetch(OLLAMA_TAGS_URL)
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function (data) {
+      const names = parseOllamaModels(data);
+      if (!names.length) throw new Error('empty model list');
+      _populateModelSelect(names);
+      const stored = localStorage.getItem(OLLAMA_MODEL_KEY);
+      const initial = names.indexOf(stored) !== -1 ? stored
+        : names.indexOf(MODEL_NAME) !== -1 ? MODEL_NAME
+          : names[0];
+      currentModel = initial;
+      modelSelect.value = initial;
+      localStorage.setItem(OLLAMA_MODEL_KEY, initial);
+    })
+    .catch(function () {
+      // Ollama unreachable / 502 / bad payload — keep the app fully usable with
+      // the stored (or default) model as the sole option.
+      const fallback = localStorage.getItem(OLLAMA_MODEL_KEY) || MODEL_NAME;
+      _populateModelSelect([fallback]);
+      currentModel = fallback;
+      modelSelect.value = fallback;
+      showToast('Could not load model list from Ollama');
+    });
+
+  modelSelect.addEventListener('change', function () {
+    currentModel = this.value;
+    localStorage.setItem(OLLAMA_MODEL_KEY, this.value);
+  });
+
   // Chat input
   const userInput = document.getElementById('userInput');
   userInput.maxLength = MAX_INPUT_LENGTH;

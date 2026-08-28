@@ -138,7 +138,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
   }
 
   const { requestBody, isVision, hasCurrentImage } = _buildRequestBody(
-    imageBase64, conversationHistory, currentSystemPrompt, MODEL_NAME, VISION_MODEL_NAME, currentThinkingMode, OLLAMA_NUM_CTX
+    imageBase64, conversationHistory, currentSystemPrompt, currentModel, VISION_MODEL_NAME, currentThinkingMode, OLLAMA_NUM_CTX
   );
   // Captured once so all three render sites (live loop, final, abort) agree on whether
   // thinking is active for this request. When false, splitThinkingContent is bypassed

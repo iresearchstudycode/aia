@@ -250,6 +250,24 @@ function diffWords(original, revised, DMP) {
   return segments;
 }
 
+// Parse Ollama's GET /api/tags response into a sorted list of model name
+// strings for the model selector. Ollama returns { models: [{ name, model,
+// size, digest, details, ... }, ...] }; `name` is the tag the user pulled
+// (e.g. "gemma4:e4b"), with `model` as a fallback. De-duplicates and sorts
+// case-insensitively. Returns [] for any malformed input — never throws.
+function parseOllamaModels(json) {
+  if (!json || typeof json !== 'object' || !Array.isArray(json.models)) return [];
+  const names = [];
+  for (const entry of json.models) {
+    if (!entry || typeof entry !== 'object') continue;
+    const name = typeof entry.name === 'string' && entry.name
+      ? entry.name
+      : (typeof entry.model === 'string' ? entry.model : '');
+    if (name && !names.includes(name)) names.push(name);
+  }
+  return names.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+
 // Node.js compat — lets Jest import these functions for unit tests; no-op in browser.
 if (typeof module !== 'undefined') {
   module.exports = {
@@ -266,7 +284,8 @@ if (typeof module !== 'undefined') {
     writePersonaPref,
     normalizeTtsEngine,
     migrateEditorModeValue,
-    diffWords
+    diffWords,
+    parseOllamaModels
   };
 }
 

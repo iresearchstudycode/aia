@@ -668,6 +668,38 @@ body {
   outline-offset: 2px;
 }
 
+/* Ollama model selector — first control in .toolbar-left. Mirrors
+   .tts-engine-select's neutral/hover styling (it has no on/off state of its
+   own), but capped in width so a long tag like
+   "qwen2.5-coder:32b-instruct-q4_K_M" can't blow out the toolbar. */
+.model-select {
+  height: 32px;
+  max-width: 160px;
+  padding: 0 4px 0 6px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.model-select:hover {
+  background: #f0f9ff;
+  border-color: #0ea5e9;
+  color: #0ea5e9;
+}
+
+.model-select:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
+}
+
 /* English Editor "Changes" view — word-level tracked changes. pre-wrap keeps
    the submitted line breaks; deletions read as struck-through red, insertions
    as underlined green, both muted to sit within the app's light slate palette. */
