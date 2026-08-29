@@ -7,7 +7,7 @@
 const dmpModule = require('../../src/aia/scripts/diff-match-patch.js');
 global.diff_match_patch = dmpModule.diff_match_patch;
 
-const { diffWords, migrateEditorModeValue } = require('../../src/aia/scripts/utils.js');
+const { diffWords } = require('../../src/aia/scripts/utils.js');
 
 const DMP = dmpModule.diff_match_patch;
 
@@ -111,26 +111,5 @@ describe('diffWords', () => {
     } finally {
       global.diff_match_patch = saved;
     }
-  });
-});
-
-describe('migrateEditorModeValue', () => {
-  test('keeps an already-stored editorMode verbatim', () => {
-    expect(migrateEditorModeValue('changes', null)).toBe('changes');
-    expect(migrateEditorModeValue('clean', 'true')).toBe('clean');
-    expect(migrateEditorModeValue('explain', 'false')).toBe('explain');
-  });
-
-  test('migrates the legacy boolean when no editorMode is stored', () => {
-    expect(migrateEditorModeValue(null, 'true')).toBe('explain');
-    expect(migrateEditorModeValue(null, 'false')).toBe('clean');
-  });
-
-  test('treats an empty-string editorMode as absent', () => {
-    expect(migrateEditorModeValue('', 'true')).toBe('explain');
-  });
-
-  test('defaults to clean when neither value is present', () => {
-    expect(migrateEditorModeValue(null, null)).toBe('clean');
   });
 });

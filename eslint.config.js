@@ -59,10 +59,6 @@ const crossModuleGlobals = {
   truncateDocumentText: 'readonly',
   buildDocumentMessageContent: 'readonly',
   parseDocumentMessageContent: 'readonly',
-  readPersonaPref: 'readonly',
-  writePersonaPref: 'readonly',
-  normalizeTtsEngine: 'readonly',
-  migrateEditorModeValue: 'readonly',
   diffWords: 'readonly',
   parseOllamaModels: 'readonly',
   // speech.js — functions
