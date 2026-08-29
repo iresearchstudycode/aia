@@ -1388,19 +1388,23 @@ function applyResolvedSettings() {
 
 // Inline SVG line icons for the toolbar badges — the app uses SVG icons, never
 // emoji (matches every other control). Hardcoded constants, no user data.
+// width/height are set explicitly: the badges have no CSS `svg` sizing rule, and
+// an SVG with only a viewBox otherwise renders at the 300x150 default and gets
+// clipped to an invisible sliver by the badge's `overflow: hidden`.
+var _SETTINGS_ICON_HEAD =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" ' +
+  'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ' +
+  'style="flex:none">';
 var _SETTINGS_MODEL_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ' +
-  'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-  'stroke-linejoin="round" aria-hidden="true">' +
+  _SETTINGS_ICON_HEAD +
   '<rect x="5" y="5" width="14" height="14" rx="2"/>' +
   '<line x1="9" y1="2" x2="9" y2="5"/><line x1="15" y1="2" x2="15" y2="5"/>' +
   '<line x1="9" y1="19" x2="9" y2="22"/><line x1="15" y1="19" x2="15" y2="22"/>' +
   '<line x1="2" y1="9" x2="5" y2="9"/><line x1="2" y1="15" x2="5" y2="15"/>' +
   '<line x1="19" y1="9" x2="22" y2="9"/><line x1="19" y1="15" x2="22" y2="15"/></svg>';
 var _SETTINGS_THINKING_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ' +
-  'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-  'stroke-linejoin="round" aria-hidden="true">' +
+  _SETTINGS_ICON_HEAD +
   '<line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/>' +
   '<path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 ' +
   '6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>';
@@ -1410,7 +1414,13 @@ var _SETTINGS_THINKING_ICON =
 function _settingsBadgeText(badge, iconSvg) {
   var span = badge.querySelector('.settings-badge-text');
   if (!span) {
-    badge.innerHTML = iconSvg + '<span class="settings-badge-text"></span>';
+    // Inline style (no CSS rule for the badge internals, and style.css is being
+    // edited elsewhere): keep the icon fixed and let a long model name ellipsise
+    // instead of clipping — `text-overflow` on the flex badge can't reach a child.
+    badge.innerHTML =
+      iconSvg +
+      '<span class="settings-badge-text" style="overflow:hidden;' +
+      'text-overflow:ellipsis;white-space:nowrap;min-width:0"></span>';
     span = badge.querySelector('.settings-badge-text');
   }
   return span;
