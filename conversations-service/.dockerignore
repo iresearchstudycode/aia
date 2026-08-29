@@ -1,0 +1,25 @@
+# Development artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Test files are not needed in the production image
+tests/
+requirements-test.txt
+pytest.ini
+
+# Environment files — never include secrets in the build context
+.env
+*.env
+
+# Editor artefacts
+.vscode/
+*.swp
+*.swo
+*~
+
+# Documentation
+*.md

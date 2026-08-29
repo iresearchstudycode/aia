@@ -5,6 +5,7 @@ const OLLAMA_API_URL = 'https://localhost/ollama/api/chat';
 const OLLAMA_TAGS_URL = 'https://localhost/ollama/api/tags'; // GET — lists models installed in Ollama, for the model selector
 const OLLAMA_MODEL_KEY = 'ollamaModel'; // localStorage key for the user's selected model (legacy — read only by the one-time settings migration)
 const SETTINGS_API_URL = 'https://localhost/settings'; // per-user settings-service (see settings.js)
+const CONVERSATIONS_API_URL = 'https://localhost/conversations'; // per-user conversations-service (see history.js)
 const VOICEBOX_SPEAK_URL = 'https://localhost/voicebox/speak';
 const PIPER_SPEAK_URL = 'https://localhost/piper/speak';
 const DOC_EXTRACT_URL = 'https://localhost/doc-extract/extract';

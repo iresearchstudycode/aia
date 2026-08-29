@@ -240,6 +240,10 @@ document.addEventListener('DOMContentLoaded', async function () {
   // setNavRailEnabled()).
   initNavRail();
 
+  // Conversation history lightbox (history.js) — builds its hidden DOM into
+  // #historyRoot and wires its own search / cards / delete / Escape / focus-trap.
+  if (typeof initHistory === 'function') initHistory();
+
   applyResolvedSettings();
   updateSystemPromptState();
 
@@ -311,6 +315,15 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
   }
 
+  // Conversation history — profile-dropdown item opens the history lightbox.
+  const historyMenuItem = document.getElementById('historyMenuItem');
+  if (historyMenuItem) {
+    historyMenuItem.addEventListener('click', function () {
+      closeProfileDropdown();
+      if (typeof openHistory === 'function') openHistory();
+    });
+  }
+
   const personaToggleBtn = document.getElementById('personaToggleBtn');
   if (personaToggleBtn) {
     personaToggleBtn.addEventListener('click', function (e) {
@@ -335,7 +348,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   //                     2nd: close whichever panel is open (profile / attach menu)
   //                     3rd: return focus to the composer
   //   Ctrl/Cmd + ,      open Settings (Models pane)
-  //   Ctrl/Cmd+Shift+O  clear the conversation (keeps its own confirm)
+  //   Ctrl/Cmd+Shift+O  "New chat" — archives the current conversation, then resets
   //
   // The Ctrl/Cmd combos fire even while the composer is focused; the bare
   // Escape path never disrupts typing (worst case it re-focuses #userInput).
@@ -350,7 +363,7 @@ document.addEventListener('DOMContentLoaded', async function () {
       return;
     }
 
-    // Ctrl/Cmd + Shift + O → clear chat.
+    // Ctrl/Cmd + Shift + O → "New chat" (archive + reset).
     if (mod && e.shiftKey && !e.altKey && (e.key === 'o' || e.key === 'O')) {
       e.preventDefault();
       if (typeof clearChat === 'function') clearChat();
@@ -398,6 +411,12 @@ document.addEventListener('DOMContentLoaded', async function () {
   // Close the dropdown after each menu-item action (before any confirm dialogs).
   ['saveBtn', 'exportMdBtn', 'openBtn', 'clearBtn', 'closeBtn'].forEach(function (id) {
     document.getElementById(id).addEventListener('click', closeProfileDropdown);
+  });
+
+  // Best-effort final save of the current conversation when the tab is closing —
+  // hcBeaconSave() builds the PUT and ships it via navigator.sendBeacon (history.js).
+  window.addEventListener('beforeunload', function () {
+    if (typeof hcBeaconSave === 'function') hcBeaconSave();
   });
 
   // Chat input
