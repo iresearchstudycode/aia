@@ -746,12 +746,20 @@ function _settingsEnsureModelNames(cb) {
     cb(_settingsModelNames);
     return;
   }
-  fetch(url)
+  // redirect: 'manual' so an expired session (nginx 302 -> /auth/login) surfaces
+  // as an opaqueredirect we can act on, instead of silently resolving to the
+  // login HTML and looking like an Ollama failure. Mirrors api.js.
+  fetch(url, { redirect: 'manual' })
     .then(function (r) {
+      if (r.type === 'opaqueredirect') {
+        window.location.reload();
+        return null;
+      }
       if (!r.ok) throw new Error('tags ' + r.status);
       return r.json();
     })
     .then(function (json) {
+      if (json === null) return; // reloading for auth
       _settingsModelNames =
         typeof parseOllamaModels === 'function' ? parseOllamaModels(json) : [];
       cb(_settingsModelNames);
