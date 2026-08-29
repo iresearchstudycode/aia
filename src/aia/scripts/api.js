@@ -313,6 +313,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
     if (speakBtn) speakBtn.dataset.content = savedContent;
     const actionsDiv = messageDiv.querySelector('.message-actions');
     if (actionsDiv) actionsDiv.style.display = '';
+    if (typeof _refreshTurnControls === 'function') _refreshTurnControls();
     if (isEditorExchange && actionsDiv) {
       actionsDiv.appendChild(
         _buildEditorViewSwitch(assistantEntry, contentDiv, userMessage, savedContent)
@@ -361,6 +362,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
         if (copyBtn) copyBtn.dataset.content = savedContent;
         const speakBtn = messageDiv.querySelector('.speak-btn');
         if (speakBtn) speakBtn.dataset.content = savedContent;
+        if (typeof _refreshTurnControls === 'function') _refreshTurnControls();
       } else {
         conversationHistory.pop();
         contentDiv.innerHTML = '<p class="status-muted">Response stopped.</p>';
@@ -388,5 +390,9 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
   } finally {
     streamAbortController = null;
     setStreamingUI(false);
+    // Now that the Stop button is hidden, (re)surface the rewind controls on
+    // the final turn — this is the call that actually adds the Edit & resend
+    // button, since the in-try hooks above run while the stream UI is still up.
+    if (typeof _refreshTurnControls === 'function') _refreshTurnControls();
   }
 }

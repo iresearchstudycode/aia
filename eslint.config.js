@@ -77,6 +77,8 @@ const crossModuleGlobals = {
   SPEAK_ICON: 'readonly',
   STOP_ICON: 'readonly',
   SPINNER_ICON: 'readonly',
+  REGEN_ICON: 'readonly',
+  EDIT_ICON: 'readonly',
   // chat.js — functions
   updateSystemPromptState: 'readonly',
   addUserMessage: 'readonly',
@@ -99,6 +101,14 @@ const crossModuleGlobals = {
   _currentPersonaKey: 'readonly',
   renderEditorReply: 'readonly',
   _buildEditorViewSwitch: 'readonly',
+  regenerateLastResponse: 'readonly',
+  editLastUserTurn: 'readonly',
+  _refreshTurnControls: 'readonly',
+  _lastExchangeIndices: 'readonly',
+  _editableTextFor: 'readonly',
+  _streamInProgress: 'readonly',
+  _dispatchSend: 'readonly',
+  _makeTurnControl: 'readonly',
   // main.js
   clearImagePreview: 'readonly',
   clearDocumentPreview: 'readonly',

@@ -8,6 +8,10 @@ const SPEAK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" 
 const STOP_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>';
 const SPINNER_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 0 1 10 10"/></svg>';
 const DOCUMENT_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
+// Rewind controls (Chat UX essentials). No width/height — `.action-btn svg` in
+// style.css sizes them, the same as the copy/speak icons above.
+const REGEN_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
+const EDIT_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>';
 
 // Render $...$, $$...$$, \(...\), \[...\] and AMS environments (\begin{equation}
 // etc.) as typeset math via KaTeX, in place, within the given element. Called
@@ -244,6 +248,175 @@ function copyMessageToClipboard(button) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Rewind controls — Regenerate the last AI reply, or edit & resend the last
+// user turn. The array bookkeeping is factored into pure helpers so it can be
+// unit-tested without a DOM (see tests/js/chat-ux.test.js).
+// ---------------------------------------------------------------------------
+
+// Indices of the last user turn and of the assistant reply immediately after
+// it — `-1` for either when absent. Pure; tolerates non-array / empty input.
+function _lastExchangeIndices(history) {
+  const none = { userIdx: -1, assistantIdx: -1 };
+  if (!Array.isArray(history)) return none;
+  let userIdx = -1;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i] && history[i].role === 'user') {
+      userIdx = i;
+      break;
+    }
+  }
+  if (userIdx === -1) return none;
+  let assistantIdx = -1;
+  for (let i = userIdx + 1; i < history.length; i++) {
+    if (history[i] && history[i].role === 'assistant') {
+      assistantIdx = i;
+      break;
+    }
+  }
+  return { userIdx, assistantIdx };
+}
+
+// Given a stored user history entry, the plain text to reload into the composer
+// when rewinding to edit it, plus whether an attachment was dropped. A document
+// block is unwrapped to just its question; an image can't be rehydrated so only
+// its text is recovered. Pure (delegates to parseDocumentMessageContent).
+function _editableTextFor(entry) {
+  const content = (entry && entry.content) || '';
+  const parsed = parseDocumentMessageContent(content);
+  if (parsed.hasDocument) return { text: parsed.question, lostAttachment: true };
+  if (entry && (entry.imageBase64 || entry.hasImage)) {
+    return { text: content, lostAttachment: true };
+  }
+  return { text: content, lostAttachment: false };
+}
+
+// True while a streamed reply is still arriving — the Stop button is shown
+// (setStreamingUI() in api.js). Used to suppress the rewind controls mid-stream.
+function _streamInProgress() {
+  const stopBtn = document.getElementById('stopBtn');
+  return !!(stopBtn && stopBtn.style && stopBtn.style.display === 'flex');
+}
+
+// Shared tail of every send path: render the user bubble, add the AI
+// placeholder, stream the reply. streamOllamaResponse() re-pushes the user
+// entry to conversationHistory itself, so callers must not.
+async function _dispatchSend(message, imageBase64, imageDataUrl) {
+  addUserMessage(message, imageDataUrl);
+  const aiMessageDiv = addAIMessagePlaceholder();
+  await streamOllamaResponse(message, aiMessageDiv, imageBase64, imageDataUrl);
+}
+
+// Regenerate the most recent AI reply: drop the trailing user+assistant pair
+// (streamOllamaResponse re-pushes the user turn) and re-run the send path with
+// the same text/image. No-op mid-stream or when there is no completed reply.
+async function regenerateLastResponse() {
+  if (_streamInProgress()) return;
+  const { userIdx, assistantIdx } = _lastExchangeIndices(conversationHistory);
+  if (userIdx === -1 || assistantIdx === -1) return;
+  // Only ever regenerate the reply that is actually last in the history.
+  if (assistantIdx !== conversationHistory.length - 1) return;
+
+  const src = conversationHistory[userIdx];
+  const message = src.content;
+  const imageBase64 = src.imageBase64 || null;
+  const imageDataUrl = src.imageDataUrl || null;
+
+  conversationHistory.splice(assistantIdx, 1);
+  conversationHistory.splice(userIdx, 1);
+
+  renderConversationHistory();
+  await _dispatchSend(message, imageBase64, imageDataUrl);
+}
+
+// Rewind to just before the last user turn: pop that turn (and its reply, if
+// any) off history, drop them from the DOM, and load the text back into the
+// composer for editing. No-op mid-stream or with no user turn.
+function editLastUserTurn() {
+  if (_streamInProgress()) return;
+  const { userIdx, assistantIdx } = _lastExchangeIndices(conversationHistory);
+  if (userIdx === -1) return;
+
+  const { text, lostAttachment } = _editableTextFor(conversationHistory[userIdx]);
+
+  // assistantIdx (when present) is always after userIdx — splice it first so
+  // userIdx stays valid.
+  if (assistantIdx !== -1) conversationHistory.splice(assistantIdx, 1);
+  conversationHistory.splice(userIdx, 1);
+
+  renderConversationHistory();
+
+  if (lostAttachment) showToast('Attachment not carried over — re-attach if needed');
+
+  const input = document.getElementById('userInput');
+  if (input) {
+    input.value = text;
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+  }
+}
+
+function _makeTurnControl(className, label, icon, handler) {
+  const btn = document.createElement('button');
+  btn.className = 'action-btn ' + className;
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.innerHTML = icon;
+  btn.addEventListener('click', handler);
+  return btn;
+}
+
+// (Re)attach the per-turn rewind controls: a Regenerate button on the last AI
+// reply, an Edit & resend button on the last user message. Idempotent — clears
+// any existing pair first — so it is safe to call after every render and at the
+// end of a stream. Skips both when the DOM and conversationHistory disagree
+// (e.g. a failed turn whose user entry was rolled back).
+function _refreshTurnControls() {
+  document
+    .querySelectorAll('.msg-regen-btn, .msg-edit-btn')
+    .forEach((btn) => btn.remove());
+
+  if (typeof conversationHistory === 'undefined' || !Array.isArray(conversationHistory)) {
+    return;
+  }
+
+  const domUserCount = document.querySelectorAll('.message.user-message').length;
+  const histUserCount = conversationHistory.filter((m) => m.role === 'user').length;
+  const inSync = domUserCount === histUserCount;
+  if (!inSync) return;
+
+  const endsWithAssistant =
+    conversationHistory.length > 0 &&
+    conversationHistory[conversationHistory.length - 1].role === 'assistant';
+
+  if (endsWithAssistant) {
+    const aiMessages = document.querySelectorAll('.message.ai-message');
+    const lastAi = aiMessages[aiMessages.length - 1];
+    const actions = lastAi && lastAi.querySelector('.message-actions');
+    if (actions && actions.style.display !== 'none') {
+      actions.appendChild(
+        _makeTurnControl('msg-regen-btn', 'Regenerate response', REGEN_ICON, regenerateLastResponse)
+      );
+    }
+  }
+
+  if (!_streamInProgress()) {
+    const userMessages = document.querySelectorAll('.message.user-message');
+    const lastUser = userMessages[userMessages.length - 1];
+    if (lastUser) {
+      let actions = lastUser.querySelector('.message-actions');
+      if (!actions) {
+        actions = document.createElement('div');
+        actions.className = 'message-actions';
+        lastUser.appendChild(actions);
+      }
+      actions.appendChild(
+        _makeTurnControl('msg-edit-btn', 'Edit & resend', EDIT_ICON, editLastUserTurn)
+      );
+    }
+  }
+}
+
 // The persona key currently in effect. The Settings lightbox is the only thing
 // that changes it (writing window.vpalSettings.global.active_persona and calling
 // applyResolvedSettings()); everything here just reads it, falling back to the
@@ -441,10 +614,7 @@ async function sendMessageAndContinueListening() {
     input.value = '';
     input.dispatchEvent(new Event('input'));
 
-    addUserMessage(message, imageDataUrl);
-
-    const aiMessageDiv = addAIMessagePlaceholder();
-    await streamOllamaResponse(message, aiMessageDiv, imageBase64, imageDataUrl);
+    await _dispatchSend(message, imageBase64, imageDataUrl);
   }
 }
 
@@ -475,12 +645,10 @@ async function sendMessage() {
     clearImagePreview();
     clearDocumentPreview();
 
-    addUserMessage(message, imageDataUrl);
     input.value = '';
     input.dispatchEvent(new Event('input'));
 
-    const aiMessageDiv = addAIMessagePlaceholder();
-    await streamOllamaResponse(message, aiMessageDiv, imageBase64, imageDataUrl);
+    await _dispatchSend(message, imageBase64, imageDataUrl);
   }
 }
 
@@ -717,6 +885,9 @@ function renderConversationHistory() {
 
   // Update system prompt state after rendering
   updateSystemPromptState();
+
+  // Attach the Regenerate / Edit & resend controls to the last turn.
+  _refreshTurnControls();
 }
 
 // Handle chosen JSON file and open into conversationHistory
@@ -801,6 +972,11 @@ if (typeof module !== 'undefined') {
     highlightCodeIn,
     renderMermaidIn,
     enrichRenderedContent,
-    renderMarkdownToHtml
+    renderMarkdownToHtml,
+    _lastExchangeIndices,
+    _editableTextFor,
+    regenerateLastResponse,
+    editLastUserTurn,
+    _refreshTurnControls
   };
 }
