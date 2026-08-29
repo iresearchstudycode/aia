@@ -100,91 +100,8 @@ body {
   line-height: 1;
 }
 
-/* Persona selection panel */
-.persona-panel {
-  display: none;
-  position: fixed;
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  padding: 14px 16px;
-  min-width: 240px;
-  z-index: 200;
-}
-
-.persona-panel.open {
-  display: block;
-}
-
-.persona-panel-header {
-  font-size: 11px;
-  font-weight: 700;
-  color: #4a5568;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  margin-bottom: 8px;
-}
-
-.persona-panel-notice {
-  display: none;
-  font-size: 12px;
-  color: #718096;
-  background: #f7fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 6px 10px;
-  margin-bottom: 8px;
-}
-
 .persona-toggle-btn.locked {
   opacity: 0.5;
-}
-
-.persona-panel select {
-  width: 100%;
-  padding: 10px 14px;
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 14px;
-  background: white;
-  color: #2d3748;
-  cursor: pointer;
-  transition: border-color 0.2s;
-}
-
-.persona-panel select:focus {
-  outline: none;
-  border-color: #0ea5e9;
-}
-
-.persona-panel select:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* English Editor "Editor output" mode row — shown only when the English Editor
-   persona is active (visibility handled in main.js). Sits directly below the
-   persona select. */
-.persona-explain-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  font-size: 13px;
-  color: #4a5568;
-}
-
-.persona-explain-toggle label {
-  cursor: default;
-}
-
-/* Override .persona-panel select's full-width block styling for this compact
-   inline mode selector. */
-.editor-mode-select {
-  flex: 1 1 auto;
-  width: auto;
-  padding: 6px 8px;
-  font-size: 13px;
 }
 
 .chat-messages {
@@ -601,104 +518,11 @@ body {
   outline-offset: 2px;
 }
 
-/* Auto-speak active state */
-.toolbar-icon-btn.tts-on {
-  background: #dcfce7;
-  border-color: #22c55e;
-  color: #15803d;
-}
-
-/* Thinking mode active — sky blue */
-.toolbar-icon-btn.thinking-on {
-  background: #e0f2fe;
-  border-color: #0ea5e9;
-  color: #0369a1;
-}
-
 /* VoiceBox generation in progress (#speakerBtn shown early, before playback) */
 .toolbar-icon-btn.generating {
   background: #e0f2fe;
   border-color: #0ea5e9;
   color: #0369a1;
-}
-
-/* Depth selector shown inline when thinking mode is active */
-.thinking-depth-select {
-  display: none;
-  height: 32px;
-  padding: 0 4px 0 6px;
-  border: 1.5px solid #0ea5e9;
-  border-radius: 8px;
-  background: #e0f2fe;
-  color: #0369a1;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.thinking-depth-select:focus-visible {
-  outline: 2px solid #0ea5e9;
-  outline-offset: 2px;
-}
-
-/* Matches the resting/hover states of .voice-btn / .toolbar-icon-btn — neutral
-   by default, sky blue on hover/focus — since this selector has no on/off
-   state of its own (unlike .thinking-depth-select, which borrows the "on"
-   blue because it only appears while thinking mode is active). */
-.tts-engine-select {
-  height: 32px;
-  padding: 0 4px 0 6px;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 8px;
-  background: white;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.tts-engine-select:hover {
-  background: #f0f9ff;
-  border-color: #0ea5e9;
-  color: #0ea5e9;
-}
-
-.tts-engine-select:focus-visible {
-  outline: 2px solid #0ea5e9;
-  outline-offset: 2px;
-}
-
-/* Ollama model selector — first control in .toolbar-left. Mirrors
-   .tts-engine-select's neutral/hover styling (it has no on/off state of its
-   own), but capped in width so a long tag like
-   "qwen2.5-coder:32b-instruct-q4_K_M" can't blow out the toolbar. */
-.model-select {
-  height: 32px;
-  max-width: 160px;
-  padding: 0 4px 0 6px;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 8px;
-  background: white;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.model-select:hover {
-  background: #f0f9ff;
-  border-color: #0ea5e9;
-  color: #0ea5e9;
-}
-
-.model-select:focus-visible {
-  outline: 2px solid #0ea5e9;
-  outline-offset: 2px;
 }
 
 /* English Editor "Changes" view — word-level tracked changes. pre-wrap keeps
@@ -725,7 +549,7 @@ body {
   padding: 0 1px;
 }
 
-/* Per-message Original/Changes/Clean switch — matches .tts-engine-select sizing,
+/* Per-message Original/Changes/Clean switch — compact neutral select that
    sits unobtrusively alongside the copy/speak actions. */
 .editor-view-switch {
   height: 28px;
@@ -1488,28 +1312,6 @@ body {
   color: #cbd5e1;
 }
 
-/* Toggle button — default state is ON, so it wears the same sky-blue "active"
-   look as #thinkingModeBtn's .thinking-on; aria-pressed="false" dims it back to
-   a neutral resting icon. The attribute selector is the source of truth. */
-#navRailToggle[aria-pressed="true"] {
-  background: #e0f2fe;
-  border-color: #0ea5e9;
-  color: #0369a1;
-}
-
-#navRailToggle[aria-pressed="false"] {
-  background: transparent;
-  border-color: transparent;
-  color: #94a3b8;
-  opacity: 0.6;
-}
-
-#navRailToggle[aria-pressed="false"]:hover {
-  background: rgba(14, 165, 233, 0.08);
-  color: #0ea5e9;
-  opacity: 1;
-}
-
 /* Transient flash on a message bubble when its rail marker is clicked. */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes navRailFlash {
@@ -1534,13 +1336,9 @@ body {
   }
 }
 
-/* Narrow viewports: the rail and its toggle are hidden entirely. */
+/* Narrow viewports: the rail is hidden entirely. */
 @media (max-width: 600px) {
   .nav-rail {
-    display: none;
-  }
-
-  #navRailToggle {
     display: none;
   }
 }
@@ -1556,8 +1354,8 @@ body {
    Every selector here is scoped under #settingsRoot / #settingsLightbox /
    #settingsBackdrop / .settings-* / #modelBadge / #thinkingBadge. Colours
    reuse the app's existing literals: dark navy #0f172a (header, as in .toast),
-   sky-blue accent #0ea5e9 / #0369a1 / #e0f2fe (the .thinking-on triad), muted
-   slate #64748b / #94a3b8 / #cbd5e1, borders #e2e8f0, slate text #1e293b. */
+   sky-blue accent #0ea5e9 / #0369a1 / #e0f2fe, muted slate
+   #64748b / #94a3b8 / #cbd5e1, borders #e2e8f0, slate text #1e293b. */
 
 #settingsBackdrop {
   display: none;
@@ -1891,8 +1689,8 @@ body {
 }
 
 /* Toolbar badges — compact, muted, non-interactive in appearance but clickable
-   (they open the lightbox). #thinkingBadge.is-on borrows the .thinking-on
-   triad. */
+   (they open the lightbox). #thinkingBadge.is-on borrows the sky-blue accent
+   triad (#e0f2fe / #0ea5e9 / #0369a1). */
 #modelBadge,
 #thinkingBadge {
   display: inline-flex;
