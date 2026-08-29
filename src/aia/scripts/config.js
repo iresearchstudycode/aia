@@ -21,6 +21,7 @@ const CHAR_COUNTER_DANGER_THRESHOLD = 50;
 const SPEECH_RECOGNITION_LANG = 'en-US'; // BCP 47 tag — e.g. 'en-AU', 'fr-FR'
 const PERSONA_PREFS_KEY = 'personaPrefs'; // localStorage key for per-persona thinking/TTS memory
 const EDITOR_MODE_KEY = 'editorMode'; // localStorage key for the English Editor output mode
+const NAV_RAIL_KEY = 'navRailEnabled'; // localStorage key for the conversation navigator rail toggle
 
 // System prompts
 // Note: `englishEditorExplained` has no <option> in #systemPromptSelect — it is
@@ -51,6 +52,8 @@ let currentModel = MODEL_NAME; // model sent to Ollama for text/thinking turns; 
 let currentThinkingMode = 'off'; // 'off' | 'low' | 'medium' | 'high'
 let currentTTSEngine = 'piper'; // 'piper' | 'voicebox'
 let currentEditorMode = 'clean'; // 'clean' | 'changes' | 'explain' — English Editor output mode
+let currentNavRailEnabled = true; // conversation navigator rail visible; toolbar toggle, persisted to localStorage[NAV_RAIL_KEY]
+window.currentNavRailEnabled = currentNavRailEnabled; // nav-rail.js reads the flag off window to avoid script load-order issues
 let pendingDocumentText = null; // extracted text, folded into the next outgoing message
 let pendingDocumentName = null; // original filename, shown in the preview chip and user bubble
 let pendingDocumentTruncated = false; // true when extracted text exceeded MAX_DOCUMENT_TEXT_CHARS

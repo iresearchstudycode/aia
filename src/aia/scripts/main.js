@@ -616,4 +616,21 @@ document.addEventListener('DOMContentLoaded', function () {
   // Per-persona settings win over the global restore above when present for the
   // persona that's active on load.
   _applyPersonaSettings(readPersonaPref(_personaPrefsJson, _activePersonaKey));
+
+  // Conversation navigator rail toggle — restore preference, initialize nav-rail,
+  // and wire button. Mirrors autoTTS and thinking-mode toggle patterns.
+  const _navRailToggle = document.getElementById('navRailToggle');
+  const _navRailStored = localStorage.getItem(NAV_RAIL_KEY);
+  currentNavRailEnabled = _navRailStored === null ? true : _navRailStored === 'true';
+  window.currentNavRailEnabled = currentNavRailEnabled;
+  _navRailToggle.setAttribute('aria-pressed', String(currentNavRailEnabled));
+  initNavRail();
+  setNavRailEnabled(currentNavRailEnabled);
+  _navRailToggle.addEventListener('click', function () {
+    currentNavRailEnabled = !currentNavRailEnabled;
+    window.currentNavRailEnabled = currentNavRailEnabled;
+    localStorage.setItem(NAV_RAIL_KEY, String(currentNavRailEnabled));
+    _navRailToggle.setAttribute('aria-pressed', String(currentNavRailEnabled));
+    setNavRailEnabled(currentNavRailEnabled);
+  });
 });
