@@ -1805,3 +1805,22 @@ body {
     max-width: 108px;
   }
 }
+
+/* --- Last-turn quick actions: regenerate / edit (v1.24.0) --------------------
+   chat.js adds `<button class="action-btn msg-regen-btn">` to the last AI
+   message's existing `.message-actions`, and `<button class="action-btn
+   msg-edit-btn">` inside a `.message-actions` it creates on the last user
+   message. Because both carry `.action-btn` they already inherit the full
+   button chrome (`.action-btn`, `.action-btn:hover`, `.action-btn:focus-visible`)
+   and the icon sizing (`.action-btn svg { width: 15px; height: 15px }`) — none
+   of that is re-declared here.
+
+   The only gap is layout: the user bubble is right-aligned (max-width: 82%;
+   margin-left: auto), but `.message-actions` defaults to flex-start, which
+   would strand the edit button at the far left. Right-align the action row on
+   user messages so it tucks under the bubble. No transitions added, so no
+   prefers-reduced-motion handling is needed. */
+.user-message .message-actions {
+  justify-content: flex-end;
+  margin-top: 2px;
+}

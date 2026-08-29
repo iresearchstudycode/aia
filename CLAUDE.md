@@ -166,6 +166,18 @@ Scripts are loaded in dependency order in `index.html`:
 
 **Global state lives in `config.js`** (`conversationHistory`, `currentSystemPrompt`, the `current*` preference globals) and is shared across modules via the window scope — there is no module bundler. The resolved server preferences hang off `window.vpalSettings` (written by `main.js`, read by `settings.js`).
 
+### Keyboard Shortcuts
+
+Wired in the single `document.addEventListener('keydown', ...)` block in `main.js` (alongside the panel Escape/Tab handling). All guard their cross-module targets with `typeof`.
+
+| Keys | Action |
+|---|---|
+| `Escape` | Priority chain: (1) cancel an in-flight stream if `#stopBtn` is visible → `stopStreaming()`; (2) close an open panel → `closeProfileDropdown()` / `closeAttachMenu()`; (3) otherwise return focus to `#userInput`. Bails immediately if the Settings lightbox is open (`settings.js` owns Escape there). |
+| `Ctrl`/`Cmd` + `,` | `openSettings('models')` |
+| `Ctrl`/`Cmd` + `Shift` + `O` | `clearChat()` (keeps its own confirm dialog) |
+
+The `Ctrl`/`Cmd` combos fire even while `#userInput` is focused; the bare `Escape` path never disrupts typing.
+
 ## Security Invariants
 
 - All AI response content — both the final answer and thinking block content — passes through `renderMarkdownToHtml()` (`marked.parse()` → `DOMPurify.sanitize()`) before being set as `innerHTML` — in `api.js` (streaming and final rebuild) and `chat.js` (`renderConversationHistory`).

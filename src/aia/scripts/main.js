@@ -328,13 +328,60 @@ document.addEventListener('DOMContentLoaded', async function () {
     thinkingBadge.addEventListener('click', function () { openSettings('reasoning'); });
   }
 
-  // Close all panels on Escape; trap Tab focus inside whichever panel is open.
+  // Global keyboard shortcuts + panel Escape/Tab handling.
   // (The Settings lightbox runs its own focus trap / Escape handling in settings.js.)
+  //
+  //   Escape            1st: cancel an in-flight stream (Stop button visible)
+  //                     2nd: close whichever panel is open (profile / attach menu)
+  //                     3rd: return focus to the composer
+  //   Ctrl/Cmd + ,      open Settings (Models pane)
+  //   Ctrl/Cmd+Shift+O  clear the conversation (keeps its own confirm)
+  //
+  // The Ctrl/Cmd combos fire even while the composer is focused; the bare
+  // Escape path never disrupts typing (worst case it re-focuses #userInput).
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') {
-      closeProfileDropdown();
-      closeAttachMenu();
+    var mod = e.ctrlKey || e.metaKey;
+
+    // Ctrl/Cmd + , → Settings. `,` is unshifted; guard against Alt to avoid
+    // stealing OS/browser chords.
+    if (mod && !e.shiftKey && !e.altKey && e.key === ',') {
+      e.preventDefault();
+      if (typeof openSettings === 'function') openSettings('models');
+      return;
     }
+
+    // Ctrl/Cmd + Shift + O → clear chat.
+    if (mod && e.shiftKey && !e.altKey && (e.key === 'o' || e.key === 'O')) {
+      e.preventDefault();
+      if (typeof clearChat === 'function') clearChat();
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      // Settings lightbox owns its own Escape — don't double-handle.
+      var lightbox = document.getElementById('settingsLightbox');
+      if (lightbox && lightbox.classList.contains('open')) return;
+
+      // 1. A stream is running (Stop button is showing) — cancel it.
+      var stopBtn = document.getElementById('stopBtn');
+      if (stopBtn && stopBtn.offsetParent !== null) {
+        if (typeof stopStreaming === 'function') stopStreaming();
+        return;
+      }
+
+      // 2. A panel is open — close it.
+      if (profileDropdown.classList.contains('open') || attachMenuDropdown.classList.contains('open')) {
+        closeProfileDropdown();
+        closeAttachMenu();
+        return;
+      }
+
+      // 3. Nothing open or streaming — put the caret back in the composer.
+      var input = document.getElementById('userInput');
+      if (input && document.activeElement !== input) input.focus();
+      return;
+    }
+
     if (e.key === 'Tab') {
       if (profileDropdown.classList.contains('open')) _trapFocus(profileDropdown, e);
       if (attachMenuDropdown.classList.contains('open')) _trapFocus(attachMenuDropdown, e);
