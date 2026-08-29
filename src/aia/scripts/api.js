@@ -83,8 +83,10 @@ function stopStreaming() {
 // and the turn carries no document attachment. Image turns are excluded by the
 // caller (they take the non-streaming vision path).
 function _isEditorExchangeTurn(userMessage) {
-  const sel = document.getElementById('systemPromptSelect');
-  if (!sel || sel.value !== 'englishEditor') return false;
+  // The active persona is the English Editor when the resolved system prompt is
+  // its silent variant. `explain` mode resolves to `englishEditorExplained`
+  // instead, and is additionally excluded by the editor-mode check below.
+  if (currentSystemPrompt !== systemPrompts.englishEditor) return false;
   if (currentEditorMode !== 'clean' && currentEditorMode !== 'changes') return false;
   if (parseDocumentMessageContent(userMessage).hasDocument) return false;
   return true;
@@ -138,7 +140,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
   }
 
   const { requestBody, isVision, hasCurrentImage } = _buildRequestBody(
-    imageBase64, conversationHistory, currentSystemPrompt, currentModel, VISION_MODEL_NAME, currentThinkingMode, OLLAMA_NUM_CTX
+    imageBase64, conversationHistory, currentSystemPrompt, currentModel, currentVisionModel, currentThinkingMode, OLLAMA_NUM_CTX
   );
   // Captured once so all three render sites (live loop, final, abort) agree on whether
   // thinking is active for this request. When false, splitThinkingContent is bypassed
@@ -317,7 +319,8 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
       );
     }
 
-    if (document.getElementById('autoTTSBtn').classList.contains('tts-on')) {
+    // Auto-speak the reply when enabled in Settings (global `auto_speak`).
+    if (window.vpalSettings && window.vpalSettings.global && window.vpalSettings.global.auto_speak) {
       speakText(savedContent);
     }
 

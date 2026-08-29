@@ -1544,3 +1544,466 @@ body {
     display: none;
   }
 }
+
+/* ============================================================
+   Settings lightbox
+   ============================================================
+
+   A single modal dialog (built in settings.js into #settingsRoot) that
+   replaces the scattered toolbar / persona-panel preference controls, plus
+   the two toolbar badges (#modelBadge / #thinkingBadge) that open it.
+
+   Every selector here is scoped under #settingsRoot / #settingsLightbox /
+   #settingsBackdrop / .settings-* / #modelBadge / #thinkingBadge. Colours
+   reuse the app's existing literals: dark navy #0f172a (header, as in .toast),
+   sky-blue accent #0ea5e9 / #0369a1 / #e0f2fe (the .thinking-on triad), muted
+   slate #64748b / #94a3b8 / #cbd5e1, borders #e2e8f0, slate text #1e293b. */
+
+#settingsBackdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  z-index: 1000;
+}
+
+#settingsBackdrop.open {
+  display: block;
+}
+
+#settingsLightbox {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(720px, calc(100vw - 32px));
+  max-width: 720px;
+  max-height: 85vh;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.45);
+  z-index: 1001;
+}
+
+#settingsLightbox.open {
+  display: flex;
+}
+
+#settingsLightbox .settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+#settingsLightbox .settings-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+#settingsLightbox .settings-close {
+  padding: 4px 9px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #cbd5e1;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#settingsLightbox .settings-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+#settingsLightbox .settings-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#settingsNav {
+  flex: 0 0 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  overflow-y: auto;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+}
+
+#settingsNav .settings-nav-btn {
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1e293b;
+  text-align: left;
+  cursor: pointer;
+}
+
+#settingsNav .settings-nav-btn:hover {
+  background: #f0f9ff;
+  color: #0ea5e9;
+}
+
+#settingsNav .settings-nav-btn.is-active {
+  background: #e0f2fe;
+  color: #0369a1;
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 #0ea5e9;
+}
+
+#settingsNav .settings-nav-btn:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: -2px;
+}
+
+#settingsPanel {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 18px 20px;
+  overflow-y: auto;
+}
+
+#settingsPanel .settings-category {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+#settingsPanel .settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+#settingsPanel .settings-field-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+#settingsPanel .settings-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+#settingsPanel .settings-field-hint {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+#settingsPanel .settings-field input[type="text"],
+#settingsPanel .settings-field select {
+  padding: 8px 10px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #2d3748;
+  font-size: 13px;
+}
+
+#settingsPanel .settings-field input[type="text"]:focus,
+#settingsPanel .settings-field select:focus {
+  outline: none;
+  border-color: #0ea5e9;
+}
+
+#settingsPanel .settings-field input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  align-self: flex-start;
+  accent-color: #0ea5e9;
+  cursor: pointer;
+}
+
+#settingsPanel .settings-field-reset {
+  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #0ea5e9;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#settingsPanel .settings-field-reset[hidden] {
+  display: none;
+}
+
+#settingsPanel .settings-field-reset:hover {
+  background: #f0f9ff;
+}
+
+#settingsPanel .settings-note {
+  padding: 6px 10px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #718096;
+}
+
+#settingsPanel .settings-persona-overrides {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 12px 0 4px;
+  border-top: 1px solid #e2e8f0;
+}
+
+#settingsPanel .settings-prompt-details {
+  font-size: 12px;
+  color: #475569;
+}
+
+#settingsPanel .settings-prompt-details summary {
+  cursor: pointer;
+  color: #0369a1;
+}
+
+#settingsPanel .settings-prompt-view {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
+#settingsPanel .settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+#settingsPanel .settings-save {
+  padding: 8px 16px;
+  background: #0ea5e9;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#settingsPanel .settings-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#settingsPanel .settings-cancel {
+  padding: 8px 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #1e293b;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#settingsPanel .settings-cancel:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#settingsPanel .settings-section-reset {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+#settingsPanel .settings-confirm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #9a3412;
+}
+
+#settingsPanel .settings-confirm button {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#settingsPanel .settings-confirm .settings-confirm-yes {
+  background: #ea580c;
+  color: #ffffff;
+}
+
+#settingsPanel .settings-confirm .settings-confirm-no {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+}
+
+#settingsPanel .settings-unavailable {
+  align-items: flex-start;
+}
+
+#settingsLightbox .settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 18px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+#settingsResetAll {
+  padding: 7px 14px;
+  background: transparent;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  color: #dc2626;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#settingsResetAll:hover {
+  background: #fef2f2;
+}
+
+/* Toolbar badges — compact, muted, non-interactive in appearance but clickable
+   (they open the lightbox). #thinkingBadge.is-on borrows the .thinking-on
+   triad. */
+#modelBadge,
+#thinkingBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  max-width: 180px;
+  padding: 0 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+#modelBadge:hover,
+#thinkingBadge:hover {
+  border-color: #0ea5e9;
+  color: #0369a1;
+}
+
+#modelBadge:focus-visible,
+#thinkingBadge:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
+}
+
+#thinkingBadge.is-on {
+  background: #e0f2fe;
+  border-color: #0ea5e9;
+  color: #0369a1;
+}
+
+/* Open/close motion — only when the viewer has not asked to reduce it. */
+@media (prefers-reduced-motion: no-preference) {
+  #settingsBackdrop.open {
+    animation: settingsFadeIn 0.15s ease-out;
+  }
+
+  #settingsLightbox.open {
+    animation: settingsPopIn 0.15s ease-out;
+  }
+
+  @keyframes settingsFadeIn {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes settingsPopIn {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -46%);
+    }
+
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
+  }
+}
+
+/* Narrow viewports: stack the two panes — nav becomes a horizontal scroll
+   strip above the panel, and the lightbox fills the screen. */
+@media (max-width: 600px) {
+  #settingsLightbox {
+    top: 0;
+    left: 0;
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    transform: none;
+  }
+
+  #settingsLightbox.open {
+    animation: none;
+  }
+
+  #settingsLightbox .settings-body {
+    flex-direction: column;
+  }
+
+  #settingsNav {
+    flex: 0 0 auto;
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  #settingsNav .settings-nav-btn {
+    white-space: nowrap;
+  }
+
+  #settingsNav .settings-nav-btn.is-active {
+    box-shadow: inset 0 -3px 0 #0ea5e9;
+  }
+
+  #modelBadge,
+  #thinkingBadge {
+    max-width: 108px;
+  }
+}

@@ -244,19 +244,28 @@ function copyMessageToClipboard(button) {
   });
 }
 
+// The persona key currently in effect. The Settings lightbox is the only thing
+// that changes it (writing window.vpalSettings.global.active_persona and calling
+// applyResolvedSettings()); everything here just reads it, falling back to the
+// englishEditor default before settings have hydrated.
+function _currentPersonaKey() {
+  const g = window.vpalSettings && window.vpalSettings.global;
+  return (g && g.active_persona) || 'englishEditor';
+}
+
 function updateSystemPromptState() {
   const locked = conversationHistory.length > 0;
-
-  document.getElementById('systemPromptSelect').disabled = locked;
 
   const toggleBtn = document.getElementById('personaToggleBtn');
   if (toggleBtn) {
     toggleBtn.classList.toggle('locked', locked);
-    toggleBtn.title = locked ? 'Clear the conversation to switch persona' : 'Choose persona';
+    toggleBtn.title = locked
+      ? 'Clear the conversation to switch persona'
+      : 'Open Settings to choose a persona';
   }
 
-  const notice = document.getElementById('personaPanelNotice');
-  if (notice) notice.style.display = locked ? '' : 'none';
+  const label = document.getElementById('currentPersonaLabel');
+  if (label) label.textContent = personaLabels[_currentPersonaKey()] || '';
 }
 
 // Add a user message bubble. imageDataUrl is a data: URL from FileReader for display.
@@ -380,46 +389,27 @@ function closeWindow() {
   }
 }
 
-// Resolve the option value to the actual prompt text. `englishEditor` has two
-// prompt variants — the silent/output-only one and the change-explaining one —
-// chosen by the #editorModeSelect selector in the persona panel: mode 'explain'
-// uses the explaining prompt, modes 'clean'/'changes' use the silent one (the
-// 'changes' diff view is derived client-side from that silent output).
-function _resolveSystemPrompt(optionValue) {
-  if (optionValue === 'englishEditor') {
-    return currentEditorMode === 'explain'
+// Resolve a persona key to the actual system-prompt text. `englishEditor` has
+// two prompt variants — the silent/output-only one and the change-explaining
+// one — chosen by that persona's `editor_mode`: 'explain' uses the explaining
+// prompt, 'clean'/'changes' use the silent one (the 'changes' diff view is
+// derived client-side from that silent output).
+//
+// The editor mode and (when no key is passed) the active persona are read from
+// window.vpalSettings, falling back to the `currentEditorMode` /
+// `currentSystemPrompt`-implied defaults before settings have hydrated.
+function _resolveSystemPrompt(personaKey) {
+  const key = personaKey || _currentPersonaKey();
+  if (key === 'englishEditor') {
+    const p = window.vpalSettings
+      && window.vpalSettings.personas
+      && window.vpalSettings.personas.englishEditor;
+    const mode = (p && p.editor_mode) || currentEditorMode;
+    return mode === 'explain'
       ? systemPrompts.englishEditorExplained
       : systemPrompts.englishEditor;
   }
-  return systemPrompts[optionValue];
-}
-
-// Update system prompt
-function updateSystemPrompt() {
-  const select = document.getElementById('systemPromptSelect');
-  currentSystemPrompt = _resolveSystemPrompt(select.value);
-
-  // If conversation has started, warn user
-  if (conversationHistory.length > 0) {
-    if (confirm('Changing the system prompt will reset the conversation. Continue?')) {
-      conversationHistory = [];
-      document.getElementById('chatMessages').innerHTML = '';
-      updateSystemPromptState(); // Update state after clearing
-    } else {
-      // Revert selection. Both editor variants map back to the single
-      // `englishEditor` option — a raw key lookup would yield
-      // `englishEditorExplained`, which is not a valid <option> value and would
-      // silently blank the select.
-      if (
-        currentSystemPrompt === systemPrompts.englishEditor ||
-        currentSystemPrompt === systemPrompts.englishEditorExplained
-      ) {
-        select.value = 'englishEditor';
-      } else {
-        select.value = Object.keys(systemPrompts).find(key => systemPrompts[key] === currentSystemPrompt);
-      }
-    }
-  }
+  return systemPrompts[key];
 }
 
 // Send message and continue listening (for voice mode)
@@ -569,8 +559,7 @@ function exportChatAsMarkdown() {
     return;
   }
 
-  const sel = document.getElementById('systemPromptSelect');
-  const personaName = sel.options[sel.selectedIndex].text;
+  const personaName = personaLabels[_currentPersonaKey()] || 'AI Assistant';
   const headerDate = formatTimestamp(new Date());
 
   const lines = [
