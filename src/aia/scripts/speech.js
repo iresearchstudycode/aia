@@ -164,7 +164,8 @@ function toggleSpeechRecognition() {
 }
 
 // Text to Speech function — routes to the Piper proxy (default) or the
-// VoiceBox proxy depending on currentTTSEngine (config.js / ttsEngineSelect).
+// VoiceBox proxy depending on currentTTSEngine (config.js global, hydrated
+// from the settings service by applyResolvedSettings() in settings.js).
 function speakText(text, sourceBtn) {
   if (currentTTSEngine === 'voicebox') {
     speakTextViaVoicebox(text, sourceBtn);

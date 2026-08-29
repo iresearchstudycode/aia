@@ -3,7 +3,7 @@ A secure, voice-enabled AI chat interface that runs entirely on your local machi
 
 ## 📋 Overview
 
-This web application provides a ChatGPT-style chat interface (dark navy header, sky-blue user bubbles, clean card AI responses) with voice input/output, a single "+" attach menu for image attachment (multimodal vision queries) and document attachment (.txt/.md/.pdf Q&A), LaTeX math rendering via KaTeX, syntax-highlighted code blocks (highlight.js) and Mermaid diagram rendering, and a live collapsible thinking block for reasoning-capable models. It connects to locally-hosted AI models through Ollama's REST API with no external dependencies — protected by TOTP authentication for up to five users.
+This web application provides a ChatGPT-style chat interface (dark navy header, sky-blue user bubbles, clean card AI responses) with voice input/output, a single "+" attach menu for image attachment (multimodal vision queries) and document attachment (.txt/.md/.pdf Q&A), LaTeX math rendering via KaTeX, syntax-highlighted code blocks (highlight.js) and Mermaid diagram rendering, a conversation navigator rail, and a live collapsible thinking block for reasoning-capable models. Every preference (models, voice, reasoning, personas) is edited in one Settings lightbox and persisted per user server-side. It connects to locally-hosted AI models through Ollama's REST API with no external dependencies — protected by TOTP authentication for up to five users.
 
 ## 🏗️ Architecture
 
@@ -182,6 +182,7 @@ Unlike the VoiceBox path, this one is entirely self-contained — no local deskt
 | Piper TTS service | FastAPI + `piper-tts` (`onnxruntime`) on `python:3.12-slim`, uid=65532 — self-contained neural speech synthesis; `en_US-lessac-medium` ONNX voice model SHA256-pinned, fetched at build time |
 | VoiceBox proxy (optional) | FastAPI + httpx (`cgr.dev/chainguard/python:latest`, uid=65532) — bridges to a local Voicebox app's REST API; in-memory generation cache |
 | Document text extraction | FastAPI + pypdf (`cgr.dev/chainguard/python:latest`, uid=65532) — self-contained PDF text extraction; `.txt`/`.md` handled entirely client-side |
+| Settings service | FastAPI + stdlib `sqlite3` (WAL) (`cgr.dev/chainguard/python:latest`, uid=65532) — per-user preferences on the `vpal-settings-data` volume; identity via the `X-Auth-User` header nginx forwards from `/auth/verify` |
 | Session | HMAC-signed cookie (`itsdangerous.TimestampSigner`), 8-hour TTL |
 | TOTP | RFC 6238 via `pyotp`, compatible with Google Authenticator |
 | Container | Docker, read-only filesystems, minimal capability sets |
@@ -326,6 +327,15 @@ vpal/
 │   └── tests/
 │       ├── conftest.py             # sys.path setup
 │       └── test_main.py            # 13 pytest tests (synthesis mocked)
+├── settings-service/               # Per-user preferences service (self-contained, SQLite/WAL)
+│   ├── main.py                     # FastAPI app — GET/PUT/POST /settings/* + /health
+│   ├── requirements.txt            # fastapi, uvicorn
+│   ├── requirements-test.txt       # pytest, flake8, black, httpx
+│   ├── Dockerfile                  # Multi-stage Chainguard build (digest-pinned); seeds /data as uid 65532
+│   ├── pytest.ini
+│   └── tests/
+│       ├── conftest.py             # per-test tmp SETTINGS_DB_PATH
+│       └── test_main.py            # 61 pytest tests (real SQLite)
 ├── src/
 │   └── aia/                        # Web application source
 │       ├── index.html              # Main HTML structure
@@ -335,12 +345,14 @@ vpal/
 │       │   ├── highlight.min.css   # highlight.js dark theme (vendored, atom-one-dark)
 │       │   └── fonts/              # KaTeX math fonts (vendored)
 │       ├── scripts/
-│       │   ├── config.js           # Configuration & system prompts
+│       │   ├── config.js           # Constants, system prompts, preference globals
 │       │   ├── utils.js            # Utility functions
 │       │   ├── speech.js           # Voice input (Web Speech recognition) + TTS routing (Piper / VoiceBox)
 │       │   ├── chat.js             # Chat UI management
 │       │   ├── api.js              # Ollama API client
-│       │   ├── main.js             # Application initialisation
+│       │   ├── nav-rail.js         # Conversation navigator rail
+│       │   ├── settings.js         # Settings lightbox + server-preference resolution
+│       │   ├── main.js             # Application initialisation, settings hydration + migration
 │       │   ├── marked.min.js       # Markdown parser (vendored)
 │       │   ├── dompurify.min.js    # HTML sanitiser (vendored)
 │       │   ├── highlight.min.js    # Syntax highlighting (vendored, highlight.js v11)
@@ -365,18 +377,34 @@ vpal/
 
 ## 🔧 Configuration
 
+### Settings service
+
+Every *user preference* — chat model, vision model, TTS engine, auto-speak, speech-recognition language, thinking mode + depth, navigator rail, per-persona overrides, editor mode, active persona — is edited in the in-app **Settings** lightbox and stored per user by the `settings-service` (SQLite on the `vpal-settings-data` Docker volume). The house **defaults** are set with optional environment variables in `.env` (all have baked-in fallbacks):
+
+| env var | fallback |
+|---|---|
+| `VPAL_DEFAULT_CHAT_MODEL` | `gemma4:e4b` |
+| `VPAL_DEFAULT_VISION_MODEL` | `gemma3:4b` |
+| `VPAL_DEFAULT_TTS_ENGINE` | `piper` |
+| `VPAL_DEFAULT_AUTO_SPEAK` | `false` |
+| `VPAL_DEFAULT_STT_LANG` | `en-US` |
+| `VPAL_DEFAULT_THINKING` | `false` |
+| `VPAL_DEFAULT_THINKING_DEPTH` | `medium` |
+| `VPAL_DEFAULT_NAV_RAIL` | `true` |
+
+"Reset to defaults" in the dialog reverts a value to its env default. `SETTINGS_DB_PATH` (default `/data/settings.db`) sets the SQLite location. Existing `localStorage` preferences migrate to the service automatically on first load after upgrade.
+
 ### Ollama settings
 
-- **Text + thinking model**: `MODEL_NAME` in `config.js` (default: `gemma4:e4b`) — the *default*; the model actually sent is whatever is chosen in the toolbar model selector (any model from `ollama list`), remembered in `localStorage` (`ollamaModel`) and restored on reload if still installed
-- **Vision model**: `VISION_MODEL_NAME` in `config.js` (default: `gemma3:4b`) — used automatically when an image is attached (not selectable); `gemma4:e4b` has no vision encoder
+- **Models**: chosen in Settings → Models from your installed models (`ollama list` / `GET /api/tags`); `MODEL_NAME` / `VISION_MODEL_NAME` in `config.js` are only the offline fallbacks. `gemma4:e4b` has no vision encoder, so a separate vision model is required.
 - **API URLs**: `OLLAMA_API_URL` (chat, default `https://localhost/ollama/api/chat`) and `OLLAMA_TAGS_URL` (model list, default `https://localhost/ollama/api/tags`) in `config.js`
 - **Context length**: `OLLAMA_NUM_CTX` in `config.js` (default: `16384`) — must match the Ollama server's actual configured context length (`OLLAMA_CONTEXT_LENGTH` env var, or `PARAMETER num_ctx` in the model's Modelfile); sent explicitly as `num_ctx` on every text/thinking and multi-turn-vision request so behavior never silently depends on Ollama's own default. `MAX_HISTORY_MESSAGES` in `config.js` (default: `40`, i.e. 20 exchanges) additionally bounds how many past messages are kept regardless of their token cost
 
 ### Voice settings
 
-- **Language**: `SPEECH_RECOGNITION_LANG` in `config.js` (BCP 47, default: `en-US`)
+- **Language**: Settings → Voice (`stt_lang`, BCP 47, default `en-US`); `SPEECH_RECOGNITION_LANG` in `config.js` is the offline fallback
 - **Silence detection**: `SILENCE_TIMEOUT_MS` in `config.js` (default: `3000` ms)
-- **TTS engine**: Toolbar dropdown next to the auto-speak button — "Piper" (self-hosted neural TTS, default; via `PIPER_SPEAK_URL` in `config.js`, default: `https://localhost/piper/speak`) or "VoiceBox" (optional local Voicebox app; via `VOICEBOX_SPEAK_URL`, default: `https://localhost/voicebox/speak`); choice persisted to `localStorage` (an older stored `"browser"` value silently migrates to `"piper"`). Both engines show a spinner on the speak button while audio is being generated and play through an `<audio>` element with a working stop button; VoiceBox additionally serves repeat text from its in-memory cache. If Voicebox isn't running, stay on Piper or VoiceBox will show an unavailable toast on speak.
+- **TTS engine**: Settings → Voice — "Piper" (self-hosted neural TTS, default; via `PIPER_SPEAK_URL` in `config.js`, default: `https://localhost/piper/speak`) or "VoiceBox" (optional local Voicebox app; via `VOICEBOX_SPEAK_URL`, default: `https://localhost/voicebox/speak`), with per-persona overrides. Both engines show a spinner on the speak button while audio is being generated and play through an `<audio>` element with a working stop button; VoiceBox additionally serves repeat text from its in-memory cache. If Voicebox isn't running, stay on Piper or VoiceBox will show an unavailable toast on speak.
 
 ### Auth settings
 
@@ -448,22 +476,23 @@ Self-contained — no external app to configure, and these only bound worst-case
 
 - **TOTP Authentication**: Google Authenticator login for up to five users
 - **ChatGPT-style UI**: Dark navy header, sky-blue user message bubbles (right-aligned), clean card AI responses; all controls use inline SVG line icons with no emoji
-- **Profile Menu**: SVG user icon + logged-in username in the header; dropdown (Save, Open, Clear, Close, Sign out) opens as a fixed overlay with Tab focus trap and Escape to close
-- **Persona Selector**: Chevron button next to the heading opens a panel to switch AI personas; selected persona shown as a subtitle; locked during an active conversation; Tab focus trap and Escape to close. The English Editor persona has an "Editor output" selector (shown only for that persona) with three modes — **Clean** (just the polished text), **Show changes** (a word-level tracked-changes diff — deletions struck through, insertions underlined), and **Explain** (prose commentary plus the revision) — persisted to `localStorage`. Each Clean / Show-changes editor reply also carries its own Original / Changes / Clean view switch, so you can flip how a past reply is shown without re-sending. Switching persona also restores that persona's last-used thinking on/off + depth and TTS engine (per-persona settings memory, `localStorage` key `personaPrefs`)
+- **Profile Menu**: SVG user icon + logged-in username in the header; dropdown (Save, Export MD, Open, Clear, Close, **Settings**, Sign out) opens as a fixed overlay with Tab focus trap and Escape to close
+- **Settings**: One lightbox (opened from the profile dropdown, next to Sign out) holds every preference, in a two-pane layout — categories on the left (Models / Voice / Reasoning / Interface / Personas), the selected category's fields on the right, each category with its own Save / Cancel / Reset, plus a whole-dialog "Reset all" and a per-field reset for any value that differs from its default. Models: the text/thinking model **and** the vision model are both selectable from your installed Ollama models. Personas: pick the active persona (locked mid-conversation) and set per-persona overrides for thinking mode/depth and TTS engine ("Inherit" falls back to the global default); the English Editor persona also has its output mode (Clean / Show changes / Explain). **Preferences persist server-side, per user** (a small `settings-service` backed by SQLite), so they follow you across devices and survive restarts; defaults come from `VPAL_DEFAULT_*` environment variables. Existing `localStorage` preferences are migrated automatically on first load. If the settings service is unreachable the app still runs on the built-in defaults
 - **Chat Input**: Auto-growing textarea (up to 6 lines); Enter sends, Shift+Enter inserts a newline; circular sky-blue send button activates only when text or an image is pending
-- **Voice Input/Output**: Continuous speech recognition with 3-second silence detection (Web Speech API); speech synthesis via the self-hosted **Piper** engine (default) or **VoiceBox** (optional), with per-message speak buttons and a working stop control; toolbar: mic → auto-speak → TTS engine (Piper / VoiceBox) → stop speaking. Recognition is paused while TTS plays so the mic doesn't capture the synthesised audio
-- **Attach Menu**: A single ChatGPT-style "+" button in the toolbar opens a popup with "Add photos" and "Add files" options, consolidating what were previously two separate toolbar buttons; Tab focus trap and Escape to close, matching the profile dropdown and persona panel
+- **Voice Input/Output**: Continuous speech recognition with 3-second silence detection (Web Speech API); speech synthesis via the self-hosted **Piper** engine (default) or **VoiceBox** (optional, chosen in Settings → Voice), with per-message speak buttons and a working stop control; the toolbar keeps only the mic and stop-speaking icons. Recognition is paused while TTS plays so the mic doesn't capture the synthesised audio
+- **Attach Menu**: A single ChatGPT-style "+" button in the toolbar opens a popup with "Add photos" and "Add files" options; Tab focus trap and Escape to close, matching the profile dropdown
 - **Image Attachment**: "Add photos" in the "+" attach menu opens a file picker; images are resized to ≤ 1024 px before being sent; vision requests are automatically routed to `gemma3:4b`; in-session thumbnails shown in user bubbles; saved chats show an SVG camera icon placeholder where the image was
 - **Document Attachment**: "Add files" in the "+" attach menu attaches a `.txt`, `.md`, or `.pdf` file to ask questions about; `.txt`/`.md` are read directly in the browser, `.pdf` is extracted server-side (see [Document Attachment Path](#document-attachment-path)); the chat bubble shows a compact filename chip and your question, not the full extracted text; follow-up questions work automatically since the extracted text is part of normal conversation history
-- **Thinking Mode**: Lightbulb toolbar button toggles reasoning ON/OFF; depth selector (Low / Medium / High) appears inline when enabled; live reasoning displayed in a collapsible `<details>` block; collapses when the final answer arrives; thinking content excluded from history, copy, and speech; mode and depth saved to `localStorage` and restored on reload
-- **Model Selector**: A compact `<select>` at the left of the bottom toolbar (before the mic) shows the current Ollama model and lists every model installed locally (read from Ollama's `GET /api/tags`); pick a different one at any time — it applies to the next and all subsequent messages and is remembered across reloads (`localStorage`), with no conversation reset. Falls back to the default model with a toast if Ollama's model list can't be loaded. Image turns always use the vision model regardless of the selection
-- **Dual-model Routing**: Text/thinking requests use the model chosen in the toolbar selector (default `gemma4:e4b`, streaming, thinking-capable); image requests and vision follow-ups always use `gemma3:4b`; `think: false` sent explicitly to suppress native reasoning when thinking is OFF
+- **Thinking Mode**: Toggled in Settings → Reasoning (on/off + depth Low / Medium / High), with per-persona overrides; a `#thinkingBadge` in the toolbar shows the current state and opens Settings on click; live reasoning displayed in a collapsible `<details>` block that collapses when the final answer arrives; thinking content excluded from history, copy, and speech
+- **Model Selection**: Both the text/thinking model and the vision model are chosen in Settings → Models from the list of models installed locally (Ollama's `GET /api/tags`); a `#modelBadge` in the toolbar shows the active model and opens Settings on click. Changes apply to the next and all subsequent messages with no conversation reset. Falls back to the default with a toast if Ollama's model list can't be loaded
+- **Conversation Navigator Rail**: A thin strip of markers down the right edge of the chat, one per completed question. Hover a marker for a preview card (the question + a short snippet of the reply); click it to jump that turn to the top of the view and briefly flash it. The marker for the turn you're looking at stays highlighted as you scroll. Toggled in Settings → Interface (default on); hidden on narrow screens. Mouse-only, and it's purely a view over the current conversation — nothing is added to saved chats
+- **Dual-model Routing**: Text/thinking requests use the chosen chat model (default `gemma4:e4b`, streaming, thinking-capable); image requests and vision follow-ups use the chosen vision model (default `gemma3:4b`); `think: false` sent explicitly to suppress native reasoning when thinking is OFF
 - **Real-time Streaming**: Live token-by-token response display with a stop button
 - **Multiple Personas**: 11 pre-configured AI personalities
 - **Per-message Actions**: Copy and speak SVG icon buttons appear on successful AI responses only; target the final answer (thinking content excluded)
 - **Chat History**: Save/load conversation history as JSON; filename format `YYYYMMDD-HHMMss-vpal-<Topic>.json`; base64 image data stripped on save (preserves `hasImage` flag for routing and placeholder display)
 - **Character Counter**: Remaining count shown as you approach the 4,000-character limit, with warning and danger colour states
-- **Auto-Speak**: Toolbar icon toggles automatic TTS after each AI response; preference saved to `localStorage`; works with either engine regardless of browser Web Speech support
+- **Auto-Speak**: Settings → Voice toggles automatic TTS after each AI response; works with either engine regardless of browser Web Speech support
 - **Markdown Support**: Rich text formatting in AI responses and thinking blocks via Marked.js + DOMPurify
 - **Math Rendering**: LaTeX expressions typeset via KaTeX — inline (`$...$`, `\(...\)`) and display (`$$...$$`, `\[...\]`, plus `\begin{equation}`/`\begin{align}`/etc.) — in AI responses, thinking blocks, and your own messages; a malformed expression falls back to showing its raw source rather than breaking the rest of the message; math inside code blocks is left alone
 - **Code Highlighting**: Fenced code blocks in AI responses are syntax-highlighted via highlight.js (vendored, ~40 common languages, dark theme matched to the app's slate `<pre>` background); highlight.js output is re-sanitised through DOMPurify; an unrecognised language falls back to plain monospace

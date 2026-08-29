@@ -3,10 +3,7 @@
  */
 'use strict';
 
-const {
-  stripMarkdownForSpeech,
-  normalizeTtsEngine,
-} = require('../../src/aia/scripts/utils.js');
+const { stripMarkdownForSpeech } = require('../../src/aia/scripts/utils.js');
 
 describe('stripMarkdownForSpeech', () => {
   test('strips heading, bold, italic, and code markers', () => {
@@ -39,24 +36,6 @@ describe('stripMarkdownForSpeech', () => {
 
   test('returns an empty string for empty input', () => {
     expect(stripMarkdownForSpeech('')).toBe('');
-  });
-});
-
-describe('normalizeTtsEngine', () => {
-  test('passes through the supported engines', () => {
-    expect(normalizeTtsEngine('piper')).toBe('piper');
-    expect(normalizeTtsEngine('voicebox')).toBe('voicebox');
-  });
-
-  test('maps the removed "browser" engine to "piper"', () => {
-    expect(normalizeTtsEngine('browser')).toBe('piper');
-  });
-
-  test('maps unknown / null / undefined to "piper"', () => {
-    expect(normalizeTtsEngine('robot')).toBe('piper');
-    expect(normalizeTtsEngine(null)).toBe('piper');
-    expect(normalizeTtsEngine(undefined)).toBe('piper');
-    expect(normalizeTtsEngine('')).toBe('piper');
   });
 });
 

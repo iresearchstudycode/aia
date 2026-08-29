@@ -3,7 +3,8 @@ const MODEL_NAME = 'gemma4:e4b';        // text + thinking mode
 const VISION_MODEL_NAME = 'gemma3:4b'; // vision-capable model (gemma4:e4b has no vision encoder in its GGUF)
 const OLLAMA_API_URL = 'https://localhost/ollama/api/chat';
 const OLLAMA_TAGS_URL = 'https://localhost/ollama/api/tags'; // GET — lists models installed in Ollama, for the model selector
-const OLLAMA_MODEL_KEY = 'ollamaModel'; // localStorage key for the user's selected model
+const OLLAMA_MODEL_KEY = 'ollamaModel'; // localStorage key for the user's selected model (legacy — read only by the one-time settings migration)
+const SETTINGS_API_URL = 'https://localhost/settings'; // per-user settings-service (see settings.js)
 const VOICEBOX_SPEAK_URL = 'https://localhost/voicebox/speak';
 const PIPER_SPEAK_URL = 'https://localhost/piper/speak';
 const DOC_EXTRACT_URL = 'https://localhost/doc-extract/extract';
@@ -19,14 +20,31 @@ const CHAR_COUNTER_SHOW_THRESHOLD = 500;
 const CHAR_COUNTER_WARNING_THRESHOLD = 200;
 const CHAR_COUNTER_DANGER_THRESHOLD = 50;
 const SPEECH_RECOGNITION_LANG = 'en-US'; // BCP 47 tag — e.g. 'en-AU', 'fr-FR'
-const PERSONA_PREFS_KEY = 'personaPrefs'; // localStorage key for per-persona thinking/TTS memory
-const EDITOR_MODE_KEY = 'editorMode'; // localStorage key for the English Editor output mode
+const PERSONA_PREFS_KEY = 'personaPrefs'; // legacy localStorage key — read only by the one-time settings migration
+const EDITOR_MODE_KEY = 'editorMode'; // legacy localStorage key — read only by the one-time settings migration
+const NAV_RAIL_KEY = 'navRailEnabled'; // legacy localStorage key — read only by the one-time settings migration
+
+// Human-readable persona names, keyed by the same keys as `systemPrompts` (minus
+// `englishEditorExplained`). Formerly the <option> label text in the persona
+// <select>; kept here now that the persona is chosen from the Settings lightbox.
+const personaLabels = {
+  assistant: 'Assistant',
+  casual: 'Casual Friend',
+  claudePromptCompressor: 'Claude Prompt Compressor',
+  creative: 'Creative Writer',
+  englishEditor: 'English Editor (Australian)',
+  legal: 'Legal Assistant',
+  medical: 'Medical Expert',
+  teacher: 'Patient Teacher',
+  professional: 'Professional Consultant',
+  technical: 'Technical Expert',
+  transcriptai: 'Transcript-Based Assistant',
+};
 
 // System prompts
-// Note: `englishEditorExplained` has no <option> in #systemPromptSelect — it is
-// selected via the "Explain" option of the #editorModeSelect selector in the
-// persona panel when the `englishEditor` persona is active (see main.js /
-// chat.js updateSystemPrompt).
+// Note: `englishEditorExplained` has no persona key of its own — it is selected
+// when the `englishEditor` persona is active and its editor_mode is "explain"
+// (Settings lightbox → Personas). See chat.js `_resolveSystemPrompt`.
 const systemPrompts = {
   assistant: "You are a helpful AI assistant. Answer questions clearly, accurately, and concisely. Be direct and to the point without omitting important detail.",
   englishEditor: "You are an Australian English editor. Review the provided text for spelling, grammar, punctuation, and style according to Australian English conventions. Make corrections and improvements that enhance readability, flow, and accuracy without altering the original tone, voice, or message. Rephrase sentences only when necessary for clarity or correctness. Avoid adding new information, interpretations, or opinions. Do not explain your changes, but present the revised text as a polished version of the original. CRITICAL RULES: - Do NOT alter or weaken the original intent, emotion, or core message of the text. - Do NOT provide an introduction, explanation, commentary, bullet points, or reasoning for your edits. - Output ONLY the final, polished version of the text. Review the following text:",
@@ -47,10 +65,13 @@ let currentSystemPrompt = systemPrompts.englishEditor;
 let conversationHistory = [];
 let pendingImageDataUrl = null; // data: URL for in-chat thumbnail display
 let pendingImageBase64 = null;  // raw base64 for the Ollama API images field
-let currentModel = MODEL_NAME; // model sent to Ollama for text/thinking turns; MODEL_NAME is the built-in default/fallback, overridden by the toolbar model selector (persisted to localStorage[OLLAMA_MODEL_KEY])
+let currentModel = MODEL_NAME; // model sent to Ollama for text/thinking turns; MODEL_NAME is the built-in default/fallback. Hydrated from window.vpalSettings by applyResolvedSettings() (settings.js)
+let currentVisionModel = VISION_MODEL_NAME; // model sent to Ollama for image turns; VISION_MODEL_NAME is the built-in default/fallback. Hydrated from window.vpalSettings by applyResolvedSettings() (settings.js)
 let currentThinkingMode = 'off'; // 'off' | 'low' | 'medium' | 'high'
 let currentTTSEngine = 'piper'; // 'piper' | 'voicebox'
 let currentEditorMode = 'clean'; // 'clean' | 'changes' | 'explain' — English Editor output mode
+let currentNavRailEnabled = true; // conversation navigator rail visible; toolbar toggle, persisted to localStorage[NAV_RAIL_KEY]
+window.currentNavRailEnabled = currentNavRailEnabled; // nav-rail.js reads the flag off window to avoid script load-order issues
 let pendingDocumentText = null; // extracted text, folded into the next outgoing message
 let pendingDocumentName = null; // original filename, shown in the preview chip and user bubble
 let pendingDocumentTruncated = false; // true when extracted text exceeded MAX_DOCUMENT_TEXT_CHARS
