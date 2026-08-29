@@ -32,6 +32,7 @@
   <script type="application/javascript" src="./scripts/speech.js"></script>
   <script type="application/javascript" src="./scripts/chat.js"></script>
   <script type="application/javascript" src="./scripts/api.js"></script>
+  <script type="application/javascript" src="./scripts/nav-rail.js"></script>
   <script type="application/javascript" src="./scripts/main.js"></script>
 </head>
 
@@ -270,6 +271,18 @@
               <option value="medium" selected>Medium</option>
               <option value="high">High</option>
             </select>
+            <!-- Conversation navigator rail toggle -->
+            <button type="button" id="navRailToggle" class="voice-btn toolbar-icon-btn"
+              aria-label="Toggle conversation navigator" aria-pressed="true"
+              title="Toggle conversation navigator">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="10" y1="6" x2="21" y2="6"/>
+                <line x1="6" y1="12" x2="21" y2="12"/>
+                <line x1="13" y1="18" x2="21" y2="18"/>
+                <circle cx="3" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+              </svg>
+            </button>
           </div>
           <div class="toolbar-right">
             <span id="charCounter" class="char-counter"></span>
@@ -290,6 +303,8 @@
         </div>
       </div>
     </div>
+
+    <div id="navRail" class="nav-rail" aria-hidden="true"></div>
   </div>
 
   <!-- Persona panel — position:fixed, outside .chat-container to escape overflow:hidden -->

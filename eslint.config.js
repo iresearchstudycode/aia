@@ -27,6 +27,7 @@ const crossModuleGlobals = {
   SPEECH_RECOGNITION_LANG: 'readonly',
   PERSONA_PREFS_KEY: 'readonly',
   EDITOR_MODE_KEY: 'readonly',
+  NAV_RAIL_KEY: 'readonly',
   systemPrompts: 'readonly',
   // config.js — mutable state
   conversationHistory: 'writable',
@@ -37,6 +38,7 @@ const crossModuleGlobals = {
   currentThinkingMode: 'writable',
   currentTTSEngine: 'writable',
   currentEditorMode: 'writable',
+  currentNavRailEnabled: 'writable',
   pendingDocumentText: 'writable',
   pendingDocumentName: 'writable',
   pendingDocumentTruncated: 'writable',
@@ -103,6 +105,12 @@ const crossModuleGlobals = {
   // api.js
   streamOllamaResponse: 'readonly',
   stopStreaming: 'readonly',
+  // nav-rail.js
+  initNavRail: 'readonly',
+  setNavRailEnabled: 'readonly',
+  navRailCollapseTitle: 'readonly',
+  navRailTruncateWords: 'readonly',
+  navRailBuildModel: 'readonly',
   // vendored libraries (loaded before app scripts)
   marked: 'readonly',
   DOMPurify: 'readonly',

@@ -21,6 +21,7 @@ body {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 40px);
+  position: relative;
 }
 
 .chat-header {
@@ -1345,4 +1346,201 @@ body {
   outline: 2px solid #0ea5e9;
   outline-offset: -2px;
   background: #f0f9ff;
+}
+
+/* ============================================================
+   Conversation navigator rail
+   ============================================================ */
+
+/* The rail is absolutely positioned against .chat-container (which now has
+   position: relative), pinned just inside its right edge and spanning roughly
+   the vertical band occupied by .chat-messages (header above, .chat-input
+   below). It is a non-blocking overlay — pointer-events are re-enabled only on
+   the interactive markers and cards. Colours reuse the app's muted slate
+   (#94a3b8, as in .message-timestamp / .image-placeholder), the sky-blue
+   accent (#0ea5e9, used throughout), and the dark toast palette
+   (rgba(15, 23, 42, …), as in .toast) for the floating card. */
+.nav-rail {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  bottom: 12px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 0;
+  pointer-events: none;
+}
+
+.nav-rail--off {
+  display: none;
+}
+
+/* Thin custom scrollbar on the messages list so the rail's right-edge markers
+   clear it — the app otherwise has no scrollbar styling, leaving a ~16px native
+   bar sitting on top of the interactive markers on Windows Chrome. This is the
+   only rule in this section outside the .nav-rail* / #navRail* namespace, and it
+   is purely additive to the existing .chat-messages rule. */
+.chat-messages {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.chat-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+/* One marker per conversation turn. The element itself is a transparent,
+   comfortably tall/wide hit target (stacked with gap:0 for continuous coverage
+   when dragging down the rail); the visible 2px tick is drawn by ::before and
+   right-aligned to sit against the rail edge. */
+.nav-rail__marker {
+  width: 28px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.nav-rail__marker::before {
+  content: "";
+  display: block;
+  width: 14px;
+  height: 2px;
+  border-radius: 2px;
+  background-color: #94a3b8;
+  transition: width 0.12s ease, background-color 0.12s ease;
+}
+
+.nav-rail:hover .nav-rail__marker::before {
+  width: 22px;
+}
+
+/* Current turn — accent colour, wider, and unaffected by the hover widen. */
+.nav-rail__marker--active::before,
+.nav-rail:hover .nav-rail__marker--active::before {
+  width: 26px;
+  background-color: #0ea5e9;
+}
+
+/* Floating preview card — dark panel to the left of the rail. JS sets `top`
+   and toggles the `hidden` attribute; `right` keeps it just clear of the rail. */
+.nav-rail__card {
+  position: absolute;
+  right: calc(100% + 8px);
+  max-width: 260px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  pointer-events: auto;
+}
+
+.nav-rail__card[hidden] {
+  display: none;
+}
+
+/* Small caret on the card's right edge, pointing toward the rail. */
+.nav-rail__card::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  right: -6px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 6px solid rgba(15, 23, 42, 0.97);
+}
+
+.nav-rail__card-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-rail__card-body {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #cbd5e1;
+}
+
+/* Toggle button — default state is ON, so it wears the same sky-blue "active"
+   look as #thinkingModeBtn's .thinking-on; aria-pressed="false" dims it back to
+   a neutral resting icon. The attribute selector is the source of truth. */
+#navRailToggle[aria-pressed="true"] {
+  background: #e0f2fe;
+  border-color: #0ea5e9;
+  color: #0369a1;
+}
+
+#navRailToggle[aria-pressed="false"] {
+  background: transparent;
+  border-color: transparent;
+  color: #94a3b8;
+  opacity: 0.6;
+}
+
+#navRailToggle[aria-pressed="false"]:hover {
+  background: rgba(14, 165, 233, 0.08);
+  color: #0ea5e9;
+  opacity: 1;
+}
+
+/* Transient flash on a message bubble when its rail marker is clicked. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes navRailFlash {
+    0% {
+      background-color: rgba(14, 165, 233, 0.18);
+    }
+
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  .message.nav-rail-flash {
+    animation: navRailFlash 1s ease-out;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message.nav-rail-flash {
+    outline: 2px solid rgba(14, 165, 233, 0.5);
+    outline-offset: 4px;
+  }
+}
+
+/* Narrow viewports: the rail and its toggle are hidden entirely. */
+@media (max-width: 600px) {
+  .nav-rail {
+    display: none;
+  }
+
+  #navRailToggle {
+    display: none;
+  }
 }
