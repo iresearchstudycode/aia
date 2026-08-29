@@ -155,16 +155,28 @@ def _set_session_cookie(response: Response, username: str) -> None:
     )
 
 
-def _validate_session(request: Request) -> bool:
-    """Return True when the request carries a valid, unexpired session cookie."""
+def _session_username(request: Request) -> str | None:
+    """Recover the username from a valid, unexpired session cookie.
+
+    Args:
+        request: Incoming request carrying the ``vpal_session`` cookie.
+
+    Returns:
+        The signed-in username when the cookie is present, correctly signed
+        and within its TTL; ``None`` otherwise.
+    """
     token = request.cookies.get("vpal_session", "")
     if not token:
-        return False
+        return None
     try:
-        _signer.unsign(token, max_age=_SESSION_TTL_SECONDS)
-        return True
+        return _signer.unsign(token, max_age=_SESSION_TTL_SECONDS).decode()
     except (BadSignature, SignatureExpired):
-        return False
+        return None
+
+
+def _validate_session(request: Request) -> bool:
+    """Return True when the request carries a valid, unexpired session cookie."""
+    return _session_username(request) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -281,11 +293,15 @@ async def health() -> dict[str, str]:
 async def verify(request: Request) -> Response:
     """Sub-request endpoint called by Nginx auth_request.
 
-    Returns 200 when the session cookie is valid, 401 otherwise.
+    Returns 200 when the session cookie is valid, 401 otherwise.  On success
+    the response carries an ``X-Auth-User`` header with the recovered username,
+    which Nginx forwards (via ``auth_request_set``) to downstream services such
+    as ``settings-service``.  The 401 path sets no header.
     Must remain internal (Nginx enforces this via the ``internal`` directive).
     """
-    if _validate_session(request):
-        return Response(status_code=200)
+    username = _session_username(request)
+    if username is not None:
+        return Response(status_code=200, headers={"X-Auth-User": username})
     return Response(status_code=401)
 
 
@@ -297,12 +313,10 @@ async def me(request: Request) -> Response:
     absent (e.g. sessions established before that cookie was introduced).
     Returns 401 for unauthenticated requests.
     """
-    token = request.cookies.get("vpal_session", "")
-    try:
-        username = _signer.unsign(token, max_age=_SESSION_TTL_SECONDS).decode()
+    username = _session_username(request)
+    if username is not None:
         return JSONResponse({"username": username})
-    except (BadSignature, SignatureExpired):
-        return Response(status_code=401)
+    return Response(status_code=401)
 
 
 @app.get("/auth/login", response_class=HTMLResponse)

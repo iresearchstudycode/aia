@@ -33,6 +33,7 @@
   <script type="application/javascript" src="./scripts/chat.js"></script>
   <script type="application/javascript" src="./scripts/api.js"></script>
   <script type="application/javascript" src="./scripts/nav-rail.js"></script>
+  <script type="application/javascript" src="./scripts/settings.js"></script>
   <script type="application/javascript" src="./scripts/main.js"></script>
 </head>
 
@@ -52,7 +53,7 @@
           </svg>
           <span>AI Assistant</span>
           <button type="button" id="personaToggleBtn" class="persona-toggle-btn"
-            aria-haspopup="true" aria-expanded="false" title="Choose persona">
+            aria-haspopup="dialog" title="Open Settings to choose a persona">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polyline points="6 9 12 15 18 9"/>
@@ -124,6 +125,15 @@
               Close
             </button>
             <hr class="dropdown-divider">
+            <button type="button" id="settingsMenuItem">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              Settings
+            </button>
+            <hr class="dropdown-divider">
             <form id="logoutForm" method="post" action="/auth/logout">
               <button type="submit">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -181,10 +191,12 @@
           placeholder="Message AI Assistant — Shift+Enter for new line..."></textarea>
         <div class="chat-input-toolbar">
           <div class="toolbar-left">
-            <!-- Ollama model selector — shows the current model and picks the
-                 one used for this conversation; changeable at any time. -->
-            <select id="modelSelect" class="model-select" aria-label="Ollama model"
-              title="Model used for this conversation"></select>
+            <!-- Settings badges — read-only status chips; clicking either opens
+                 the Settings lightbox. Text is filled by applyResolvedSettings(). -->
+            <button type="button" id="modelBadge" class="settings-badge"
+              title="Model — click to open Settings"></button>
+            <button type="button" id="thinkingBadge" class="settings-badge"
+              title="Thinking — click to open Settings"></button>
             <!-- Microphone -->
             <button type="button" class="voice-btn toolbar-icon-btn" id="micBtn"
               aria-label="Toggle voice input" aria-pressed="false"
@@ -197,22 +209,6 @@
                 <line x1="8" y1="23" x2="16" y2="23"/>
               </svg>
             </button>
-            <!-- Auto-speak -->
-            <button type="button" class="voice-btn toolbar-icon-btn" id="autoTTSBtn"
-              aria-label="Toggle auto-speak" aria-pressed="false"
-              title="Toggle Auto-speak — automatically reads AI responses aloud">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-              </svg>
-            </button>
-            <select id="ttsEngineSelect" class="tts-engine-select" aria-label="Text-to-speech engine"
-              title="Choose which engine speaks AI responses">
-              <option value="piper" selected>Piper</option>
-              <option value="voicebox">VoiceBox</option>
-            </select>
             <!-- Stop speaking -->
             <button type="button" class="voice-btn toolbar-icon-btn" id="speakerBtn"
               aria-label="Stop speaking" title="Stop Speaking">
@@ -255,34 +251,6 @@
                 </button>
               </div>
             </div>
-            <!-- Thinking mode -->
-            <button type="button" class="voice-btn toolbar-icon-btn" id="thinkingModeBtn"
-              aria-label="Thinking mode: Off" aria-pressed="false"
-              title="Enable thinking mode — model reasons before answering">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <line x1="9" y1="18" x2="15" y2="18"/>
-                <line x1="10" y1="22" x2="14" y2="22"/>
-                <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/>
-              </svg>
-            </button>
-            <select id="thinkingDepthSelect" class="thinking-depth-select" aria-label="Thinking depth">
-              <option value="low">Low</option>
-              <option value="medium" selected>Medium</option>
-              <option value="high">High</option>
-            </select>
-            <!-- Conversation navigator rail toggle -->
-            <button type="button" id="navRailToggle" class="voice-btn toolbar-icon-btn"
-              aria-label="Toggle conversation navigator" aria-pressed="true"
-              title="Toggle conversation navigator">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <line x1="10" y1="6" x2="21" y2="6"/>
-                <line x1="6" y1="12" x2="21" y2="12"/>
-                <line x1="13" y1="18" x2="21" y2="18"/>
-                <circle cx="3" cy="12" r="1.5" fill="currentColor" stroke="none"/>
-              </svg>
-            </button>
           </div>
           <div class="toolbar-right">
             <span id="charCounter" class="char-counter"></span>
@@ -305,33 +273,7 @@
     </div>
 
     <div id="navRail" class="nav-rail" aria-hidden="true"></div>
-  </div>
-
-  <!-- Persona panel — position:fixed, outside .chat-container to escape overflow:hidden -->
-  <div id="personaPanel" class="persona-panel">
-    <div class="persona-panel-header" id="personaPanelHeader">Persona</div>
-    <div id="personaPanelNotice" class="persona-panel-notice">Clear the conversation to switch persona</div>
-    <select id="systemPromptSelect" aria-labelledby="personaPanelHeader">
-      <option value="assistant">Assistant</option>
-      <option value="casual">Casual Friend</option>
-      <option value="claudePromptCompressor">Claude Prompt Compressor</option>
-      <option value="creative">Creative Writer</option>
-      <option value="englishEditor" selected>English Editor (Australian)</option>
-      <option value="legal">Legal Assistant</option>
-      <option value="medical">Medical Expert</option>
-      <option value="teacher">Patient Teacher</option>
-      <option value="professional">Professional Consultant</option>
-      <option value="technical">Technical Expert</option>
-      <option value="transcriptai">Transcript-Based Assistant</option>
-    </select>
-    <div id="editorModeRow" class="persona-explain-toggle">
-      <label for="editorModeSelect">Editor output</label>
-      <select id="editorModeSelect" class="editor-mode-select">
-        <option value="clean" selected>Clean</option>
-        <option value="changes">Show changes</option>
-        <option value="explain">Explain</option>
-      </select>
-    </div>
+    <div id="settingsRoot"></div>
   </div>
 
 </body>

@@ -57,63 +57,115 @@ function clearDocumentPreview() {
   document.getElementById('sendBtn').disabled = textarea.value.trim().length === 0 && !pendingImageBase64;
 }
 
-// --- Per-persona settings memory -------------------------------------------
-// The persona `change` event fires after #systemPromptSelect.value has already
-// changed, so the key of the persona being switched *away from* is tracked here.
-// Persona switching is disabled during an active conversation, so `change` only
-// ever fires from an empty conversation — no mid-chat handling is needed.
-let _activePersonaKey = null;
-let _personaPrefsJson = '{}';
+// --- Consolidated settings ------------------------------------------------------
+// The 11 persona keys (must match config.js `systemPrompts` minus
+// `englishEditorExplained` and the spec's contract).
+const _PERSONA_KEYS = [
+  'assistant', 'casual', 'claudePromptCompressor', 'creative', 'englishEditor',
+  'legal', 'medical', 'professional', 'teacher', 'technical', 'transcriptai'
+];
 
-// Single source of truth for the thinking-mode button + depth-select DOM state
-// (shared by the toggle handler, the session restore, and per-persona restore).
-function _setThinkingUI(isOn, depth) {
-  const btn = document.getElementById('thinkingModeBtn');
-  const depthSelect = document.getElementById('thinkingDepthSelect');
-  btn.classList.toggle('thinking-on', isOn);
-  btn.setAttribute('aria-pressed', String(isOn));
-  btn.setAttribute('aria-label', isOn ? 'Thinking mode: On' : 'Thinking mode: Off');
-  btn.title = isOn
-    ? 'Thinking mode: On — click to disable'
-    : 'Enable thinking mode — model reasons before answering';
-  depthSelect.style.display = isOn ? 'inline-block' : 'none';
-  if (depth) depthSelect.value = depth;
-  currentThinkingMode = isOn ? depthSelect.value : 'off';
-}
+// A defaults-shaped `window.vpalSettings` built entirely from config.js
+// constants — used when the settings-service can't be reached on load so the
+// app stays fully usable. `__unavailable: true` tells the lightbox (settings.js)
+// to render its "can't connect / Retry" state with Save disabled.
+function _defaultVpalSettings() {
+  const personas = {};
+  _PERSONA_KEYS.forEach(function (k) {
+    personas[k] = { thinking_enabled: null, thinking_depth: null, tts_engine: null };
+  });
+  personas.englishEditor.editor_mode = 'clean';
 
-// Single source of truth for the TTS-engine select DOM state + global.
-// Normalises legacy/unknown values (e.g. the removed 'browser' engine) to the
-// current default so old localStorage / personaPrefs entries can't break it.
-function _setTTSUI(engine) {
-  const normalized = normalizeTtsEngine(engine);
-  document.getElementById('ttsEngineSelect').value = normalized;
-  currentTTSEngine = normalized;
-}
+  const global = {
+    chat_model: MODEL_NAME,
+    vision_model: VISION_MODEL_NAME,
+    tts_engine: 'piper',
+    auto_speak: false,
+    stt_lang: SPEECH_RECOGNITION_LANG,
+    thinking_enabled: false,
+    thinking_depth: 'medium',
+    nav_rail: true,
+    active_persona: 'englishEditor'
+  };
 
-// Read the live thinking/TTS control state as a persona-pref patch.
-function _snapshotPersonaSettings() {
   return {
-    thinkingOn: document.getElementById('thinkingModeBtn').classList.contains('thinking-on'),
-    thinkingDepth: document.getElementById('thinkingDepthSelect').value,
-    ttsEngine: document.getElementById('ttsEngineSelect').value,
+    __unavailable: true,
+    global: global,
+    personas: personas,
+    defaults: {
+      global: Object.assign({}, global),
+      persona: { thinking_enabled: null, thinking_depth: null, tts_engine: null, editor_mode: 'clean' }
+    }
   };
 }
 
-// Apply a stored persona-pref entry to the thinking/TTS controls.
-function _applyPersonaSettings(s) {
-  if (!s) return;
-  if (typeof s.thinkingOn === 'boolean') _setThinkingUI(s.thinkingOn, s.thinkingDepth);
-  if (s.ttsEngine) _setTTSUI(s.ttsEngine);
+// One-time migration of the pre-1.23.0 per-preference localStorage keys into the
+// settings-service. Guarded by localStorage['settingsMigrated'] === '1'. On a
+// successful PUT the legacy keys are removed and the guard is set; a failure is
+// swallowed so the next load retries. Re-reads GET /settings into
+// window.vpalSettings afterwards so the applied state reflects what was stored.
+async function _migrateLegacySettingsIfNeeded() {
+  if (localStorage.getItem('settingsMigrated') === '1') return;
+
+  const snapshot = {
+    ollamaModel: localStorage.getItem(OLLAMA_MODEL_KEY),
+    ttsEngine: localStorage.getItem('ttsEngine'),
+    autoTTS: localStorage.getItem('autoTTS'),
+    thinkingOn: localStorage.getItem('thinkingOn'),
+    thinkingDepth: localStorage.getItem('thinkingDepth'),
+    navRailEnabled: localStorage.getItem(NAV_RAIL_KEY),
+    editorMode: localStorage.getItem(EDITOR_MODE_KEY),
+    personaPrefs: localStorage.getItem(PERSONA_PREFS_KEY)
+  };
+
+  const legacyKeys = [
+    OLLAMA_MODEL_KEY, 'ttsEngine', 'autoTTS', 'thinkingOn', 'thinkingDepth',
+    NAV_RAIL_KEY, EDITOR_MODE_KEY, PERSONA_PREFS_KEY
+  ];
+
+  // Nothing stored locally — mark migrated and skip the round-trips.
+  const hasAny = Object.keys(snapshot).some(function (k) { return snapshot[k] !== null; });
+  if (!hasAny) {
+    localStorage.setItem('settingsMigrated', '1');
+    return;
+  }
+
+  const payload = buildMigrationPayload(snapshot);
+
+  try {
+    if (payload.global && Object.keys(payload.global).length) {
+      const r = await fetch(SETTINGS_API_URL + '/global', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload.global)
+      });
+      if (!r.ok) throw new Error('migrate global ' + r.status);
+    }
+
+    const personas = payload.personas || {};
+    for (const key of Object.keys(personas)) {
+      if (!personas[key] || !Object.keys(personas[key]).length) continue;
+      const r = await fetch(SETTINGS_API_URL + '/persona/' + encodeURIComponent(key), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(personas[key])
+      });
+      if (!r.ok) throw new Error('migrate persona ' + key + ' ' + r.status);
+    }
+
+    legacyKeys.forEach(function (k) { localStorage.removeItem(k); });
+    localStorage.setItem('settingsMigrated', '1');
+
+    const fresh = await fetch(SETTINGS_API_URL, { credentials: 'same-origin' });
+    if (fresh.ok) window.vpalSettings = await fresh.json();
+  } catch (e) {
+    console.error('Legacy settings migration failed (will retry next load):', e);
+  }
 }
 
-// Merge a patch into the current persona's stored prefs and persist to localStorage.
-function _persistPersonaPref(patch) {
-  if (!_activePersonaKey) return;
-  _personaPrefsJson = writePersonaPref(_personaPrefsJson, _activePersonaKey, patch);
-  localStorage.setItem(PERSONA_PREFS_KEY, _personaPrefsJson);
-}
-
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', async function () {
   // Inject the CSRF token into the logout form (double-submit cookie pattern).
   // vpal_csrf is non-HttpOnly so JS can read it; the server verifies it matches
   // the HMAC-derived value tied to the session token.
@@ -144,47 +196,52 @@ document.addEventListener('DOMContentLoaded', function () {
       .catch(function () {});
   }
 
-  // Persona panel — shows #systemPromptSelect in a fixed overlay below the ▾ button.
-  // _applyCurrentPersonaLabel() reads the selected option text and writes it under
-  // the "AI Assistant" heading; called on init and after every selection change.
-  function _applyCurrentPersonaLabel() {
-    var sel = document.getElementById('systemPromptSelect');
-    document.getElementById('currentPersonaLabel').textContent =
-      sel.options[sel.selectedIndex].text;
+  // --- Settings bootstrap ----------------------------------------------------
+  // Build the (hidden) lightbox, hydrate window.vpalSettings from the
+  // settings-service, run the one-time legacy-localStorage migration, then apply
+  // the resolved values to the runtime globals (currentModel, currentSystemPrompt,
+  // currentThinkingMode, currentTTSEngine, currentNavRailEnabled, ...).
+  initSettings();
+
+  let _settingsResolved = false;
+  try {
+    const r = await fetch(SETTINGS_API_URL, { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('settings ' + r.status);
+    window.vpalSettings = await r.json();
+    _settingsResolved = true;
+  } catch (e) {
+    console.error('Settings service unavailable:', e);
+    window.vpalSettings = _defaultVpalSettings();
+    showToast('Settings service unavailable — using defaults');
   }
 
-  var personaToggleBtn = document.getElementById('personaToggleBtn');
-  var personaPanel = document.getElementById('personaPanel');
-
-  function openPersonaPanel() {
-    var rect = personaToggleBtn.getBoundingClientRect();
-    personaPanel.style.top = (rect.bottom + 8) + 'px';
-    personaPanel.style.left = rect.left + 'px';
-    personaPanel.classList.add('open');
-    personaToggleBtn.setAttribute('aria-expanded', 'true');
-    var sel = document.getElementById('systemPromptSelect');
-    if (!sel.disabled) sel.focus();
-  }
-
-  function closePersonaPanel() {
-    if (personaPanel.contains(document.activeElement)) {
-      personaToggleBtn.focus();
+  // Exposed so the lightbox's "Retry" control (settings.js) can re-attempt
+  // hydration without a page reload.
+  window.__vpalRetrySettings = async function () {
+    try {
+      const r = await fetch(SETTINGS_API_URL, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('settings ' + r.status);
+      window.vpalSettings = await r.json();
+      await _migrateLegacySettingsIfNeeded();
+      applyResolvedSettings();
+      updateSystemPromptState();
+      initSettings();
+      return true;
+    } catch (e) {
+      console.error('Settings retry failed:', e);
+      showToast('Settings service still unavailable');
+      return false;
     }
-    personaPanel.classList.remove('open');
-    personaToggleBtn.setAttribute('aria-expanded', 'false');
-  }
+  };
 
-  personaToggleBtn.addEventListener('click', function (e) {
-    e.stopPropagation();
-    personaPanel.classList.contains('open') ? closePersonaPanel() : openPersonaPanel();
-  });
+  if (_settingsResolved) await _migrateLegacySettingsIfNeeded();
 
-  document.addEventListener('click', function (e) {
-    if (!personaPanel.contains(e.target)) closePersonaPanel();
-  });
+  // nav-rail must be wired before applyResolvedSettings() (which calls
+  // setNavRailEnabled()).
+  initNavRail();
 
-  // Initialise the label from the HTML selected attribute.
-  _applyCurrentPersonaLabel();
+  applyResolvedSettings();
+  updateSystemPromptState();
 
   // Profile dropdown toggle — uses position:fixed positioned via JS so the
   // dropdown escapes the chat-container's overflow:hidden boundary.
@@ -244,15 +301,41 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!attachMenu.contains(e.target)) closeAttachMenu();
   });
 
+  // Settings lightbox entry points — the profile-dropdown item, the persona ▾
+  // toggle next to the header title, and the two toolbar status badges.
+  const settingsMenuItem = document.getElementById('settingsMenuItem');
+  if (settingsMenuItem) {
+    settingsMenuItem.addEventListener('click', function () {
+      closeProfileDropdown();
+      openSettings('models');
+    });
+  }
+
+  const personaToggleBtn = document.getElementById('personaToggleBtn');
+  if (personaToggleBtn) {
+    personaToggleBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openSettings('personas');
+    });
+  }
+
+  const modelBadge = document.getElementById('modelBadge');
+  if (modelBadge) {
+    modelBadge.addEventListener('click', function () { openSettings('models'); });
+  }
+  const thinkingBadge = document.getElementById('thinkingBadge');
+  if (thinkingBadge) {
+    thinkingBadge.addEventListener('click', function () { openSettings('reasoning'); });
+  }
+
   // Close all panels on Escape; trap Tab focus inside whichever panel is open.
+  // (The Settings lightbox runs its own focus trap / Escape handling in settings.js.)
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       closeProfileDropdown();
-      closePersonaPanel();
       closeAttachMenu();
     }
     if (e.key === 'Tab') {
-      if (personaPanel.classList.contains('open')) _trapFocus(personaPanel, e);
       if (profileDropdown.classList.contains('open')) _trapFocus(profileDropdown, e);
       if (attachMenuDropdown.classList.contains('open')) _trapFocus(attachMenuDropdown, e);
     }
@@ -261,7 +344,6 @@ document.addEventListener('DOMContentLoaded', function () {
   // Close open panels on resize — their fixed positions were calculated at open
   // time and become stale as soon as the viewport dimensions change.
   window.addEventListener('resize', function () {
-    if (personaPanel.classList.contains('open')) closePersonaPanel();
     if (profileDropdown.classList.contains('open')) closeProfileDropdown();
     if (attachMenuDropdown.classList.contains('open')) closeAttachMenu();
   });
@@ -269,127 +351,6 @@ document.addEventListener('DOMContentLoaded', function () {
   // Close the dropdown after each menu-item action (before any confirm dialogs).
   ['saveBtn', 'exportMdBtn', 'openBtn', 'clearBtn', 'closeBtn'].forEach(function (id) {
     document.getElementById(id).addEventListener('click', closeProfileDropdown);
-  });
-
-  // Sync JS state with whichever option is marked selected in the HTML
-  const select = document.getElementById('systemPromptSelect');
-
-  // English Editor output mode — only meaningful for the English Editor persona.
-  // 'clean'/'changes' use the silent prompt (the 'changes' tracked-changes view
-  // is derived client-side from that output); 'explain' swaps in the
-  // change-explaining prompt variant.
-  const editorModeSelect = document.getElementById('editorModeSelect');
-  const editorModeRow = document.getElementById('editorModeRow');
-
-  function _updateEditorModeVisibility() {
-    editorModeRow.style.display = select.value === 'englishEditor' ? '' : 'none';
-  }
-
-  // Migrate the pre-1.18.0 boolean `editorExplainChanges` flag the first time
-  // the app loads after this upgrade, then never look at it again.
-  const _hadEditorMode = localStorage.getItem(EDITOR_MODE_KEY) !== null;
-  const _legacyEditorExplain = localStorage.getItem('editorExplainChanges');
-  currentEditorMode = migrateEditorModeValue(
-    localStorage.getItem(EDITOR_MODE_KEY),
-    _legacyEditorExplain
-  );
-  if (!_hadEditorMode && _legacyEditorExplain !== null) {
-    localStorage.setItem(EDITOR_MODE_KEY, currentEditorMode);
-    localStorage.removeItem('editorExplainChanges');
-  }
-  editorModeSelect.value = currentEditorMode;
-
-  editorModeSelect.addEventListener('change', function () {
-    currentEditorMode = this.value;
-    localStorage.setItem(EDITOR_MODE_KEY, this.value);
-    if (select.value === 'englishEditor') {
-      currentSystemPrompt = _resolveSystemPrompt('englishEditor');
-    }
-  });
-  _updateEditorModeVisibility();
-
-  currentSystemPrompt = _resolveSystemPrompt(select.value);
-  updateSystemPromptState();
-
-  // Per-persona settings memory — load the store and record the starting persona.
-  _personaPrefsJson = localStorage.getItem(PERSONA_PREFS_KEY) || '{}';
-  _activePersonaKey = select.value;
-
-  // Restore autoTTS preference across sessions. No Web Speech API guard —
-  // auto-speak now works via the Piper proxy regardless of browser support.
-  const autoTTSBtn = document.getElementById('autoTTSBtn');
-  if (localStorage.getItem('autoTTS') === 'true') {
-    autoTTSBtn.classList.add('tts-on');
-    autoTTSBtn.setAttribute('aria-pressed', 'true');
-  }
-  autoTTSBtn.addEventListener('click', function () {
-    const isOn = this.classList.toggle('tts-on');
-    this.setAttribute('aria-pressed', String(isOn));
-    localStorage.setItem('autoTTS', String(isOn));
-  });
-
-  // TTS engine selector (Piper vs VoiceBox) — applies to both auto-TTS and
-  // the per-message speak button; persisted to localStorage like autoTTS.
-  const ttsEngineSelect = document.getElementById('ttsEngineSelect');
-  const _storedTtsEngine = localStorage.getItem('ttsEngine');
-  _setTTSUI(_storedTtsEngine || 'piper');
-  // Migrate a pre-Piper stored value (notably the removed 'browser' engine).
-  if (_storedTtsEngine && _storedTtsEngine !== currentTTSEngine) {
-    localStorage.setItem('ttsEngine', currentTTSEngine);
-  }
-  ttsEngineSelect.addEventListener('change', function () {
-    _setTTSUI(this.value);
-    localStorage.setItem('ttsEngine', this.value);
-    _persistPersonaPref({ ttsEngine: this.value });
-  });
-
-  // Ollama model selector — lists the models installed in Ollama (GET
-  // /api/tags) and picks the one used for text/thinking turns. Changeable at
-  // any time with no conversation reset and no lock (unlike the persona
-  // selector); the choice is a global preference (not per-persona) persisted
-  // to localStorage. Vision turns always route to VISION_MODEL_NAME regardless.
-  const modelSelect = document.getElementById('modelSelect');
-
-  function _populateModelSelect(names) {
-    modelSelect.innerHTML = '';
-    names.forEach(function (name) {
-      const opt = document.createElement('option');
-      opt.value = name;
-      opt.textContent = name;
-      modelSelect.appendChild(opt);
-    });
-  }
-
-  fetch(OLLAMA_TAGS_URL)
-    .then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(function (data) {
-      const names = parseOllamaModels(data);
-      if (!names.length) throw new Error('empty model list');
-      _populateModelSelect(names);
-      const stored = localStorage.getItem(OLLAMA_MODEL_KEY);
-      const initial = names.indexOf(stored) !== -1 ? stored
-        : names.indexOf(MODEL_NAME) !== -1 ? MODEL_NAME
-          : names[0];
-      currentModel = initial;
-      modelSelect.value = initial;
-      localStorage.setItem(OLLAMA_MODEL_KEY, initial);
-    })
-    .catch(function () {
-      // Ollama unreachable / 502 / bad payload — keep the app fully usable with
-      // the stored (or default) model as the sole option.
-      const fallback = localStorage.getItem(OLLAMA_MODEL_KEY) || MODEL_NAME;
-      _populateModelSelect([fallback]);
-      currentModel = fallback;
-      modelSelect.value = fallback;
-      showToast('Could not load model list from Ollama');
-    });
-
-  modelSelect.addEventListener('change', function () {
-    currentModel = this.value;
-    localStorage.setItem(OLLAMA_MODEL_KEY, this.value);
   });
 
   // Chat input
@@ -427,21 +388,6 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('openBtn').addEventListener('click', openChat);
   document.getElementById('clearBtn').addEventListener('click', clearChat);
   document.getElementById('closeBtn').addEventListener('click', closeWindow);
-
-  // Persona selector: run existing logic first (may revert selection on cancel),
-  // then update the header label and close the panel with the final value.
-  document.getElementById('systemPromptSelect').addEventListener('change', updateSystemPrompt);
-  document.getElementById('systemPromptSelect').addEventListener('change', function () {
-    // Save the persona being left, then restore the one being entered.
-    _persistPersonaPref(_snapshotPersonaSettings());
-    _activePersonaKey = this.value;
-    _applyPersonaSettings(readPersonaPref(_personaPrefsJson, _activePersonaKey));
-    _updateEditorModeVisibility();
-  });
-  document.getElementById('systemPromptSelect').addEventListener('change', function () {
-    _applyCurrentPersonaLabel();
-    closePersonaPanel();
-  });
 
   // Voice controls
   document.getElementById('micBtn').addEventListener('click', toggleSpeechRecognition);
@@ -586,51 +532,4 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   document.getElementById('removeDocumentBtn').addEventListener('click', clearDocumentPreview);
-
-  // Thinking mode — toggle ON/OFF; when ON show depth selector and update global.
-  const thinkingModeBtn = document.getElementById('thinkingModeBtn');
-  const thinkingDepthSelect = document.getElementById('thinkingDepthSelect');
-
-  thinkingModeBtn.addEventListener('click', function () {
-    const isOn = !this.classList.contains('thinking-on');
-    _setThinkingUI(isOn, thinkingDepthSelect.value);
-    localStorage.setItem('thinkingOn', String(isOn));
-    _persistPersonaPref({ thinkingOn: isOn, thinkingDepth: thinkingDepthSelect.value });
-  });
-
-  thinkingDepthSelect.addEventListener('change', function () {
-    _setThinkingUI(thinkingModeBtn.classList.contains('thinking-on'), this.value);
-    localStorage.setItem('thinkingDepth', this.value);
-    _persistPersonaPref({
-      thinkingOn: thinkingModeBtn.classList.contains('thinking-on'),
-      thinkingDepth: this.value,
-    });
-  });
-
-  // Restore thinking mode preference across sessions (mirrors autoTTS persistence).
-  _setThinkingUI(
-    localStorage.getItem('thinkingOn') === 'true',
-    localStorage.getItem('thinkingDepth') || 'medium'
-  );
-
-  // Per-persona settings win over the global restore above when present for the
-  // persona that's active on load.
-  _applyPersonaSettings(readPersonaPref(_personaPrefsJson, _activePersonaKey));
-
-  // Conversation navigator rail toggle — restore preference, initialize nav-rail,
-  // and wire button. Mirrors autoTTS and thinking-mode toggle patterns.
-  const _navRailToggle = document.getElementById('navRailToggle');
-  const _navRailStored = localStorage.getItem(NAV_RAIL_KEY);
-  currentNavRailEnabled = _navRailStored === null ? true : _navRailStored === 'true';
-  window.currentNavRailEnabled = currentNavRailEnabled;
-  _navRailToggle.setAttribute('aria-pressed', String(currentNavRailEnabled));
-  initNavRail();
-  setNavRailEnabled(currentNavRailEnabled);
-  _navRailToggle.addEventListener('click', function () {
-    currentNavRailEnabled = !currentNavRailEnabled;
-    window.currentNavRailEnabled = currentNavRailEnabled;
-    localStorage.setItem(NAV_RAIL_KEY, String(currentNavRailEnabled));
-    _navRailToggle.setAttribute('aria-pressed', String(currentNavRailEnabled));
-    setNavRailEnabled(currentNavRailEnabled);
-  });
 });

@@ -297,10 +297,22 @@ class TestVerify:
         resp = client.get("/auth/verify")
         assert resp.status_code == 200
 
+    def test_valid_cookie_sets_x_auth_user_header(self, client: TestClient) -> None:
+        client.cookies.set("vpal_session", _signed_session("alice_1"))
+        resp = client.get("/auth/verify")
+        assert resp.status_code == 200
+        assert resp.headers["X-Auth-User"] == "alice_1"
+
+    def test_no_cookie_omits_x_auth_user_header(self, client: TestClient) -> None:
+        resp = client.get("/auth/verify")
+        assert resp.status_code == 401
+        assert "X-Auth-User" not in resp.headers
+
     def test_tampered_cookie_returns_401(self, client: TestClient) -> None:
         client.cookies.set("vpal_session", "bad.token.data")
         resp = client.get("/auth/verify")
         assert resp.status_code == 401
+        assert "X-Auth-User" not in resp.headers
 
     def test_empty_cookie_returns_401(self, client: TestClient) -> None:
         client.cookies.set("vpal_session", "")
