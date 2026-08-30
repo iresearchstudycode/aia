@@ -216,6 +216,48 @@ function parseOllamaModels(json) {
   return names.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 }
 
+// Parse Ollama's GET /api/tags response into a { modelName: contextLength } map.
+// Recent Ollama builds expose `details.context_length` (the model's architectural
+// context window) per entry; older builds and some models (e.g. the gemma line
+// here) omit it. Only positive integers are kept; everything else — including
+// models with no `context_length` — is simply absent from the map, and callers
+// fall back to the configured ceiling. Returns {} for malformed input; never
+// throws. Feeds resolveNumCtx().
+function parseModelContextLengths(json) {
+  const out = {};
+  if (!json || typeof json !== 'object' || !Array.isArray(json.models)) return out;
+  for (const entry of json.models) {
+    if (!entry || typeof entry !== 'object') continue;
+    const name = typeof entry.name === 'string' && entry.name
+      ? entry.name
+      : (typeof entry.model === 'string' ? entry.model : '');
+    if (!name) continue;
+    const ctx = entry.details && entry.details.context_length;
+    if (typeof ctx === 'number' && isFinite(ctx) && ctx > 0 && Math.floor(ctx) === ctx) {
+      out[name] = ctx;
+    }
+  }
+  return out;
+}
+
+// Resolve the num_ctx to send for `modelName`: the configured `ceiling`
+// (OLLAMA_NUM_CTX), reduced to the model's advertised context window when that
+// is *smaller* — sending num_ctx larger than a model can hold makes Ollama
+// silently clamp the request. It never raises above the ceiling: a larger KV
+// cache is a deliberate memory-budget decision, not something to enable
+// automatically from a model's architectural maximum (which can be 128K+).
+// Falls back to the ceiling whenever the model's window is unknown.
+function resolveNumCtx(modelName, ceiling, contextMap) {
+  const cap = typeof ceiling === 'number' && isFinite(ceiling) && ceiling > 0
+    ? Math.floor(ceiling)
+    : 16384;
+  const known = contextMap && typeof contextMap === 'object' ? contextMap[modelName] : undefined;
+  if (typeof known === 'number' && isFinite(known) && known > 0) {
+    return Math.min(cap, Math.floor(known));
+  }
+  return cap;
+}
+
 // Node.js compat — lets Jest import these functions for unit tests; no-op in browser.
 if (typeof module !== 'undefined') {
   module.exports = {
@@ -229,7 +271,9 @@ if (typeof module !== 'undefined') {
     buildDocumentMessageContent,
     parseDocumentMessageContent,
     diffWords,
-    parseOllamaModels
+    parseOllamaModels,
+    parseModelContextLengths,
+    resolveNumCtx
   };
 }
 

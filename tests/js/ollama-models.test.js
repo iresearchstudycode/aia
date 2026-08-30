@@ -1,6 +1,10 @@
 'use strict';
 
-const { parseOllamaModels } = require('../../src/aia/scripts/utils.js');
+const {
+  parseOllamaModels,
+  parseModelContextLengths,
+  resolveNumCtx,
+} = require('../../src/aia/scripts/utils.js');
 
 describe('parseOllamaModels', () => {
   test('valid /api/tags response → case-insensitively sorted model names', () => {
@@ -67,5 +71,93 @@ describe('parseOllamaModels', () => {
       ],
     };
     expect(parseOllamaModels(json)).toEqual(['llama3:8b']);
+  });
+});
+
+describe('parseModelContextLengths', () => {
+  test('extracts details.context_length keyed by model name', () => {
+    const json = {
+      models: [
+        { name: 'qwen3:4b', details: { context_length: 262144 } },
+        { name: 'deepseek-r1:8b', details: { context_length: 131072 } },
+      ],
+    };
+    expect(parseModelContextLengths(json)).toEqual({
+      'qwen3:4b': 262144,
+      'deepseek-r1:8b': 131072,
+    });
+  });
+
+  test('omits entries whose details have no context_length (e.g. the gemma line)', () => {
+    const json = {
+      models: [
+        { name: 'gemma4:e4b', details: { family: 'gemma4' } },
+        { name: 'gemma3:4b', details: {} },
+        { name: 'qwen3:4b', details: { context_length: 262144 } },
+      ],
+    };
+    expect(parseModelContextLengths(json)).toEqual({ 'qwen3:4b': 262144 });
+  });
+
+  test('falls back to m.model for the key when m.name is absent', () => {
+    const json = { models: [{ model: 'phi3:mini', details: { context_length: 4096 } }] };
+    expect(parseModelContextLengths(json)).toEqual({ 'phi3:mini': 4096 });
+  });
+
+  test('ignores non-positive, non-integer, non-numeric context_length values', () => {
+    const json = {
+      models: [
+        { name: 'a', details: { context_length: 0 } },
+        { name: 'b', details: { context_length: -1 } },
+        { name: 'c', details: { context_length: 8192.5 } },
+        { name: 'd', details: { context_length: '8192' } },
+        { name: 'e', details: { context_length: Infinity } },
+        { name: 'f', details: { context_length: 8192 } },
+      ],
+    };
+    expect(parseModelContextLengths(json)).toEqual({ f: 8192 });
+  });
+
+  test('malformed / missing input → {} (never throws)', () => {
+    expect(parseModelContextLengths(null)).toEqual({});
+    expect(parseModelContextLengths(undefined)).toEqual({});
+    expect(parseModelContextLengths('nope')).toEqual({});
+    expect(parseModelContextLengths({})).toEqual({});
+    expect(parseModelContextLengths({ models: 'x' })).toEqual({});
+    expect(parseModelContextLengths({ models: [null, 'str', { size: 1 }] })).toEqual({});
+  });
+});
+
+describe('resolveNumCtx', () => {
+  const CEILING = 16384;
+  const MAP = { 'qwen3:4b': 262144, 'small:1b': 8192, 'exact:1b': 16384 };
+
+  test('unknown model → the ceiling (pre-existing behaviour)', () => {
+    expect(resolveNumCtx('gemma4:e4b', CEILING, MAP)).toBe(16384);
+  });
+
+  test('model window larger than the ceiling → capped at the ceiling (never raised)', () => {
+    expect(resolveNumCtx('qwen3:4b', CEILING, MAP)).toBe(16384);
+  });
+
+  test('model window smaller than the ceiling → reduced to the model window', () => {
+    expect(resolveNumCtx('small:1b', CEILING, MAP)).toBe(8192);
+  });
+
+  test('model window equal to the ceiling → the ceiling', () => {
+    expect(resolveNumCtx('exact:1b', CEILING, MAP)).toBe(16384);
+  });
+
+  test('empty / missing map → the ceiling', () => {
+    expect(resolveNumCtx('qwen3:4b', CEILING, {})).toBe(16384);
+    expect(resolveNumCtx('qwen3:4b', CEILING, null)).toBe(16384);
+    expect(resolveNumCtx('qwen3:4b', CEILING, undefined)).toBe(16384);
+  });
+
+  test('invalid ceiling → falls back to 16384', () => {
+    expect(resolveNumCtx('gemma4:e4b', 0, MAP)).toBe(16384);
+    expect(resolveNumCtx('gemma4:e4b', -5, MAP)).toBe(16384);
+    expect(resolveNumCtx('gemma4:e4b', 'big', MAP)).toBe(16384);
+    expect(resolveNumCtx('small:1b', NaN, MAP)).toBe(8192);
   });
 });
