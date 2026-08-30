@@ -24,6 +24,7 @@ const SPEECH_RECOGNITION_LANG = 'en-US'; // BCP 47 tag — e.g. 'en-AU', 'fr-FR'
 const PERSONA_PREFS_KEY = 'personaPrefs'; // legacy localStorage key — read only by the one-time settings migration
 const EDITOR_MODE_KEY = 'editorMode'; // legacy localStorage key — read only by the one-time settings migration
 const NAV_RAIL_KEY = 'navRailEnabled'; // legacy localStorage key — read only by the one-time settings migration
+const SIDEBAR_STATE_KEY = 'sidebarCollapsed'; // pure client view state (desktop sidebar collapsed) — never synced to the settings-service
 
 // Human-readable persona names, keyed by the same keys as `systemPrompts` (minus
 // `englishEditorExplained`). Formerly the <option> label text in the persona

@@ -30,6 +30,7 @@ const crossModuleGlobals = {
   PERSONA_PREFS_KEY: 'readonly',
   EDITOR_MODE_KEY: 'readonly',
   NAV_RAIL_KEY: 'readonly',
+  SIDEBAR_STATE_KEY: 'readonly',
   systemPrompts: 'readonly',
   personaLabels: 'readonly',
   // config.js — mutable state
@@ -125,6 +126,7 @@ const crossModuleGlobals = {
   resolveTtsEngine: 'readonly',
   diffSettings: 'readonly',
   buildMigrationPayload: 'readonly',
+  setActivePersona: 'readonly',
   // api.js
   streamOllamaResponse: 'readonly',
   stopStreaming: 'readonly',
@@ -136,8 +138,8 @@ const crossModuleGlobals = {
   navRailBuildModel: 'readonly',
   // history.js
   initHistory: 'readonly',
-  openHistory: 'readonly',
-  closeHistory: 'readonly',
+  hcNewChat: 'readonly',
+  hcRefreshSidebar: 'readonly',
   hcCurrentId: 'readonly',
   hcNewConversationId: 'readonly',
   hcArchiveCurrent: 'readonly',
@@ -147,6 +149,9 @@ const crossModuleGlobals = {
   chatTitleFrom: 'readonly',
   conversationRecordFrom: 'readonly',
   filterConversations: 'readonly',
+  resolveActiveCardId: 'readonly',
+  // main.js
+  closeSidebarDrawer: 'readonly',
   // vendored libraries (loaded before app scripts)
   marked: 'readonly',
   DOMPurify: 'readonly',

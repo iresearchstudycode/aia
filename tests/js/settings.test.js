@@ -9,6 +9,7 @@ const {
   resolveTtsEngine,
   diffSettings,
   buildMigrationPayload,
+  setActivePersona,
 } = require('../../src/aia/scripts/settings.js');
 
 // Minimal snapshot in the `GET /settings` shape.
@@ -282,5 +283,34 @@ describe('buildMigrationPayload', () => {
 
   test('empty ollamaModel string is omitted', () => {
     expect(buildMigrationPayload({ ollamaModel: '' })).toEqual({ global: {}, personas: {} });
+  });
+});
+
+describe('setActivePersona — validation guards', () => {
+  const origFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = origFetch;
+    if (typeof window !== 'undefined') delete window.vpalSettings;
+  });
+
+  test('rejects a non-string / unknown persona key without a network call', async () => {
+    const fetchSpy = jest.fn();
+    global.fetch = fetchSpy;
+    await expect(setActivePersona('not-a-persona')).resolves.toBe(false);
+    await expect(setActivePersona(42)).resolves.toBe(false);
+    await expect(setActivePersona(null)).resolves.toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test('no-ops (false) when the key already matches the active persona', async () => {
+    const fetchSpy = jest.fn();
+    global.fetch = fetchSpy;
+    window.vpalSettings = {
+      global: { active_persona: 'assistant' },
+      personas: {},
+      defaults: { global: {}, persona: {} },
+    };
+    await expect(setActivePersona('assistant')).resolves.toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
