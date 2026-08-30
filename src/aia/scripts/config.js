@@ -5,6 +5,7 @@ const OLLAMA_API_URL = 'https://localhost/ollama/api/chat';
 const OLLAMA_TAGS_URL = 'https://localhost/ollama/api/tags'; // GET — lists models installed in Ollama, for the model selector
 const OLLAMA_MODEL_KEY = 'ollamaModel'; // localStorage key for the user's selected model (legacy — read only by the one-time settings migration)
 const SETTINGS_API_URL = 'https://localhost/settings'; // per-user settings-service (see settings.js)
+const CONVERSATIONS_API_URL = 'https://localhost/conversations'; // per-user conversations-service (see history.js)
 const VOICEBOX_SPEAK_URL = 'https://localhost/voicebox/speak';
 const PIPER_SPEAK_URL = 'https://localhost/piper/speak';
 const DOC_EXTRACT_URL = 'https://localhost/doc-extract/extract';
@@ -23,6 +24,7 @@ const SPEECH_RECOGNITION_LANG = 'en-US'; // BCP 47 tag — e.g. 'en-AU', 'fr-FR'
 const PERSONA_PREFS_KEY = 'personaPrefs'; // legacy localStorage key — read only by the one-time settings migration
 const EDITOR_MODE_KEY = 'editorMode'; // legacy localStorage key — read only by the one-time settings migration
 const NAV_RAIL_KEY = 'navRailEnabled'; // legacy localStorage key — read only by the one-time settings migration
+const SIDEBAR_STATE_KEY = 'sidebarCollapsed'; // pure client view state (desktop sidebar collapsed) — never synced to the settings-service
 
 // Human-readable persona names, keyed by the same keys as `systemPrompts` (minus
 // `englishEditorExplained`). Formerly the <option> label text in the persona

@@ -240,37 +240,119 @@ document.addEventListener('DOMContentLoaded', async function () {
   // setNavRailEnabled()).
   initNavRail();
 
+  // Conversation history (history.js) — binds the static sidebar shell
+  // (#historySearch / #historyList / #newChatBtn …) and does the initial fetch.
+  if (typeof initHistory === 'function') initHistory();
+
   applyResolvedSettings();
   updateSystemPromptState();
 
-  // Profile dropdown toggle — uses position:fixed positioned via JS so the
-  // dropdown escapes the chat-container's overflow:hidden boundary.
-  const profileTrigger = document.getElementById('profileTrigger');
-  const profileDropdown = document.getElementById('profileDropdown');
-  const profileMenu = document.getElementById('profileMenu');
+  // --- Sidebar collapse (desktop) / drawer (mobile) --------------------------
+  const app = document.getElementById('app');
+  const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  const sidebarMq = window.matchMedia('(max-width: 768px)');
 
-  function openProfileDropdown() {
-    const rect = profileTrigger.getBoundingClientRect();
-    profileDropdown.style.top = (rect.bottom + 8) + 'px';
-    profileDropdown.style.right = (window.innerWidth - rect.right) + 'px';
-    profileDropdown.classList.add('open');
-    profileTrigger.setAttribute('aria-expanded', 'true');
+  // Restore the desktop collapsed state (pure client view state — never synced
+  // to the settings-service, matching the pre-migration nav-rail precedent).
+  if (!sidebarMq.matches && localStorage.getItem(SIDEBAR_STATE_KEY) === '1') {
+    app.classList.add('app--sidebar-collapsed');
   }
 
-  function closeProfileDropdown() {
-    profileDropdown.classList.remove('open');
-    profileTrigger.setAttribute('aria-expanded', 'false');
+  function closeSidebarDrawer() {
+    app.classList.remove('app--drawer-open');
   }
 
-  profileTrigger.addEventListener('click', function (e) {
-    e.stopPropagation();
-    profileDropdown.classList.contains('open') ? closeProfileDropdown() : openProfileDropdown();
+  function toggleSidebar() {
+    if (sidebarMq.matches) {
+      app.classList.toggle('app--drawer-open');
+    } else {
+      const collapsed = app.classList.toggle('app--sidebar-collapsed');
+      if (collapsed) localStorage.setItem(SIDEBAR_STATE_KEY, '1');
+      else localStorage.removeItem(SIDEBAR_STATE_KEY);
+    }
+  }
+  window.closeSidebarDrawer = closeSidebarDrawer;
+
+  const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+  if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', toggleSidebar);
+  const sidebarCollapseBtn = document.getElementById('sidebarCollapseBtn');
+  if (sidebarCollapseBtn) sidebarCollapseBtn.addEventListener('click', toggleSidebar);
+  if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', closeSidebarDrawer);
+
+  // Crossing the breakpoint: drop whichever mode's class doesn't apply, so the
+  // sidebar can never get stuck open/collapsed in the other layout.
+  sidebarMq.addEventListener('change', function () {
+    app.classList.remove('app--drawer-open');
+    if (sidebarMq.matches) {
+      app.classList.remove('app--sidebar-collapsed');
+    } else if (localStorage.getItem(SIDEBAR_STATE_KEY) === '1') {
+      app.classList.add('app--sidebar-collapsed');
+    }
   });
 
-  // Close when clicking outside the menu.
-  document.addEventListener('click', function (e) {
-    if (!profileMenu.contains(e.target)) closeProfileDropdown();
-  });
+  // --- Bottom-left account menu (Settings / Sign out) -----------------------
+  // position:fixed, JS-anchored to #accountTrigger, opening upward — the shared
+  // .menu-popup base handles the chrome; this mirrors the attach-menu pattern.
+  const accountTrigger = document.getElementById('accountTrigger');
+  const accountMenu = document.getElementById('accountMenu');
+
+  function openAccountMenu() {
+    const rect = accountTrigger.getBoundingClientRect();
+    accountMenu.style.bottom = (window.innerHeight - rect.top + 8) + 'px';
+    accountMenu.style.left = rect.left + 'px';
+    accountMenu.style.maxHeight = (rect.top - 16) + 'px';
+    accountMenu.style.overflowY = 'auto';
+    accountMenu.classList.add('open');
+    accountTrigger.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeAccountMenu() {
+    accountMenu.classList.remove('open');
+    accountTrigger.setAttribute('aria-expanded', 'false');
+  }
+
+  if (accountTrigger && accountMenu) {
+    accountTrigger.addEventListener('click', function (e) {
+      e.stopPropagation();
+      accountMenu.classList.contains('open') ? closeAccountMenu() : openAccountMenu();
+    });
+    document.addEventListener('click', function (e) {
+      if (!accountMenu.contains(e.target) && e.target !== accountTrigger &&
+          !accountTrigger.contains(e.target)) {
+        closeAccountMenu();
+      }
+    });
+  }
+
+  // --- Active-chat overflow menu (Save / Export MD / Open / Close) ----------
+  const chatOverflowBtn = document.getElementById('chatOverflowBtn');
+  const chatOverflowMenu = document.getElementById('chatOverflowMenu');
+
+  function openOverflowMenu() {
+    const rect = chatOverflowBtn.getBoundingClientRect();
+    chatOverflowMenu.style.top = (rect.bottom + 8) + 'px';
+    chatOverflowMenu.style.right = (window.innerWidth - rect.right) + 'px';
+    chatOverflowMenu.classList.add('open');
+    chatOverflowBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeOverflowMenu() {
+    chatOverflowMenu.classList.remove('open');
+    chatOverflowBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  if (chatOverflowBtn && chatOverflowMenu) {
+    chatOverflowBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      chatOverflowMenu.classList.contains('open') ? closeOverflowMenu() : openOverflowMenu();
+    });
+    document.addEventListener('click', function (e) {
+      if (!chatOverflowMenu.contains(e.target) && e.target !== chatOverflowBtn &&
+          !chatOverflowBtn.contains(e.target)) {
+        closeOverflowMenu();
+      }
+    });
+  }
 
   // Attach menu ("+") — consolidates image + document attachment into a single
   // ChatGPT-style trigger; mirrors the profileTrigger/profileDropdown open/close
@@ -301,21 +383,84 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (!attachMenu.contains(e.target)) closeAttachMenu();
   });
 
-  // Settings lightbox entry points — the profile-dropdown item, the persona ▾
-  // toggle next to the header title, and the two toolbar status badges.
+  // Settings lightbox entry points — the account-menu item and the two toolbar
+  // status badges. (The persona ▾ toggle no longer opens Settings — it opens a
+  // lightweight persona picker; per-persona detail settings stay in Settings.)
   const settingsMenuItem = document.getElementById('settingsMenuItem');
   if (settingsMenuItem) {
     settingsMenuItem.addEventListener('click', function () {
-      closeProfileDropdown();
+      closeAccountMenu();
       openSettings('models');
     });
   }
 
+  // --- Persona picker -------------------------------------------------------
+  // The ▾ next to "AI Assistant" opens a plain list of the personas; picking
+  // one switches the active persona (settings.js setActivePersona → PUT +
+  // applyResolvedSettings). Locked mid-conversation, matching the old behaviour
+  // — you can't change persona partway through a thread; load or start a chat.
   const personaToggleBtn = document.getElementById('personaToggleBtn');
-  if (personaToggleBtn) {
+  const personaMenu = document.getElementById('personaMenu');
+
+  function _buildPersonaMenu() {
+    if (!personaMenu || typeof personaLabels === 'undefined') return;
+    while (personaMenu.firstChild) personaMenu.removeChild(personaMenu.firstChild);
+    _PERSONA_KEYS.forEach(function (key) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.setAttribute('role', 'menuitemradio');
+      item.dataset.persona = key;
+      item.textContent = personaLabels[key] || key;
+      item.addEventListener('click', function () {
+        closePersonaMenu();
+        if (typeof setActivePersona === 'function') setActivePersona(key);
+      });
+      personaMenu.appendChild(item);
+    });
+  }
+
+  function openPersonaMenu() {
+    if (!personaMenu || !personaToggleBtn) return;
+    // Mark the current selection each time it opens (it may have changed).
+    const active = (window.vpalSettings && window.vpalSettings.global &&
+      window.vpalSettings.global.active_persona) || '';
+    personaMenu.querySelectorAll('button').forEach(function (b) {
+      b.setAttribute('aria-checked', b.dataset.persona === active ? 'true' : 'false');
+      b.classList.toggle('is-active', b.dataset.persona === active);
+    });
+    const rect = personaToggleBtn.getBoundingClientRect();
+    personaMenu.style.top = (rect.bottom + 8) + 'px';
+    personaMenu.style.left = rect.left + 'px';
+    personaMenu.style.maxHeight = (window.innerHeight - rect.bottom - 24) + 'px';
+    personaMenu.style.overflowY = 'auto';
+    personaMenu.classList.add('open');
+    personaToggleBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  function closePersonaMenu() {
+    if (!personaMenu) return;
+    personaMenu.classList.remove('open');
+    if (personaToggleBtn) personaToggleBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  if (personaToggleBtn && personaMenu) {
+    _buildPersonaMenu();
     personaToggleBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      openSettings('personas');
+      // conversationHistory.length > 0 → persona is locked for this thread.
+      if (typeof conversationHistory !== 'undefined' && conversationHistory.length > 0) {
+        if (typeof showToast === 'function') {
+          showToast('Start a new chat to switch persona');
+        }
+        return;
+      }
+      personaMenu.classList.contains('open') ? closePersonaMenu() : openPersonaMenu();
+    });
+    document.addEventListener('click', function (e) {
+      if (!personaMenu.contains(e.target) && e.target !== personaToggleBtn &&
+          !personaToggleBtn.contains(e.target)) {
+        closePersonaMenu();
+      }
     });
   }
 
@@ -328,29 +473,106 @@ document.addEventListener('DOMContentLoaded', async function () {
     thinkingBadge.addEventListener('click', function () { openSettings('reasoning'); });
   }
 
-  // Close all panels on Escape; trap Tab focus inside whichever panel is open.
+  // Global keyboard shortcuts + panel Escape/Tab handling.
   // (The Settings lightbox runs its own focus trap / Escape handling in settings.js.)
+  //
+  //   Escape            1st: cancel an in-flight stream (Stop button visible)
+  //                     2nd: close the mobile sidebar drawer
+  //                     3rd: close whichever popup is open (account / overflow / attach)
+  //                     4th: return focus to the composer
+  //   Ctrl/Cmd + ,      open Settings (Models pane)
+  //   Ctrl/Cmd + B      toggle the sidebar (collapse on desktop / drawer on mobile)
+  //   Ctrl/Cmd+Shift+O  "New chat" — archives the current conversation, then resets
+  //
+  // The Ctrl/Cmd combos fire even while the composer is focused; the bare
+  // Escape path never disrupts typing (worst case it re-focuses #userInput).
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') {
-      closeProfileDropdown();
-      closeAttachMenu();
+    var mod = e.ctrlKey || e.metaKey;
+
+    // Ctrl/Cmd + , → Settings. `,` is unshifted; guard against Alt to avoid
+    // stealing OS/browser chords.
+    if (mod && !e.shiftKey && !e.altKey && e.key === ',') {
+      e.preventDefault();
+      if (typeof openSettings === 'function') openSettings('models');
+      return;
     }
+
+    // Ctrl/Cmd + B → toggle the sidebar.
+    if (mod && !e.shiftKey && !e.altKey && (e.key === 'b' || e.key === 'B')) {
+      e.preventDefault();
+      toggleSidebar();
+      return;
+    }
+
+    // Ctrl/Cmd + Shift + O → "New chat" (archive + reset).
+    if (mod && e.shiftKey && !e.altKey && (e.key === 'o' || e.key === 'O')) {
+      e.preventDefault();
+      if (typeof clearChat === 'function') clearChat();
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      // Settings lightbox owns its own Escape — don't double-handle.
+      var lightbox = document.getElementById('settingsLightbox');
+      if (lightbox && lightbox.classList.contains('open')) return;
+
+      // 1. A stream is running (Stop button is showing) — cancel it.
+      var stopBtn = document.getElementById('stopBtn');
+      if (stopBtn && stopBtn.offsetParent !== null) {
+        if (typeof stopStreaming === 'function') stopStreaming();
+        return;
+      }
+
+      // 2. The mobile sidebar drawer is open — close it.
+      if (app.classList.contains('app--drawer-open')) {
+        closeSidebarDrawer();
+        return;
+      }
+
+      // 3. A popup is open — close it.
+      if (accountMenu.classList.contains('open') ||
+          chatOverflowMenu.classList.contains('open') ||
+          (personaMenu && personaMenu.classList.contains('open')) ||
+          attachMenuDropdown.classList.contains('open')) {
+        closeAccountMenu();
+        closeOverflowMenu();
+        closePersonaMenu();
+        closeAttachMenu();
+        return;
+      }
+
+      // 4. Nothing open or streaming — put the caret back in the composer.
+      var input = document.getElementById('userInput');
+      if (input && document.activeElement !== input) input.focus();
+      return;
+    }
+
     if (e.key === 'Tab') {
-      if (profileDropdown.classList.contains('open')) _trapFocus(profileDropdown, e);
+      if (accountMenu.classList.contains('open')) _trapFocus(accountMenu, e);
+      if (chatOverflowMenu.classList.contains('open')) _trapFocus(chatOverflowMenu, e);
+      if (personaMenu && personaMenu.classList.contains('open')) _trapFocus(personaMenu, e);
       if (attachMenuDropdown.classList.contains('open')) _trapFocus(attachMenuDropdown, e);
     }
   });
 
-  // Close open panels on resize — their fixed positions were calculated at open
+  // Close open popups on resize — their fixed positions were calculated at open
   // time and become stale as soon as the viewport dimensions change.
   window.addEventListener('resize', function () {
-    if (profileDropdown.classList.contains('open')) closeProfileDropdown();
+    if (accountMenu.classList.contains('open')) closeAccountMenu();
+    if (chatOverflowMenu.classList.contains('open')) closeOverflowMenu();
+    if (personaMenu && personaMenu.classList.contains('open')) closePersonaMenu();
     if (attachMenuDropdown.classList.contains('open')) closeAttachMenu();
   });
 
-  // Close the dropdown after each menu-item action (before any confirm dialogs).
-  ['saveBtn', 'exportMdBtn', 'openBtn', 'clearBtn', 'closeBtn'].forEach(function (id) {
-    document.getElementById(id).addEventListener('click', closeProfileDropdown);
+  // Close the overflow menu after each of its actions (before any confirm dialogs).
+  ['saveBtn', 'exportMdBtn', 'openBtn', 'closeBtn'].forEach(function (id) {
+    document.getElementById(id).addEventListener('click', closeOverflowMenu);
+  });
+
+  // Best-effort final save of the current conversation when the tab is closing —
+  // hcBeaconSave() builds the PUT and ships it via navigator.sendBeacon (history.js).
+  window.addEventListener('beforeunload', function () {
+    if (typeof hcBeaconSave === 'function') hcBeaconSave();
   });
 
   // Chat input
@@ -382,11 +604,11 @@ document.addEventListener('DOMContentLoaded', async function () {
   document.getElementById('sendBtn').addEventListener('click', sendMessage);
   document.getElementById('stopBtn').addEventListener('click', stopStreaming);
 
-  // Header controls (now inside the profile dropdown)
+  // "New chat" (#newChatBtn, top of the sidebar) is wired by history.js. The
+  // file operations live in the main-pane "⋯" overflow menu.
   document.getElementById('saveBtn').addEventListener('click', saveChat);
   document.getElementById('exportMdBtn').addEventListener('click', exportChatAsMarkdown);
   document.getElementById('openBtn').addEventListener('click', openChat);
-  document.getElementById('clearBtn').addEventListener('click', clearChat);
   document.getElementById('closeBtn').addEventListener('click', closeWindow);
 
   // Voice controls

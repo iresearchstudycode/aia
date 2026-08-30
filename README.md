@@ -3,7 +3,7 @@ A secure, voice-enabled AI chat interface that runs entirely on your local machi
 
 ## 📋 Overview
 
-This web application provides a ChatGPT-style chat interface (dark navy header, sky-blue user bubbles, clean card AI responses) with voice input/output, a single "+" attach menu for image attachment (multimodal vision queries) and document attachment (.txt/.md/.pdf Q&A), LaTeX math rendering via KaTeX, syntax-highlighted code blocks (highlight.js) and Mermaid diagram rendering, a conversation navigator rail, and a live collapsible thinking block for reasoning-capable models. Every preference (models, voice, reasoning, personas) is edited in one Settings lightbox and persisted per user server-side. It connects to locally-hosted AI models through Ollama's REST API with no external dependencies — protected by TOTP authentication for up to five users.
+This web application provides a ChatGPT-style chat interface (dark navy header, sky-blue user bubbles, clean card AI responses) with voice input/output, a single "+" attach menu for image attachment (multimodal vision queries) and document attachment (.txt/.md/.pdf Q&A), LaTeX math rendering via KaTeX, syntax-highlighted code blocks (highlight.js) and Mermaid diagram rendering, a conversation navigator rail, and a live collapsible thinking block for reasoning-capable models. Every preference (models, voice, reasoning, personas) is edited in one Settings lightbox and persisted per user server-side, and every conversation is auto-saved to a searchable, per-user history. It connects to locally-hosted AI models through Ollama's REST API with no external dependencies — protected by TOTP authentication for up to five users.
 
 ## 🏗️ Architecture
 
@@ -183,6 +183,7 @@ Unlike the VoiceBox path, this one is entirely self-contained — no local deskt
 | VoiceBox proxy (optional) | FastAPI + httpx (`cgr.dev/chainguard/python:latest`, uid=65532) — bridges to a local Voicebox app's REST API; in-memory generation cache |
 | Document text extraction | FastAPI + pypdf (`cgr.dev/chainguard/python:latest`, uid=65532) — self-contained PDF text extraction; `.txt`/`.md` handled entirely client-side |
 | Settings service | FastAPI + stdlib `sqlite3` (WAL) (`cgr.dev/chainguard/python:latest`, uid=65532) — per-user preferences on the `vpal-settings-data` volume; identity via the `X-Auth-User` header nginx forwards from `/auth/verify` |
+| Conversations service | FastAPI + stdlib `sqlite3` (WAL) (`cgr.dev/chainguard/python:latest`, uid=65532) — auto-saved per-user conversation history on the `vpal-conversations-data` volume; same `X-Auth-User` identity model; per-user cap with oldest-first eviction |
 | Session | HMAC-signed cookie (`itsdangerous.TimestampSigner`), 8-hour TTL |
 | TOTP | RFC 6238 via `pyotp`, compatible with Google Authenticator |
 | Container | Docker, read-only filesystems, minimal capability sets |
@@ -279,7 +280,7 @@ TOTP_SECRET_1=<base32 secret>
 1. Visit `https://localhost/` — unauthenticated requests redirect to `/auth/login`.
 2. Enter your username and the current 6-digit code from Google Authenticator.
 3. On success, a signed session cookie is set (8-hour TTL by default).
-4. Click the profile menu (user icon + username) in the header, then **Sign out** to end the session.
+4. Click the user block at the bottom-left of the sidebar, then **Sign out** to end the session.
 
 ### Setup page security
 
@@ -336,6 +337,15 @@ vpal/
 │   └── tests/
 │       ├── conftest.py             # per-test tmp SETTINGS_DB_PATH
 │       └── test_main.py            # 61 pytest tests (real SQLite)
+├── conversations-service/          # Per-user conversation history service (self-contained, SQLite/WAL)
+│   ├── main.py                     # FastAPI app — GET/PUT/DELETE /conversations/* + /conversations/search + /health
+│   ├── requirements.txt            # fastapi, uvicorn
+│   ├── requirements-test.txt       # pytest, flake8, black, httpx
+│   ├── Dockerfile                  # Multi-stage Chainguard build (digest-pinned); seeds /data as uid 65532
+│   ├── pytest.ini
+│   └── tests/
+│       ├── conftest.py             # per-test tmp CONVERSATIONS_DB_PATH
+│       └── test_main.py            # pytest tests (real SQLite)
 ├── src/
 │   └── aia/                        # Web application source
 │       ├── index.html              # Main HTML structure
@@ -351,7 +361,8 @@ vpal/
 │       │   ├── chat.js             # Chat UI management
 │       │   ├── api.js              # Ollama API client
 │       │   ├── nav-rail.js         # Conversation navigator rail
-│       │   ├── settings.js         # Settings lightbox + server-preference resolution
+│       │   ├── settings.js         # Settings lightbox + server-preference resolution + settings backup
+│       │   ├── history.js          # Conversation history lightbox + per-turn auto-save
 │       │   ├── main.js             # Application initialisation, settings hydration + migration
 │       │   ├── marked.min.js       # Markdown parser (vendored)
 │       │   ├── dompurify.min.js    # HTML sanitiser (vendored)
@@ -475,12 +486,13 @@ Self-contained — no external app to configure, and these only bound worst-case
 ## 🎯 Features
 
 - **TOTP Authentication**: Google Authenticator login for up to five users
-- **ChatGPT-style UI**: Dark navy header, sky-blue user message bubbles (right-aligned), clean card AI responses; all controls use inline SVG line icons with no emoji
-- **Profile Menu**: SVG user icon + logged-in username in the header; dropdown (Save, Export MD, Open, Clear, Close, **Settings**, Sign out) opens as a fixed overlay with Tab focus trap and Escape to close
-- **Settings**: One lightbox (opened from the profile dropdown, next to Sign out) holds every preference, in a two-pane layout — categories on the left (Models / Voice / Reasoning / Interface / Personas), the selected category's fields on the right, each category with its own Save / Cancel / Reset, plus a whole-dialog "Reset all" and a per-field reset for any value that differs from its default. Models: the text/thinking model **and** the vision model are both selectable from your installed Ollama models. Personas: pick the active persona (locked mid-conversation) and set per-persona overrides for thinking mode/depth and TTS engine ("Inherit" falls back to the global default); the English Editor persona also has its output mode (Clean / Show changes / Explain). **Preferences persist server-side, per user** (a small `settings-service` backed by SQLite), so they follow you across devices and survive restarts; defaults come from `VPAL_DEFAULT_*` environment variables. Existing `localStorage` preferences are migrated automatically on first load. If the settings service is unreachable the app still runs on the built-in defaults
+- **ChatGPT-style layout**: A full-viewport two-column shell — a dark left **sidebar** (New chat, an inline searchable conversation-history list, and a locked logged-in-user block at the bottom) and a light main pane with a slim header. Sky-blue user message bubbles (right-aligned), clean card AI responses; all controls use inline SVG line icons with no emoji. The sidebar collapses on desktop (`Ctrl`/`Cmd` + `B`, persisted) and becomes a swipe-in drawer on narrow screens
+- **Account menu**: The bottom-left user block opens a small menu with **Settings** and **Sign out**. The file operations (Save chat, Export MD, Open file, Close window) live in a **"⋯" overflow menu** on the chat header
+- **Settings**: One lightbox (opened from the account menu, `Ctrl`/`Cmd` + `,`, or either toolbar badge) holds every preference, in a two-pane layout — categories on the left (Models / Voice / Reasoning / Interface / Personas), the selected category's fields on the right, each category with its own Save / Cancel / Reset, plus a whole-dialog "Reset all" and a per-field reset for any value that differs from its default. Models: the text/thinking model **and** the vision model are both selectable from your installed Ollama models. Personas: the detail view — per-persona overrides for thinking mode/depth and TTS engine ("Inherit" falls back to the global default) and, for English Editor, the output mode (Clean / Show changes / Explain); everyday persona switching is the ▾ picker in the header. **Preferences persist server-side, per user** (a small `settings-service` backed by SQLite), so they follow you across devices and survive restarts; defaults come from `VPAL_DEFAULT_*` environment variables. Existing `localStorage` preferences are migrated automatically on first load. If the settings service is unreachable the app still runs on the built-in defaults
 - **Chat Input**: Auto-growing textarea (up to 6 lines); Enter sends, Shift+Enter inserts a newline; circular sky-blue send button activates only when text or an image is pending
+- **Keyboard Shortcuts**: `Ctrl`/`Cmd` + `,` opens Settings; `Ctrl`/`Cmd` + `B` toggles the sidebar; `Ctrl`/`Cmd` + `Shift` + `O` starts a new chat (the current conversation is archived to history first, so there's no confirm); `Escape` cancels an in-flight response, then closes the mobile drawer, then any open popup, then returns focus to the composer
 - **Voice Input/Output**: Continuous speech recognition with 3-second silence detection (Web Speech API); speech synthesis via the self-hosted **Piper** engine (default) or **VoiceBox** (optional, chosen in Settings → Voice), with per-message speak buttons and a working stop control; the toolbar keeps only the mic and stop-speaking icons. Recognition is paused while TTS plays so the mic doesn't capture the synthesised audio
-- **Attach Menu**: A single ChatGPT-style "+" button in the toolbar opens a popup with "Add photos" and "Add files" options; Tab focus trap and Escape to close, matching the profile dropdown
+- **Attach Menu**: A single ChatGPT-style "+" button in the toolbar opens a popup with "Add photos" and "Add files" options; Tab focus trap and Escape to close, matching the account / overflow menus
 - **Image Attachment**: "Add photos" in the "+" attach menu opens a file picker; images are resized to ≤ 1024 px before being sent; vision requests are automatically routed to `gemma3:4b`; in-session thumbnails shown in user bubbles; saved chats show an SVG camera icon placeholder where the image was
 - **Document Attachment**: "Add files" in the "+" attach menu attaches a `.txt`, `.md`, or `.pdf` file to ask questions about; `.txt`/`.md` are read directly in the browser, `.pdf` is extracted server-side (see [Document Attachment Path](#document-attachment-path)); the chat bubble shows a compact filename chip and your question, not the full extracted text; follow-up questions work automatically since the extracted text is part of normal conversation history
 - **Thinking Mode**: Toggled in Settings → Reasoning (on/off + depth Low / Medium / High), with per-persona overrides; a `#thinkingBadge` in the toolbar shows the current state and opens Settings on click; live reasoning displayed in a collapsible `<details>` block that collapses when the final answer arrives; thinking content excluded from history, copy, and speech
@@ -488,9 +500,11 @@ Self-contained — no external app to configure, and these only bound worst-case
 - **Conversation Navigator Rail**: A thin strip of markers down the right edge of the chat, one per completed question. Hover a marker for a preview card (the question + a short snippet of the reply); click it to jump that turn to the top of the view and briefly flash it. The marker for the turn you're looking at stays highlighted as you scroll. Toggled in Settings → Interface (default on); hidden on narrow screens. Mouse-only, and it's purely a view over the current conversation — nothing is added to saved chats
 - **Dual-model Routing**: Text/thinking requests use the chosen chat model (default `gemma4:e4b`, streaming, thinking-capable); image requests and vision follow-ups use the chosen vision model (default `gemma3:4b`); `think: false` sent explicitly to suppress native reasoning when thinking is OFF
 - **Real-time Streaming**: Live token-by-token response display with a stop button
-- **Multiple Personas**: 11 pre-configured AI personalities
+- **Multiple Personas**: 11 pre-configured AI personalities. Switch with the **▾ next to "AI Assistant"** — a plain persona list (not the full Settings). Locked once a conversation is underway; **loading a past conversation restores the persona it was created with** so follow-ups stay in context. Per-persona detail (thinking/TTS overrides, editor mode) lives in Settings → Personas
 - **Per-message Actions**: Copy and speak SVG icon buttons appear on successful AI responses only; target the final answer (thinking content excluded)
 - **Chat History**: Save/load conversation history as JSON; filename format `YYYYMMDD-HHMMss-vpal-<Topic>.json`; base64 image data stripped on save (preserves `hasImage` flag for routing and placeholder display)
+- **Conversation History**: Every conversation is auto-saved to a per-user, server-side history (`conversations-service`, SQLite on the `vpal-conversations-data` volume) after each completed turn and on tab close. The list lives in the left sidebar — search by title or full message text, click to reopen (the active one is highlighted), ✕ to delete; the list refreshes itself after each turn. "New chat" archives the current conversation before resetting, so nothing is lost. Bounded per user (default 100, oldest evicted first); the manual JSON Save/Export/Open still work unchanged, and chat never blocks on the history service
+- **Settings Backup**: The Settings lightbox footer has **Export settings** (downloads the full per-user settings JSON) and **Import settings** (restores one), for moving preferences between deployments or keeping an offline copy
 - **Character Counter**: Remaining count shown as you approach the 4,000-character limit, with warning and danger colour states
 - **Auto-Speak**: Settings → Voice toggles automatic TTS after each AI response; works with either engine regardless of browser Web Speech support
 - **Markdown Support**: Rich text formatting in AI responses and thinking blocks via Marked.js + DOMPurify
@@ -545,6 +559,8 @@ docker logs vpal-nginx
 docker logs vpal-voicebox-proxy
 docker logs vpal-doc-extract
 docker logs vpal-piper-tts
+docker logs vpal-settings
+docker logs vpal-conversations
 ```
 
 ## 📄 License

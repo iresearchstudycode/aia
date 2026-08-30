@@ -360,7 +360,7 @@ function initSettings() {
   if (!root) return;
   _settingsInited = true;
 
-  var backdrop = _settingsEl('div', { id: 'settingsBackdrop' });
+  var backdrop = _settingsEl('div', { id: 'settingsBackdrop', class: 'lightbox__backdrop' });
   backdrop.addEventListener('click', function () {
     _settingsAttemptClose();
   });
@@ -392,11 +392,57 @@ function initSettings() {
     text: 'Reset all settings'
   });
   resetAll.addEventListener('click', _settingsOnResetAll);
-  var footer = _settingsEl('div', { class: 'settings-footer' }, [resetAll]);
+
+  // Backup block — export the raw GET /settings JSON to a file, or import one
+  // back. Ids are `settings*`-scoped so the history lightbox's `history-*` CSS
+  // never collides; they lean on the existing `.settings-*` button styles.
+  var exportBtn = _settingsEl('button', {
+    id: 'settingsExportBtn',
+    class: 'settings-section-reset',
+    type: 'button',
+    text: 'Export settings'
+  });
+  exportBtn.addEventListener('click', _settingsExportBackup);
+
+  var importBtn = _settingsEl('button', {
+    id: 'settingsImportBtn',
+    class: 'settings-section-reset',
+    type: 'button',
+    text: 'Import settings'
+  });
+  var importInput = _settingsEl('input', {
+    id: 'settingsImportInput',
+    type: 'file',
+    accept: 'application/json'
+  });
+  importInput.style.display = 'none';
+  importBtn.addEventListener('click', function () {
+    importInput.value = '';
+    importInput.click();
+  });
+  importInput.addEventListener('change', function () {
+    var file = importInput.files && importInput.files[0];
+    if (file) _settingsImportBackup(file);
+  });
+
+  var backup = _settingsEl('div', { id: 'settingsBackup', class: 'settings-backup' }, [
+    _settingsEl('span', { class: 'settings-backup-label', text: 'Backup' }),
+    exportBtn,
+    importBtn,
+    importInput
+  ]);
+
+  var footer = _settingsEl('div', { class: 'settings-footer' }, [resetAll, backup]);
 
   var lightbox = _settingsEl(
     'div',
-    { id: 'settingsLightbox', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
+    {
+      id: 'settingsLightbox',
+      class: 'lightbox__panel',
+      role: 'dialog',
+      'aria-modal': 'true',
+      'aria-label': 'Settings'
+    },
     [header, body, footer]
   );
 
@@ -746,12 +792,20 @@ function _settingsEnsureModelNames(cb) {
     cb(_settingsModelNames);
     return;
   }
-  fetch(url)
+  // redirect: 'manual' so an expired session (nginx 302 -> /auth/login) surfaces
+  // as an opaqueredirect we can act on, instead of silently resolving to the
+  // login HTML and looking like an Ollama failure. Mirrors api.js.
+  fetch(url, { redirect: 'manual' })
     .then(function (r) {
+      if (r.type === 'opaqueredirect') {
+        window.location.reload();
+        return null;
+      }
       if (!r.ok) throw new Error('tags ' + r.status);
       return r.json();
     })
     .then(function (json) {
+      if (json === null) return; // reloading for auth
       _settingsModelNames =
         typeof parseOllamaModels === 'function' ? parseOllamaModels(json) : [];
       cb(_settingsModelNames);
@@ -1207,6 +1261,41 @@ function _settingsMergeGlobal(snapshot, freshGlobal) {
   return merged;
 }
 
+/**
+ * Switch the active persona without opening the Settings lightbox — used by the
+ * header persona picker (main.js) and by history.js when a loaded conversation
+ * carries its own `persona_key`. PUTs `active_persona` to `/settings/global`,
+ * merges the response into `window.vpalSettings`, and re-applies. Never throws;
+ * a no-op (resolves `false`) when the key is unknown or already active.
+ *
+ * @param {string} personaKey
+ * @returns {Promise<boolean>} true when the persona actually changed
+ */
+function setActivePersona(personaKey) {
+  if (typeof personaKey !== 'string' || SETTINGS_PERSONA_KEYS.indexOf(personaKey) === -1) {
+    return Promise.resolve(false);
+  }
+  if (_settingsActivePersona() === personaKey) return Promise.resolve(false);
+  if (typeof fetch === 'undefined') return Promise.resolve(false);
+
+  return _settingsPut(_settingsApi('/global'), { active_persona: personaKey })
+    .then(function (resp) {
+      if (!resp || resp.ok !== true) throw new Error('persona save failed');
+      window.vpalSettings = _settingsMergeGlobal(_settingsSnapshot(), resp.global);
+      if (typeof applyResolvedSettings === 'function') applyResolvedSettings();
+      // Keep the (possibly open) Personas panel in sync.
+      if (_settingsInited && _settingsActiveCategory === 'personas') {
+        _settingsEditPersona = _settingsActivePersona();
+        _settingsRenderPanel();
+      }
+      return true;
+    })
+    .catch(function () {
+      if (typeof showToast === 'function') showToast('Could not switch persona');
+      return false;
+    });
+}
+
 // -- Reset ------------------------------------------------------------
 
 function _settingsOnResetAll() {
@@ -1253,6 +1342,120 @@ function _settingsResetKeys(scope, keys) {
     })
     .catch(function () {
       if (typeof showToast === 'function') showToast('Could not reset settings');
+    });
+}
+
+// -- Backup: export / import --------------------------------------------
+
+/** Timestamp for a backup filename: `YYYYMMDD-HHMMSS` (local time). */
+function _settingsBackupStamp(now) {
+  var d = now || new Date();
+  var p = function (n) {
+    return String(n).padStart(2, '0');
+  };
+  return (
+    '' +
+    d.getFullYear() +
+    p(d.getMonth() + 1) +
+    p(d.getDate()) +
+    '-' +
+    p(d.getHours()) +
+    p(d.getMinutes()) +
+    p(d.getSeconds())
+  );
+}
+
+/**
+ * Download the current `GET /settings` payload as
+ * `vpal-settings-<YYYYMMDD-HHMMSS>.json`.
+ *
+ * @returns {void}
+ */
+function _settingsExportBackup() {
+  if (typeof fetch === 'undefined') return;
+  fetch(_settingsApi(''), { credentials: 'same-origin' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('GET /settings ' + r.status);
+      return r.json();
+    })
+    .then(function (data) {
+      var json = JSON.stringify(data, null, 2);
+      var blob = new Blob([json], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'vpal-settings-' + _settingsBackupStamp() + '.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      if (typeof showToast === 'function') showToast('Settings exported');
+    })
+    .catch(function () {
+      if (typeof showToast === 'function') showToast('Settings export failed');
+    });
+}
+
+/** Strip `null` / `undefined` values from a persona override object. */
+function _settingsNonNull(obj) {
+  var out = {};
+  Object.keys(obj || {}).forEach(function (k) {
+    if (obj[k] !== null && obj[k] !== undefined) out[k] = obj[k];
+  });
+  return out;
+}
+
+/**
+ * Read a settings-export JSON file and push it back into the service: `PUT
+ * /global` with `parsed.global`, then `PUT /persona/<k>` with each persona's
+ * non-null overrides, then re-`GET` and re-apply. Any failure → a single toast.
+ *
+ * @param {File} file
+ * @returns {void}
+ */
+function _settingsImportBackup(file) {
+  if (!file || typeof file.text !== 'function') {
+    if (typeof showToast === 'function') showToast('Settings import failed');
+    return;
+  }
+  file
+    .text()
+    .then(function (raw) {
+      var parsed = JSON.parse(raw);
+      if (!parsed || !parsed.global || typeof parsed.global !== 'object') {
+        if (typeof showToast === 'function') showToast('Not a settings file');
+        return null;
+      }
+      var chain = _settingsPut(_settingsApi('/global'), parsed.global).then(function (resp) {
+        if (!resp || resp.ok !== true) throw new Error('import global');
+      });
+      var personas = parsed.personas || {};
+      Object.keys(personas).forEach(function (key) {
+        var body = _settingsNonNull(personas[key]);
+        if (!Object.keys(body).length) return;
+        chain = chain.then(function () {
+          return _settingsPut(_settingsApi('/persona/' + encodeURIComponent(key)), body).then(
+            function (resp) {
+              if (!resp || resp.ok !== true) throw new Error('import persona ' + key);
+            }
+          );
+        });
+      });
+      return chain
+        .then(function () {
+          return _settingsReloadSnapshot();
+        })
+        .then(function () {
+          if (typeof applyResolvedSettings === 'function') applyResolvedSettings();
+          if (_settingsInited) {
+            _settingsRenderNav();
+            _settingsRenderPanel();
+          }
+          if (typeof showToast === 'function') showToast('Settings imported');
+        });
+    })
+    .catch(function () {
+      if (typeof showToast === 'function') showToast('Settings import failed');
     });
 }
 
@@ -1455,6 +1658,7 @@ if (typeof module !== 'undefined') {
     resolveThinkingMode: resolveThinkingMode,
     resolveTtsEngine: resolveTtsEngine,
     diffSettings: diffSettings,
-    buildMigrationPayload: buildMigrationPayload
+    buildMigrationPayload: buildMigrationPayload,
+    setActivePersona: setActivePersona
   };
 }

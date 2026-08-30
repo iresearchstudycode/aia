@@ -10,8 +10,6 @@ let streamAbortController = null;
 // always pass that constant explicitly; the default only exists so tests that don't
 // care about num_ctx can omit it.
 function _buildRequestBody(imageBase64, history, systemPrompt, modelName, visionModelName, thinkingMode = 'off', numCtx = 16384) {
-  const thinkingToken = "<|think|>  ";
-
   // isVision: true when this message or any history entry contains an image.
   // hasCurrentImage: true only when a new image is attached to this specific message.
   // They differ on follow-ups: user asks a text question after an image turn —
@@ -19,11 +17,17 @@ function _buildRequestBody(imageBase64, history, systemPrompt, modelName, vision
   const isVision = detectVisionContext(imageBase64, history);
   const hasCurrentImage = !!imageBase64;
 
-  // Thinking is only available for non-vision text requests and only when enabled.
-  // Vision uses gemma3:4b which has no thinking capability, and Ollama rejects an
-  // assistant prefill on any request that carries images.
+  // Thinking is only available for non-vision text requests and only when
+  // enabled. The vision model (gemma3:4b) has no thinking capability.
   const thinkingEnabled = !isVision && thinkingMode !== 'off';
 
+  // No assistant prefill. Ollama's `think` parameter (set below) makes every
+  // thinking-capable model — gemma4:e4b, qwen3.x, deepseek-r1, … — return its
+  // reasoning in a separate `message.thinking` field, cleanly split from the
+  // answer in `message.content`. The old `<|think|>  ` prefill was a gemma-only
+  // nudge from before Ollama supported this; on qwen3 it *breaks* the native
+  // split (the assistant turn is "continued", so nothing separates) and the
+  // whole reply lands in the thinking box. See splitThinkingContent (utils.js).
   const messages = [
     { role: 'system', content: systemPrompt },
     ...history.map(m => {
@@ -32,9 +36,6 @@ function _buildRequestBody(imageBase64, history, systemPrompt, modelName, vision
       return msg;
     }),
   ];
-  if (thinkingEnabled) {
-    messages.push({ role: 'assistant', content: thinkingToken });
-  }
 
   // Initial vision requests (hasCurrentImage) use stream:false — Ollama's streaming
   // path silently drops image tokens for GGUF models without vision encoders.
@@ -144,9 +145,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
   );
   // Captured once so all three render sites (live loop, final, abort) agree on whether
   // thinking is active for this request. When false, splitThinkingContent is bypassed
-  // entirely — calling it with an empty thinkingBuffer and no <|/think|> boundary
-  // returns { thinking: fullResponse, answer: '' }, which would render the answer inside
-  // the thinking block.
+  // entirely and message.content renders directly as the answer.
   const thinkingActive = !isVision && currentThinkingMode !== 'off';
 
   // Editor-exchange rendering is mutually exclusive with the thinking-block UI
@@ -313,6 +312,8 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
     if (speakBtn) speakBtn.dataset.content = savedContent;
     const actionsDiv = messageDiv.querySelector('.message-actions');
     if (actionsDiv) actionsDiv.style.display = '';
+    if (typeof _refreshTurnControls === 'function') _refreshTurnControls();
+    if (typeof hcTouchCurrent === 'function') hcTouchCurrent();
     if (isEditorExchange && actionsDiv) {
       actionsDiv.appendChild(
         _buildEditorViewSwitch(assistantEntry, contentDiv, userMessage, savedContent)
@@ -361,6 +362,8 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
         if (copyBtn) copyBtn.dataset.content = savedContent;
         const speakBtn = messageDiv.querySelector('.speak-btn');
         if (speakBtn) speakBtn.dataset.content = savedContent;
+        if (typeof _refreshTurnControls === 'function') _refreshTurnControls();
+        if (typeof hcTouchCurrent === 'function') hcTouchCurrent();
       } else {
         conversationHistory.pop();
         contentDiv.innerHTML = '<p class="status-muted">Response stopped.</p>';
@@ -388,5 +391,10 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
   } finally {
     streamAbortController = null;
     setStreamingUI(false);
+    // Now that the Stop button is hidden, (re)surface the rewind controls on
+    // the final turn — this is the call that actually adds the Edit & resend
+    // button, since the in-try hooks above run while the stream UI is still up.
+    if (typeof _refreshTurnControls === 'function') _refreshTurnControls();
+    if (typeof hcTouchCurrent === 'function') hcTouchCurrent();
   }
 }

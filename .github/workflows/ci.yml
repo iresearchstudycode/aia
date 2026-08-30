@@ -147,6 +147,34 @@ jobs:
         working-directory: settings-service
         run: pytest tests/ -v
 
+  conversations-service-lint-test:
+    name: Conversations service — format, lint & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: |
+            conversations-service/requirements.txt
+            conversations-service/requirements-test.txt
+
+      - name: Install dependencies
+        run: pip install -r conversations-service/requirements.txt -r conversations-service/requirements-test.txt
+
+      - name: Format (black --check)
+        run: black conversations-service/main.py conversations-service/tests/ --check --line-length=99
+
+      - name: Lint (flake8)
+        run: flake8 conversations-service/main.py conversations-service/tests/ --max-line-length=99
+
+      - name: Test (pytest)
+        working-directory: conversations-service
+        run: pytest tests/ -q
+
   frontend-lint:
     name: Frontend — ESLint
     runs-on: ubuntu-latest
@@ -193,6 +221,7 @@ jobs:
           DOC_EXTRACT_UPSTREAM=vpal-de.internal:8003 \
           PIPER_UPSTREAM=vpal-piper.internal:8004 \
           SETTINGS_UPSTREAM=vpal-settings.internal:8005 \
+          CONVERSATIONS_UPSTREAM=vpal-conversations.internal:8006 \
           OLLAMA_UPSTREAM=ollama.internal:11434 \
           SERVER_NAME=vpal.example.com \
           SSL_CERT_PATH=/tls/fullchain.pem \
@@ -220,6 +249,7 @@ jobs:
             --add-host doc-extract:127.0.0.1 \
             --add-host piper-tts:127.0.0.1 \
             --add-host settings-service:127.0.0.1 \
+            --add-host conversations-service:127.0.0.1 \
             --add-host host.docker.internal:127.0.0.1 \
             -v "${{ github.workspace }}/deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
             -v "${{ github.workspace }}/deploy/certs/localhost.pem:/etc/nginx/ssl/localhost.pem:ro" \
