@@ -84,9 +84,12 @@ describe('conversationRecordFrom', () => {
     },
   ];
 
-  test('shape: id / title / persona_key / message_count / body', () => {
+  test('shape: title / persona_key / message_count / body — and NO id key', () => {
     const rec = conversationRecordFrom('c-abc', history, 'technical');
-    expect(rec.id).toBe('c-abc');
+    // id travels in the PUT URL path only; the service rejects a body carrying
+    // any key outside {title, persona_key, message_count, body} with a 422.
+    expect(rec).not.toHaveProperty('id');
+    expect(Object.keys(rec).sort()).toEqual(['body', 'message_count', 'persona_key', 'title']);
     expect(rec.title).toBe('Explain closures');
     expect(rec.persona_key).toBe('technical');
     expect(rec.message_count).toBe(2);
