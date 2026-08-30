@@ -1,29 +1,50 @@
 // utils.js - Utility functions
 
-const _THINK_END = '<|/think|>';
+// End-of-reasoning markers, longest first. `<|/think|>` is gemma's; `</think>` /
+// `</thinking>` are what qwen3 / deepseek-r1 / most community GGUFs emit when a
+// model's Ollama template doesn't peel reasoning into `message.thinking` itself.
+const _THINK_END_TOKENS = ['<|/think|>', '</thinking>', '</think>'];
+// A leading open tag on inline reasoning, stripped for display.
+const _THINK_OPEN_RE = /^\s*<\|?\s*think(?:ing)?\s*\|?>\s*/i;
 
 /**
  * Split streaming buffers into { thinking, answer } components.
- * Works for both Ollama native thinking mode (separate message.thinking tokens)
- * and inline token mode (<|/think|> boundary inside message.content).
+ *
+ * Two modes, in priority order:
+ *  1. Native Ollama thinking — reasoning arrives as `message.thinking` tokens,
+ *     the answer as `message.content`. When `thinkingBuffer` has any content we
+ *     are unconditionally in this mode: `message.content` is the answer verbatim
+ *     (it may legitimately contain the literal string "</think>").
+ *  2. Inline — the model wrote its reasoning into `message.content` wrapped in
+ *     `<think>…</think>` (or gemma's `<|think|>…<|/think|>`). Split on the first
+ *     close marker; before it (open tag stripped) is thinking, after it is the
+ *     answer. With no close marker yet, everything is still thinking.
  *
  * @param {string} thinkingBuffer - Accumulated message.thinking tokens
  * @param {string} fullResponse   - Accumulated message.content tokens
  * @returns {{ thinking: string, answer: string }}
  */
 function splitThinkingContent(thinkingBuffer, fullResponse) {
-  if (thinkingBuffer && !fullResponse.includes(_THINK_END)) {
-    // Native Ollama thinking mode: thinking and answer arrive in separate fields.
+  if (thinkingBuffer) {
     return { thinking: thinkingBuffer, answer: fullResponse };
   }
-  const idx = fullResponse.indexOf(_THINK_END);
+
+  let idx = -1;
+  let tokenLen = 0;
+  for (const token of _THINK_END_TOKENS) {
+    const at = fullResponse.indexOf(token);
+    if (at !== -1 && (idx === -1 || at < idx)) {
+      idx = at;
+      tokenLen = token.length;
+    }
+  }
+
   if (idx === -1) {
-    // Inline token mode, still in the thinking phase.
-    return { thinking: fullResponse, answer: '' };
+    return { thinking: fullResponse.replace(_THINK_OPEN_RE, ''), answer: '' };
   }
   return {
-    thinking: fullResponse.slice(0, idx),
-    answer: fullResponse.slice(idx + _THINK_END.length).trimStart()
+    thinking: fullResponse.slice(0, idx).replace(_THINK_OPEN_RE, ''),
+    answer: fullResponse.slice(idx + tokenLen).trimStart()
   };
 }
 
