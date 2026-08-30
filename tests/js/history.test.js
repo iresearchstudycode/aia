@@ -7,6 +7,7 @@ const {
   chatTitleFrom,
   conversationRecordFrom,
   filterConversations,
+  resolveActiveCardId,
 } = require('../../src/aia/scripts/history.js');
 
 describe('chatTitleFrom', () => {
@@ -159,5 +160,34 @@ describe('filterConversations', () => {
     expect(filterConversations(undefined, 'x')).toEqual([]);
     expect(filterConversations([null, { title: null }], 'x')).toEqual([]);
     expect(filterConversations(null, '')).toBe(null);
+  });
+});
+
+describe('resolveActiveCardId', () => {
+  const list = [{ id: 'c-a' }, { id: 'c-b' }, { id: 'c-c' }];
+
+  test('returns currentId when it appears in the list', () => {
+    expect(resolveActiveCardId(list, 'c-b')).toBe('c-b');
+  });
+
+  test('returns null when currentId is not in the list (new unsaved conversation)', () => {
+    expect(resolveActiveCardId(list, 'c-new')).toBeNull();
+  });
+
+  test('returns null when currentId is nullish', () => {
+    expect(resolveActiveCardId(list, null)).toBeNull();
+    expect(resolveActiveCardId(list, '')).toBeNull();
+    expect(resolveActiveCardId(list, undefined)).toBeNull();
+  });
+
+  test('nullish / non-array list → null, never throws', () => {
+    expect(resolveActiveCardId(null, 'c-a')).toBeNull();
+    expect(resolveActiveCardId(undefined, 'c-a')).toBeNull();
+    expect(resolveActiveCardId('nope', 'c-a')).toBeNull();
+  });
+
+  test('skips malformed entries and matches by string equality', () => {
+    expect(resolveActiveCardId([null, {}, { id: 42 }], '42')).toBe('42');
+    expect(resolveActiveCardId([{ id: 'c-a' }], 'c-z')).toBeNull();
   });
 });

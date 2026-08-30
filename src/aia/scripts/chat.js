@@ -545,6 +545,9 @@ async function clearChat() {
   clearDocumentPreview();
   updateSystemPromptState(); // Re-enable persona switching
   if (typeof hcNewConversationId === 'function') hcNewConversationId();
+  // Drop the just-archived conversation into the sidebar list and clear the
+  // active-card highlight (the new conversation has no saved row yet).
+  if (typeof hcRefreshSidebar === 'function') hcRefreshSidebar();
 }
 
 // Close window function

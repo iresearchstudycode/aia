@@ -360,7 +360,7 @@ function initSettings() {
   if (!root) return;
   _settingsInited = true;
 
-  var backdrop = _settingsEl('div', { id: 'settingsBackdrop' });
+  var backdrop = _settingsEl('div', { id: 'settingsBackdrop', class: 'lightbox__backdrop' });
   backdrop.addEventListener('click', function () {
     _settingsAttemptClose();
   });
@@ -436,7 +436,13 @@ function initSettings() {
 
   var lightbox = _settingsEl(
     'div',
-    { id: 'settingsLightbox', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
+    {
+      id: 'settingsLightbox',
+      class: 'lightbox__panel',
+      role: 'dialog',
+      'aria-modal': 'true',
+      'aria-label': 'Settings'
+    },
     [header, body, footer]
   );
 
