@@ -163,24 +163,41 @@ describe('_buildRequestBody — think field', () => {
 // ─── Options ─────────────────────────────────────────────────────────────────
 
 describe('_buildRequestBody — options', () => {
-  test('text-only, thinking off: sampling options + default num_ctx, no thinking_budget', () => {
+  const GEMMA_SAMPLING = { temperature: 1.0, top_p: 0.95, top_k: 64 };
+
+  test('gemma, thinking off: gemma sampling + default num_ctx, no num_predict', () => {
     const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'off');
-    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64, num_ctx: 16384 });
+    expect(requestBody.options).toEqual({ ...GEMMA_SAMPLING, num_ctx: 16384 });
   });
 
-  test('text-only, thinking low: sampling options + thinking_budget 1024', () => {
+  test('gemma, thinking low: gemma sampling + num_predict 4096 ceiling', () => {
     const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'low');
-    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64, num_ctx: 16384, thinking_budget: 1024 });
+    expect(requestBody.options).toEqual({ ...GEMMA_SAMPLING, num_ctx: 16384, num_predict: 4096 });
   });
 
-  test('text-only, thinking medium: sampling options + thinking_budget 4096', () => {
+  test('gemma, thinking medium: gemma sampling + num_predict 8192 ceiling', () => {
     const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'medium');
-    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64, num_ctx: 16384, thinking_budget: 4096 });
+    expect(requestBody.options).toEqual({ ...GEMMA_SAMPLING, num_ctx: 16384, num_predict: 8192 });
   });
 
-  test('text-only, thinking high: sampling options, no budget cap', () => {
+  test('gemma, thinking high: gemma sampling, no num_predict ceiling (uncapped)', () => {
     const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'high');
-    expect(requestBody.options).toEqual({ temperature: 1.0, top_p: 0.95, top_k: 64, num_ctx: 16384 });
+    expect(requestBody.options).toEqual({ ...GEMMA_SAMPLING, num_ctx: 16384 });
+  });
+
+  test('non-gemma model: no gemma sampling override, only num_ctx', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, 'qwen3.5:9b', VISION, 'off');
+    expect(requestBody.options).toEqual({ num_ctx: 16384 });
+  });
+
+  test('non-gemma model, thinking low: num_predict ceiling but no sampling override', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, 'qwen3.5:9b', VISION, 'low');
+    expect(requestBody.options).toEqual({ num_ctx: 16384, num_predict: 4096 });
+  });
+
+  test('non-gemma model, thinking high: no num_predict, no sampling override', () => {
+    const { requestBody } = _buildRequestBody(null, [], SYSTEM, 'deepseek-r1:8b', VISION, 'high');
+    expect(requestBody.options).toEqual({ num_ctx: 16384 });
   });
 
   test('text-only: honors a custom numCtx when the caller passes one', () => {
