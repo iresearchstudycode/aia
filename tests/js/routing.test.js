@@ -81,49 +81,47 @@ describe('_buildRequestBody — stream mode', () => {
   });
 });
 
-// ─── Thinking prefill ─────────────────────────────────────────────────────────
+// ─── No assistant prefill ─────────────────────────────────────────────────────
+// The `<|think|>  ` assistant prefill was removed in v1.26.1: Ollama's `think`
+// parameter alone drives native reasoning separation for every thinking-capable
+// model, and the prefill broke that split on qwen3 (whole reply → thinking box).
 
-describe('_buildRequestBody — thinking prefill', () => {
-  test('thinking OFF: no prefill (default state)', () => {
-    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'off');
-    const hasPrefill = requestBody.messages.some(m => m.content && m.content.includes(THINK));
-    expect(hasPrefill).toBe(false);
+describe('_buildRequestBody — never injects an assistant prefill', () => {
+  const NO_PREFILL = (rb) =>
+    !rb.messages.some(m => m.role === 'assistant' && m.content && m.content.includes(THINK));
+
+  for (const mode of ['off', 'low', 'medium', 'high']) {
+    test(`thinking ${mode}: no assistant prefill, no trailing assistant message`, () => {
+      const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, mode);
+      expect(NO_PREFILL(requestBody)).toBe(true);
+      expect(requestBody.messages[requestBody.messages.length - 1].role).not.toBe('assistant');
+    });
+  }
+
+  test('history assistant turns are preserved verbatim (not mistaken for a prefill)', () => {
+    const history = [
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello there' },
+      { role: 'user', content: 'and now?' },
+    ];
+    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'high');
+    expect(requestBody.messages).toEqual([
+      { role: 'system', content: SYSTEM },
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello there' },
+      { role: 'user', content: 'and now?' },
+    ]);
   });
 
-  test('thinking high: assistant prefill with <|think|> present', () => {
-    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'high');
-    const prefill = requestBody.messages.find(
-      m => m.role === 'assistant' && m.content && m.content.includes(THINK)
-    );
-    expect(prefill).toBeTruthy();
-  });
-
-  test('thinking low: prefill present', () => {
-    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'low');
-    const hasPrefill = requestBody.messages.some(m => m.content && m.content.includes(THINK));
-    expect(hasPrefill).toBe(true);
-  });
-
-  test('thinking medium: prefill present', () => {
-    const { requestBody } = _buildRequestBody(null, [], SYSTEM, MODEL, VISION, 'medium');
-    const hasPrefill = requestBody.messages.some(m => m.content && m.content.includes(THINK));
-    expect(hasPrefill).toBe(true);
-  });
-
-  test('initial vision: no thinking prefill regardless of mode', () => {
-    const { requestBody } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION, 'high');
-    const hasPrefill = requestBody.messages.some(m => m.content && m.content.includes(THINK));
-    expect(hasPrefill).toBe(false);
-  });
-
-  test('follow-up vision: no thinking prefill injected', () => {
+  test('vision turns: no prefill regardless of mode', () => {
+    const { requestBody: initial } = _buildRequestBody('img64', [], SYSTEM, MODEL, VISION, 'high');
+    expect(NO_PREFILL(initial)).toBe(true);
     const history = [
       { role: 'user', content: 'describe', imageBase64: 'img64' },
       { role: 'assistant', content: 'a cat' },
     ];
-    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'high');
-    const hasPrefill = requestBody.messages.some(m => m.content && m.content.includes(THINK));
-    expect(hasPrefill).toBe(false);
+    const { requestBody: followUp } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'high');
+    expect(NO_PREFILL(followUp)).toBe(true);
   });
 });
 
