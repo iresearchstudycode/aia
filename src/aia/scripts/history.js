@@ -1,20 +1,22 @@
-// history.js - Conversation History lightbox
+// history.js - Conversation history sidebar
 //
 // An auto-saved, searchable list of past conversations, persisted server-side
 // per authenticated user by the conversations-service (reached at
-// `CONVERSATIONS_API_URL`). The manual JSON Save / Export MD / Open items in the
-// profile menu are unchanged — this is the convenience layer on top.
+// `CONVERSATIONS_API_URL`). Since v1.26.0 the list lives inline in the left
+// app sidebar (`#appSidebar`) rather than a modal lightbox: the shell markup
+// (`#historySearch`, `#historySearchBodyToggle`, `#historyList`, `#historyEmpty`,
+// `#historyCount`, `#historyStorage`, `#newChatBtn`) is static in index.html and
+// `initHistory()` only binds the handlers + does the initial fetch. The list
+// refreshes after every completed turn (`hcRefreshSidebar`, debounced) and
+// marks the active conversation card.
 //
 // Layer separation mirrors settings.js / nav-rail.js: every function that
 // touches the DOM, the network or a cross-module runtime global lives inside a
 // function body behind `typeof` guards, so this file can be CommonJS-required in
 // Jest with no DOM, no fetch and no config.js present. Only the pure helpers
-// (`chatTitleFrom`, `conversationRecordFrom`, `filterConversations`) are
-// exercised by the unit suite and exported at the file tail.
-//
-// Agent D adds the DOM anchors (`#historyRoot`, `#historyMenuItem`), the
-// `<script>` tag (after settings.js, before main.js), the `config.js` constant,
-// the eslint globals, and the auto-save call sites in api.js / chat.js / main.js.
+// (`chatTitleFrom`, `conversationRecordFrom`, `filterConversations`,
+// `resolveActiveCardId`) are exercised by the unit suite and exported at the
+// file tail.
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-tested in isolation, exported for Node at the file tail).
@@ -134,24 +136,40 @@ function filterConversations(list, query, searchBody) {
   });
 }
 
+/**
+ * Decide which conversation card should carry the "active" highlight. Returns
+ * `currentId` only when it actually appears in `list` by `.id` — a brand-new
+ * unsaved conversation (id minted, nothing PUT yet) must not light up a stale
+ * card. Nullish-safe; never throws.
+ *
+ * @param {?Array<object>} list - GET /conversations metadata entries
+ * @param {?string} currentId
+ * @returns {?string}
+ */
+function resolveActiveCardId(list, currentId) {
+  if (!currentId || !Array.isArray(list)) return null;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i] && String(list[i].id) === String(currentId)) return currentId;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Browser-only state + wiring. None of this runs at require() time; every entry
 // point re-checks the DOM / globals and returns early when they are absent.
 // ---------------------------------------------------------------------------
 
 var _historyInited = false;
-var _historyOpen = false;
-var _historyOpener = null;
-var _historyKeydownBound = false;
 
 var _currentId = null;
 
-// Cached lightbox state, refreshed on every open / search / delete.
+// Cached sidebar state, refreshed on load / turn-complete / search / delete.
 var _hcConversations = [];
 var _hcTotal = 0;
 var _hcCap = 100;
 
 var _hcSearchTimer = null;
+var _hcRefreshTimer = null;
 
 // hcTouchCurrent coalescing.
 var _hcTouchTimer = null;
@@ -290,6 +308,9 @@ async function _hcDoTouch() {
   try {
     var record = conversationRecordFrom(id, conversationHistory, _hcActivePersona());
     await _hcPut(id, record);
+    // A completed turn just landed — refresh the sidebar so a new conversation
+    // appears (and its title / relative-time updates).
+    hcRefreshSidebar();
   } catch (err) {
     if (typeof console !== 'undefined') console.error('history: auto-save failed', err);
   } finally {
@@ -375,192 +396,112 @@ async function hcLoadConversation(id) {
     if (typeof conversationHistory !== 'undefined') {
       conversationHistory = data.body;
     }
+    // Restore the persona this conversation was created with, so follow-up
+    // turns continue in its context. setActivePersona (settings.js) validates
+    // the key, no-ops when it already matches, PUTs `active_persona`, and
+    // re-applies (currentSystemPrompt + labels) before the transcript renders.
+    if (data.persona_key && typeof setActivePersona === 'function') {
+      await setActivePersona(data.persona_key);
+    }
     if (typeof renderConversationHistory === 'function') renderConversationHistory();
     _currentId = id;
-    closeHistory();
+    // Re-render the list so the active-card highlight moves to this entry, and
+    // collapse the mobile drawer if it was open.
+    _hcRenderList(_hcConversations);
+    if (typeof closeSidebarDrawer === 'function') closeSidebarDrawer();
+    var input = typeof document !== 'undefined' ? document.getElementById('userInput') : null;
+    if (input && typeof input.focus === 'function') input.focus();
   } catch (err) {
     if (typeof console !== 'undefined') console.error('history: load failed', err);
     if (typeof showToast === 'function') showToast('Could not open that conversation');
   }
 }
 
-// -- Lightbox construction ----------------------------------------------
+// -- Sidebar wiring ---------------------------------------------------
 
 /**
- * Build the hidden lightbox DOM into `#historyRoot`. Idempotent; a no-op when
- * `#historyRoot` is absent. Called by main.js from DOMContentLoaded.
+ * Bind the static sidebar shell (built into `#appSidebar` by index.html) and do
+ * the initial list fetch. Idempotent; a no-op when `#historyList` is absent
+ * (e.g. under Jest). Called by main.js from DOMContentLoaded.
  *
  * @returns {void}
  */
 function initHistory() {
   if (_historyInited) return;
-  var root = typeof document !== 'undefined' ? document.getElementById('historyRoot') : null;
-  if (!root) return;
+  var list = typeof document !== 'undefined' ? document.getElementById('historyList') : null;
+  if (!list) return;
   _historyInited = true;
 
-  var backdrop = document.createElement('div');
-  backdrop.id = 'historyBackdrop';
-  backdrop.addEventListener('click', closeHistory);
-
-  var closeBtn = document.createElement('button');
-  closeBtn.id = 'historyCloseBtn';
-  closeBtn.className = 'history-close';
-  closeBtn.type = 'button';
-  closeBtn.setAttribute('aria-label', 'Close history');
-  closeBtn.textContent = '✕';
-  closeBtn.addEventListener('click', closeHistory);
-
-  var header = document.createElement('div');
-  header.className = 'history-header';
-  var titleEl = document.createElement('span');
-  titleEl.className = 'history-title';
-  titleEl.textContent = 'History';
-  header.appendChild(titleEl);
-  header.appendChild(closeBtn);
-
-  // Search row -----------------------------------------------------------
-  var searchRow = document.createElement('div');
-  searchRow.className = 'history-search-row';
-
-  var search = document.createElement('input');
-  search.id = 'historySearch';
-  search.type = 'text';
-  search.setAttribute('placeholder', 'Search conversations');
-  search.setAttribute('aria-label', 'Search conversations');
-  search.addEventListener('input', function () {
-    if (_hcSearchTimer) clearTimeout(_hcSearchTimer);
-    _hcSearchTimer = setTimeout(_hcRunSearch, 200);
-  });
-
-  var bodyLabel = document.createElement('label');
-  bodyLabel.className = 'history-search-body';
-  var bodyToggle = document.createElement('input');
-  bodyToggle.id = 'historySearchBodyToggle';
-  bodyToggle.type = 'checkbox';
-  bodyToggle.addEventListener('change', _hcRunSearch);
-  var bodyText = document.createElement('span');
-  bodyText.textContent = 'search message text';
-  bodyLabel.appendChild(bodyToggle);
-  bodyLabel.appendChild(bodyText);
-
-  searchRow.appendChild(search);
-  searchRow.appendChild(bodyLabel);
-
-  // List + empty --------------------------------------------------------
-  var list = document.createElement('div');
-  list.id = 'historyList';
-
-  var empty = document.createElement('div');
-  empty.id = 'historyEmpty';
-  empty.textContent = 'No saved conversations yet.';
-  empty.hidden = true;
-
-  // Footer -------------------------------------------------------------
-  var footer = document.createElement('div');
-  footer.id = 'historyFooter';
-  var meta = document.createElement('div');
-  meta.className = 'history-footer-meta';
-  var countEl = document.createElement('span');
-  countEl.id = 'historyCount';
-  var storageEl = document.createElement('span');
-  storageEl.id = 'historyStorage';
-  storageEl.className = 'history-storage';
-  meta.appendChild(countEl);
-  meta.appendChild(storageEl);
-
-  var newChatBtn = document.createElement('button');
-  newChatBtn.id = 'historyNewChatBtn';
-  newChatBtn.type = 'button';
-  newChatBtn.textContent = 'New chat';
-  newChatBtn.addEventListener('click', _hcNewChat);
-
-  footer.appendChild(meta);
-  footer.appendChild(newChatBtn);
-
-  var lightbox = document.createElement('div');
-  lightbox.id = 'historyLightbox';
-  lightbox.setAttribute('role', 'dialog');
-  lightbox.setAttribute('aria-modal', 'true');
-  lightbox.setAttribute('aria-label', 'Conversation history');
-  lightbox.appendChild(header);
-  lightbox.appendChild(searchRow);
-  lightbox.appendChild(list);
-  lightbox.appendChild(empty);
-  lightbox.appendChild(footer);
-
-  root.appendChild(backdrop);
-  root.appendChild(lightbox);
-
-  if (!_historyKeydownBound) {
-    document.addEventListener('keydown', _hcOnKeydown);
-    _historyKeydownBound = true;
+  var search = document.getElementById('historySearch');
+  if (search) {
+    search.addEventListener('input', function () {
+      if (_hcSearchTimer) clearTimeout(_hcSearchTimer);
+      _hcSearchTimer = setTimeout(_hcRunSearch, 200);
+    });
   }
+
+  var bodyToggle = document.getElementById('historySearchBodyToggle');
+  if (bodyToggle) bodyToggle.addEventListener('change', _hcRunSearch);
+
+  var newChatBtn = document.getElementById('newChatBtn');
+  if (newChatBtn) newChatBtn.addEventListener('click', hcNewChat);
+
+  _hcFetchAndRender();
 }
 
 /**
- * Ensure init, fetch the list, render the cards, show the lightbox and focus the
- * search box. Remembers the opener for focus restoration.
+ * "New chat" — hand off to `clearChat()` (chat.js), which archives the current
+ * conversation to the history service, wipes the transcript, mints a fresh id
+ * and refreshes this list. Then collapse the mobile drawer if it is open.
  *
  * @returns {Promise<void>}
  */
-async function openHistory() {
-  if (!_historyInited) initHistory();
-  var lightbox = typeof document !== 'undefined' ? document.getElementById('historyLightbox') : null;
-  var backdrop = document.getElementById('historyBackdrop');
-  if (!lightbox || !backdrop) return;
-
-  _historyOpener =
-    document.activeElement && document.activeElement !== document.body
-      ? document.activeElement
-      : null;
-
-  var search = document.getElementById('historySearch');
-  if (search) search.value = '';
-  var bodyToggle = document.getElementById('historySearchBodyToggle');
-  if (bodyToggle) bodyToggle.checked = false;
-
-  backdrop.classList.add('open');
-  lightbox.classList.add('open');
-  _historyOpen = true;
-
-  if (search) search.focus();
-
-  await _hcFetchAndRender();
+async function hcNewChat() {
+  if (typeof clearChat === 'function') {
+    await clearChat();
+  }
+  if (typeof closeSidebarDrawer === 'function') closeSidebarDrawer();
 }
 
 /**
- * Hide the lightbox and restore focus to whatever opened it.
+ * Refresh the sidebar list out-of-band (after a completed turn, a load, a
+ * delete, or "New chat"). Debounced ~800ms trailing; never throws. Re-runs the
+ * active search when the search box has a value, otherwise re-fetches the list.
+ * No loading placeholder — the list stays put until fresh data lands, so it
+ * doesn't flicker on every turn.
  *
  * @returns {void}
  */
-function closeHistory() {
-  var lightbox = typeof document !== 'undefined' ? document.getElementById('historyLightbox') : null;
-  var backdrop = document.getElementById('historyBackdrop');
-  if (lightbox) lightbox.classList.remove('open');
-  if (backdrop) backdrop.classList.remove('open');
-  _historyOpen = false;
-  if (_historyOpener && typeof _historyOpener.focus === 'function') {
-    _historyOpener.focus();
-  }
-  _historyOpener = null;
+function hcRefreshSidebar() {
+  if (typeof document === 'undefined' || !document.getElementById('historyList')) return;
+  if (typeof setTimeout === 'undefined') return _hcDoRefreshSidebar();
+  if (_hcRefreshTimer) clearTimeout(_hcRefreshTimer);
+  _hcRefreshTimer = setTimeout(function () {
+    _hcRefreshTimer = null;
+    _hcDoRefreshSidebar();
+  }, 800);
 }
 
-/**
- * "New chat" — archive the open conversation, drop the current id (a fresh one
- * is minted lazily on the next turn), reset the chat, and close.
- *
- * @returns {Promise<void>}
- */
-async function _hcNewChat() {
-  await hcArchiveCurrent();
-  _currentId = null;
-  if (typeof clearChat === 'function') {
-    clearChat();
-  } else {
-    var clearBtn = document.getElementById('clearBtn');
-    if (clearBtn) clearBtn.click();
+/** The worker behind `hcRefreshSidebar`. Async; never throws. */
+async function _hcDoRefreshSidebar() {
+  try {
+    var search = document.getElementById('historySearch');
+    if (search && search.value.trim()) {
+      await _hcRunSearch();
+      return;
+    }
+    if (typeof fetch === 'undefined') return;
+    var res = await fetch(_hcApi(''), { credentials: 'same-origin' });
+    if (!res.ok) return;
+    var data = await res.json();
+    _hcConversations = data && Array.isArray(data.conversations) ? data.conversations : [];
+    _hcCap = data && typeof data.cap === 'number' ? data.cap : _hcCap;
+    _hcTotal = data && typeof data.total === 'number' ? data.total : _hcConversations.length;
+    _hcRenderList(_hcConversations);
+    _hcRenderFooter();
+  } catch (err) {
+    if (typeof console !== 'undefined') console.error('history: sidebar refresh failed', err);
   }
-  closeHistory();
 }
 
 // -- Fetch + render ----------------------------------------------------
@@ -685,19 +626,22 @@ function _hcRenderList(items) {
     return;
   }
   if (empty) empty.hidden = true;
+  var activeId = resolveActiveCardId(items, hcCurrentId());
   items.forEach(function (item) {
-    list.appendChild(_hcBuildCard(item));
+    list.appendChild(_hcBuildCard(item, activeId));
   });
 }
 
 /**
  * Build one conversation card. Clicking the card (not the delete ✕) loads the
- * conversation; the ✕ confirms then DELETEs.
+ * conversation; the ✕ confirms then DELETEs. `activeId` (from
+ * `resolveActiveCardId`) marks the currently-open conversation.
  *
  * @param {object} item - a `GET /conversations` metadata entry
+ * @param {?string} [activeId]
  * @returns {HTMLElement}
  */
-function _hcBuildCard(item) {
+function _hcBuildCard(item, activeId) {
   var id = item && item.id ? String(item.id) : '';
 
   var card = document.createElement('div');
@@ -705,6 +649,10 @@ function _hcBuildCard(item) {
   card.setAttribute('data-id', id);
   card.setAttribute('role', 'button');
   card.setAttribute('tabindex', '0');
+  if (id && activeId && id === String(activeId)) {
+    card.classList.add('is-active');
+    card.setAttribute('aria-current', 'true');
+  }
 
   var main = document.createElement('div');
   main.className = 'history-card-main';
@@ -782,6 +730,7 @@ function _hcDeleteCard(id, card) {
         var empty = document.getElementById('historyEmpty');
         if (empty) empty.hidden = false;
       }
+      hcRefreshSidebar();
     })
     .catch(function (err) {
       if (typeof console !== 'undefined') console.error('history: delete failed', err);
@@ -872,56 +821,6 @@ function _hcRelativeDate(iso) {
   return years + (years === 1 ? ' year ago' : ' years ago');
 }
 
-// -- Focus trap + keyboard --------------------------------------------
-
-/** @returns {Array<HTMLElement>} visible, focusable elements in the lightbox. */
-function _hcFocusable() {
-  var lightbox = document.getElementById('historyLightbox');
-  if (!lightbox) return [];
-  return Array.prototype.slice
-    .call(
-      lightbox.querySelectorAll(
-        'button:not(:disabled), select:not(:disabled), input:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])'
-      )
-    )
-    .filter(function (el) {
-      return el.offsetParent !== null || el === document.activeElement;
-    });
-}
-
-/**
- * Escape closes; Tab / Shift-Tab is trapped inside the lightbox.
- *
- * @param {KeyboardEvent} e
- * @returns {void}
- */
-function _hcOnKeydown(e) {
-  if (!_historyOpen) return;
-  if (e.key === 'Escape') {
-    e.preventDefault();
-    closeHistory();
-    return;
-  }
-  if (e.key !== 'Tab') return;
-  var focusable = _hcFocusable();
-  if (!focusable.length) return;
-  var first = focusable[0];
-  var last = focusable[focusable.length - 1];
-  var lightbox = document.getElementById('historyLightbox');
-  if (lightbox && !lightbox.contains(document.activeElement)) {
-    e.preventDefault();
-    first.focus();
-    return;
-  }
-  if (e.shiftKey && document.activeElement === first) {
-    e.preventDefault();
-    last.focus();
-  } else if (!e.shiftKey && document.activeElement === last) {
-    e.preventDefault();
-    first.focus();
-  }
-}
-
 // Node.js compat — lets Jest import the pure helpers for unit tests; no-op in
 // the browser (module is undefined there). Mirrors utils.js / nav-rail.js /
 // settings.js.
@@ -929,6 +828,7 @@ if (typeof module !== 'undefined') {
   module.exports = {
     chatTitleFrom: chatTitleFrom,
     conversationRecordFrom: conversationRecordFrom,
-    filterConversations: filterConversations
+    filterConversations: filterConversations,
+    resolveActiveCardId: resolveActiveCardId
   };
 }

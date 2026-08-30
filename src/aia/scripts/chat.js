@@ -417,10 +417,12 @@ function _refreshTurnControls() {
   }
 }
 
-// The persona key currently in effect. The Settings lightbox is the only thing
-// that changes it (writing window.vpalSettings.global.active_persona and calling
-// applyResolvedSettings()); everything here just reads it, falling back to the
-// englishEditor default before settings have hydrated.
+// The persona key currently in effect. Written by the header persona picker and
+// the Settings lightbox (both via settings.js: they set
+// window.vpalSettings.global.active_persona and call applyResolvedSettings()),
+// and by history.js when a loaded conversation carries its own persona_key.
+// Everything here just reads it, falling back to the englishEditor default
+// before settings have hydrated.
 function _currentPersonaKey() {
   const g = window.vpalSettings && window.vpalSettings.global;
   return (g && g.active_persona) || 'englishEditor';
@@ -433,8 +435,8 @@ function updateSystemPromptState() {
   if (toggleBtn) {
     toggleBtn.classList.toggle('locked', locked);
     toggleBtn.title = locked
-      ? 'Clear the conversation to switch persona'
-      : 'Open Settings to choose a persona';
+      ? 'Start a new chat to switch persona'
+      : 'Choose a persona';
   }
 
   const label = document.getElementById('currentPersonaLabel');
@@ -545,6 +547,9 @@ async function clearChat() {
   clearDocumentPreview();
   updateSystemPromptState(); // Re-enable persona switching
   if (typeof hcNewConversationId === 'function') hcNewConversationId();
+  // Drop the just-archived conversation into the sidebar list and clear the
+  // active-card highlight (the new conversation has no saved row yet).
+  if (typeof hcRefreshSidebar === 'function') hcRefreshSidebar();
 }
 
 // Close window function
