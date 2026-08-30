@@ -52,12 +52,32 @@ function _buildRequestBody(imageBase64, history, systemPrompt, modelName, vision
     // think: false explicitly suppresses native reasoning in gemma4:e4b — omitting
     // the field is not enough because the model reasons by default.
     requestBody.think = thinkingEnabled;
-    const options = { temperature: 1.0, top_p: 0.95, top_k: 64, num_ctx: numCtx };
+    const options = { num_ctx: numCtx };
+
+    // These sampling values are tuned for the Gemma models and are what Gemma's
+    // own guidance recommends. Other thinking models (qwen3.x, deepseek-r1)
+    // ship their own recommended sampling in their Modelfile — notably qwen3
+    // wants top_k 20, not 64, and runs hot/repetitive at these values — so we
+    // only override for Gemma and let every other model keep its own defaults.
+    if (/^gemma/i.test(modelName)) {
+      options.temperature = 1.0;
+      options.top_p = 0.95;
+      options.top_k = 64;
+    }
+
     if (thinkingEnabled) {
-      // Low/Medium cap the thinking budget; High lets the model reason without limit.
-      const budgetMap = { low: 1024, medium: 4096 };
-      if (budgetMap[thinkingMode] !== undefined) {
-        options.thinking_budget = budgetMap[thinkingMode];
+      // Ollama exposes no real "thinking budget": the old options.thinking_budget
+      // was a Gemini/Anthropic concept that Ollama silently drops, and the
+      // think:"low"|"high" string levels are ignored by the qwen3.x / deepseek
+      // parsers (verified: byte-identical output at a fixed seed). num_predict is
+      // the only lever that actually bites — it caps TOTAL generated tokens
+      // (reasoning + answer). We use it as a generous safety ceiling, not a tight
+      // budget: a normal-length reply never reaches it, but a runaway reasoner
+      // (or an outright loop) is force-stopped in minutes instead of grinding to
+      // the full context window. High is deliberately uncapped.
+      const predictMap = { low: 4096, medium: 8192 };
+      if (predictMap[thinkingMode] !== undefined) {
+        options.num_predict = predictMap[thinkingMode];
       }
     }
     requestBody.options = options;
@@ -115,6 +135,23 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
   let inAnswerPhase = false;
   let answerDiv = null;
 
+  // Progress tracking for the "Thinking…" indicator. A large model can spend
+  // 30–60s loading + tens of seconds reasoning before the first answer token —
+  // without a visible elapsed time / token count that reads as a frozen UI.
+  const requestStartMs = Date.now();
+  let firstChunkSeen = false;
+  let thinkingTokenApprox = 0; // ~1 streamed thinking chunk per token
+  let doneReason = null;       // 'stop' | 'length' | … from the final stream chunk
+  let loadingTimer = null;
+
+  // "Thinking… 12s · ~340 tokens" — trailing meta is our own static markup
+  // (integers only), never model content, so it is safe to inline as HTML.
+  const thinkingLabel = (settled) => {
+    const secs = Math.round((Date.now() - requestStartMs) / 1000);
+    const meta = secs + 's' + (thinkingTokenApprox ? ' · ~' + thinkingTokenApprox + ' tokens' : '');
+    return (settled ? 'Thinking' : 'Thinking…') + ' <span class="thinking-meta">' + meta + '</span>';
+  };
+
   // Add user message to conversation history
   const userTsISO = new Date().toISOString();
   const userTsFmt = formatTimestamp(new Date());
@@ -155,6 +192,16 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
 
   streamAbortController = new AbortController();
   setStreamingUI(true);
+
+  // If nothing has come back after a few seconds, say so — the usual cause is a
+  // cold model being loaded into memory, which the stream gives no signal for.
+  loadingTimer = setTimeout(() => {
+    if (!firstChunkSeen) {
+      contentDiv.innerHTML =
+        '<p class="status-muted">Loading model… '
+        + '<span class="status-hint">the first reply from a large model can take 30–60s</span></p>';
+    }
+  }, 4000);
 
   try {
     const response = await fetch(OLLAMA_API_URL, {
@@ -211,13 +258,18 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
         for (const line of lines) {
           try {
             const json = JSON.parse(line);
+            if (json.done && json.done_reason) doneReason = json.done_reason;
             if (!json.message) continue;
 
             const gotThinking = json.message.thinking;
             const gotContent = json.message.content;
             if (!gotThinking && !gotContent) continue;
 
-            if (gotThinking) thinkingBuffer += json.message.thinking;
+            firstChunkSeen = true;
+            if (gotThinking) {
+              thinkingBuffer += json.message.thinking;
+              thinkingTokenApprox += 1;
+            }
             if (gotContent) fullResponse += json.message.content;
 
             if (!thinkingActive) {
@@ -230,7 +282,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
               if (!isAnswering) {
                 contentDiv.innerHTML =
                   '<details class="thinking-block" open>' +
-                  '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
+                  '<summary aria-label="Toggle AI reasoning">' + thinkingLabel(false) + '</summary>' +
                   '<div class="thinking-content">' + renderMarkdownToHtml(currentThinking) + '</div>' +
                   '</details>';
               } else {
@@ -238,7 +290,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
                   inAnswerPhase = true;
                   contentDiv.innerHTML = (currentThinking
                     ? '<details class="thinking-block" open>' +
-                      '<summary aria-label="Toggle AI reasoning">Thinking…</summary>' +
+                      '<summary aria-label="Toggle AI reasoning">' + thinkingLabel(true) + '</summary>' +
                       '<div class="thinking-content">' + renderMarkdownToHtml(currentThinking) + '</div>' +
                       '</details>'
                     : '') + '<div class="answer-content"></div>';
@@ -265,6 +317,15 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
         savedContent = fullResponse;
       }
 
+      // The reasoning-effort ceiling (options.num_predict) was hit before the
+      // model produced an answer — say so rather than showing an empty bubble.
+      const hitReasoningCap = doneReason === 'length';
+      const capNote = hitReasoningCap
+        ? '<p class="status-stopped">Reasoning-effort limit reached'
+          + (savedContent ? ' — answer may be cut off.' : ' before an answer was produced. Try a lower reasoning effort, a simpler question, or a smaller model.')
+          + '</p>'
+        : '';
+
       if (isEditorExchange) {
         // Polished text + Original/Changes/Clean switch, diffed against the
         // user's just-sent text. The raw model output is still stored verbatim
@@ -273,10 +334,10 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
       } else if (finalThinking) {
         contentDiv.innerHTML =
           '<details class="thinking-block">' +
-          '<summary aria-label="Toggle AI reasoning">Thinking</summary>' +
+          '<summary aria-label="Toggle AI reasoning">' + thinkingLabel(true) + '</summary>' +
           '<div class="thinking-content">' + renderMarkdownToHtml(finalThinking) + '</div>' +
           '</details>' +
-          '<div class="answer-content">' + renderMarkdownToHtml(savedContent) + '</div>';
+          '<div class="answer-content">' + renderMarkdownToHtml(savedContent) + capNote + '</div>';
         enrichRenderedContent(contentDiv);
       } else {
         contentDiv.innerHTML = renderMarkdownToHtml(savedContent);
@@ -350,7 +411,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
         if (abortThinking) {
           contentDiv.innerHTML =
             '<details class="thinking-block">' +
-            '<summary aria-label="Toggle AI reasoning">Thinking</summary>' +
+            '<summary aria-label="Toggle AI reasoning">' + thinkingLabel(true) + '</summary>' +
             '<div class="thinking-content">' + renderMarkdownToHtml(abortThinking) + '</div>' +
             '</details>' +
             '<div class="answer-content">' + partialHtml + '</div>';
@@ -389,6 +450,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
     }
     updateSystemPromptState();
   } finally {
+    clearTimeout(loadingTimer);
     streamAbortController = null;
     setStreamingUI(false);
     // Now that the Stop button is hidden, (re)surface the rewind controls on
