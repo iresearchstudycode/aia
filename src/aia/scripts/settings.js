@@ -1261,6 +1261,41 @@ function _settingsMergeGlobal(snapshot, freshGlobal) {
   return merged;
 }
 
+/**
+ * Switch the active persona without opening the Settings lightbox — used by the
+ * header persona picker (main.js) and by history.js when a loaded conversation
+ * carries its own `persona_key`. PUTs `active_persona` to `/settings/global`,
+ * merges the response into `window.vpalSettings`, and re-applies. Never throws;
+ * a no-op (resolves `false`) when the key is unknown or already active.
+ *
+ * @param {string} personaKey
+ * @returns {Promise<boolean>} true when the persona actually changed
+ */
+function setActivePersona(personaKey) {
+  if (typeof personaKey !== 'string' || SETTINGS_PERSONA_KEYS.indexOf(personaKey) === -1) {
+    return Promise.resolve(false);
+  }
+  if (_settingsActivePersona() === personaKey) return Promise.resolve(false);
+  if (typeof fetch === 'undefined') return Promise.resolve(false);
+
+  return _settingsPut(_settingsApi('/global'), { active_persona: personaKey })
+    .then(function (resp) {
+      if (!resp || resp.ok !== true) throw new Error('persona save failed');
+      window.vpalSettings = _settingsMergeGlobal(_settingsSnapshot(), resp.global);
+      if (typeof applyResolvedSettings === 'function') applyResolvedSettings();
+      // Keep the (possibly open) Personas panel in sync.
+      if (_settingsInited && _settingsActiveCategory === 'personas') {
+        _settingsEditPersona = _settingsActivePersona();
+        _settingsRenderPanel();
+      }
+      return true;
+    })
+    .catch(function () {
+      if (typeof showToast === 'function') showToast('Could not switch persona');
+      return false;
+    });
+}
+
 // -- Reset ------------------------------------------------------------
 
 function _settingsOnResetAll() {
@@ -1623,6 +1658,7 @@ if (typeof module !== 'undefined') {
     resolveThinkingMode: resolveThinkingMode,
     resolveTtsEngine: resolveTtsEngine,
     diffSettings: diffSettings,
-    buildMigrationPayload: buildMigrationPayload
+    buildMigrationPayload: buildMigrationPayload,
+    setActivePersona: setActivePersona
   };
 }

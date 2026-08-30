@@ -396,6 +396,13 @@ async function hcLoadConversation(id) {
     if (typeof conversationHistory !== 'undefined') {
       conversationHistory = data.body;
     }
+    // Restore the persona this conversation was created with, so follow-up
+    // turns continue in its context. setActivePersona (settings.js) validates
+    // the key, no-ops when it already matches, PUTs `active_persona`, and
+    // re-applies (currentSystemPrompt + labels) before the transcript renders.
+    if (data.persona_key && typeof setActivePersona === 'function') {
+      await setActivePersona(data.persona_key);
+    }
     if (typeof renderConversationHistory === 'function') renderConversationHistory();
     _currentId = id;
     // Re-render the list so the active-card highlight moves to this entry, and

@@ -123,7 +123,7 @@
             </svg>
             <span>AI Assistant</span>
             <button type="button" id="personaToggleBtn" class="persona-toggle-btn"
-              aria-haspopup="dialog" title="Open Settings to choose a persona">
+              aria-haspopup="menu" aria-expanded="false" title="Choose a persona">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <polyline points="6 9 12 15 18 9"/>
@@ -333,6 +333,10 @@
       Close window
     </button>
   </div>
+
+  <!-- Persona picker — anchored to #personaToggleBtn, opens downward. Items are
+       built by main.js from personaLabels; picking one PUTs active_persona. -->
+  <div class="menu-popup" id="personaMenu" role="menu"></div>
 
   <div id="settingsRoot"></div>
 

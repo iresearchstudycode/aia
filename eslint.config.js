@@ -126,6 +126,7 @@ const crossModuleGlobals = {
   resolveTtsEngine: 'readonly',
   diffSettings: 'readonly',
   buildMigrationPayload: 'readonly',
+  setActivePersona: 'readonly',
   // api.js
   streamOllamaResponse: 'readonly',
   stopStreaming: 'readonly',

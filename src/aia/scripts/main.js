@@ -383,8 +383,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (!attachMenu.contains(e.target)) closeAttachMenu();
   });
 
-  // Settings lightbox entry points — the account-menu item, the persona ▾
-  // toggle next to the header title, and the two toolbar status badges.
+  // Settings lightbox entry points — the account-menu item and the two toolbar
+  // status badges. (The persona ▾ toggle no longer opens Settings — it opens a
+  // lightweight persona picker; per-persona detail settings stay in Settings.)
   const settingsMenuItem = document.getElementById('settingsMenuItem');
   if (settingsMenuItem) {
     settingsMenuItem.addEventListener('click', function () {
@@ -393,11 +394,73 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
   }
 
+  // --- Persona picker -------------------------------------------------------
+  // The ▾ next to "AI Assistant" opens a plain list of the personas; picking
+  // one switches the active persona (settings.js setActivePersona → PUT +
+  // applyResolvedSettings). Locked mid-conversation, matching the old behaviour
+  // — you can't change persona partway through a thread; load or start a chat.
   const personaToggleBtn = document.getElementById('personaToggleBtn');
-  if (personaToggleBtn) {
+  const personaMenu = document.getElementById('personaMenu');
+
+  function _buildPersonaMenu() {
+    if (!personaMenu || typeof personaLabels === 'undefined') return;
+    while (personaMenu.firstChild) personaMenu.removeChild(personaMenu.firstChild);
+    _PERSONA_KEYS.forEach(function (key) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.setAttribute('role', 'menuitemradio');
+      item.dataset.persona = key;
+      item.textContent = personaLabels[key] || key;
+      item.addEventListener('click', function () {
+        closePersonaMenu();
+        if (typeof setActivePersona === 'function') setActivePersona(key);
+      });
+      personaMenu.appendChild(item);
+    });
+  }
+
+  function openPersonaMenu() {
+    if (!personaMenu || !personaToggleBtn) return;
+    // Mark the current selection each time it opens (it may have changed).
+    const active = (window.vpalSettings && window.vpalSettings.global &&
+      window.vpalSettings.global.active_persona) || '';
+    personaMenu.querySelectorAll('button').forEach(function (b) {
+      b.setAttribute('aria-checked', b.dataset.persona === active ? 'true' : 'false');
+      b.classList.toggle('is-active', b.dataset.persona === active);
+    });
+    const rect = personaToggleBtn.getBoundingClientRect();
+    personaMenu.style.top = (rect.bottom + 8) + 'px';
+    personaMenu.style.left = rect.left + 'px';
+    personaMenu.style.maxHeight = (window.innerHeight - rect.bottom - 24) + 'px';
+    personaMenu.style.overflowY = 'auto';
+    personaMenu.classList.add('open');
+    personaToggleBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  function closePersonaMenu() {
+    if (!personaMenu) return;
+    personaMenu.classList.remove('open');
+    if (personaToggleBtn) personaToggleBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  if (personaToggleBtn && personaMenu) {
+    _buildPersonaMenu();
     personaToggleBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      openSettings('personas');
+      // conversationHistory.length > 0 → persona is locked for this thread.
+      if (typeof conversationHistory !== 'undefined' && conversationHistory.length > 0) {
+        if (typeof showToast === 'function') {
+          showToast('Start a new chat to switch persona');
+        }
+        return;
+      }
+      personaMenu.classList.contains('open') ? closePersonaMenu() : openPersonaMenu();
+    });
+    document.addEventListener('click', function (e) {
+      if (!personaMenu.contains(e.target) && e.target !== personaToggleBtn &&
+          !personaToggleBtn.contains(e.target)) {
+        closePersonaMenu();
+      }
     });
   }
 
@@ -469,9 +532,11 @@ document.addEventListener('DOMContentLoaded', async function () {
       // 3. A popup is open — close it.
       if (accountMenu.classList.contains('open') ||
           chatOverflowMenu.classList.contains('open') ||
+          (personaMenu && personaMenu.classList.contains('open')) ||
           attachMenuDropdown.classList.contains('open')) {
         closeAccountMenu();
         closeOverflowMenu();
+        closePersonaMenu();
         closeAttachMenu();
         return;
       }
@@ -485,6 +550,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (e.key === 'Tab') {
       if (accountMenu.classList.contains('open')) _trapFocus(accountMenu, e);
       if (chatOverflowMenu.classList.contains('open')) _trapFocus(chatOverflowMenu, e);
+      if (personaMenu && personaMenu.classList.contains('open')) _trapFocus(personaMenu, e);
       if (attachMenuDropdown.classList.contains('open')) _trapFocus(attachMenuDropdown, e);
     }
   });
@@ -494,6 +560,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   window.addEventListener('resize', function () {
     if (accountMenu.classList.contains('open')) closeAccountMenu();
     if (chatOverflowMenu.classList.contains('open')) closeOverflowMenu();
+    if (personaMenu && personaMenu.classList.contains('open')) closePersonaMenu();
     if (attachMenuDropdown.classList.contains('open')) closeAttachMenu();
   });
 

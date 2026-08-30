@@ -190,6 +190,30 @@ body {
   color: var(--color-danger);
 }
 
+/* Persona picker (#personaMenu): a plain radio-list of personas. The active one
+   gets a leading check and the accent tint. */
+#personaMenu button {
+  padding-left: 34px;
+  position: relative;
+}
+
+#personaMenu button.is-active {
+  color: var(--color-accent-deep);
+  font-weight: 600;
+}
+
+#personaMenu button.is-active::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 6px;
+  height: 10px;
+  border: solid var(--color-accent);
+  border-width: 0 2px 2px 0;
+  transform: translateY(-60%) rotate(45deg);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .lightbox__backdrop.open {
     animation: lightboxFadeIn 0.15s ease-out;
