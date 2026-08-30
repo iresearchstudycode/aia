@@ -54,6 +54,10 @@ http {
     # GET/PUT/POST calls per session (hydration on page load, plus one per Save).
     limit_req_zone $binary_remote_addr zone=settings:1m rate=30r/m;
 
+    # Rate limit zone for the conversation history service — a write fires after
+    # every completed turn, so a higher cap than settings is comfortable.
+    limit_req_zone $binary_remote_addr zone=conversations:1m rate=60r/m;
+
     # Return 429 Too Many Requests (not the default 503) when a limit is hit
     limit_req_status 429;
 
@@ -86,6 +90,13 @@ http {
     # volume), no external host dependency
     upstream settings_service {
         server ${SETTINGS_UPSTREAM};
+        keepalive 16;
+    }
+
+    # Conversation history upstream — self-contained (SQLite on a named volume),
+    # per-user scoped, auto-saved on every turn, no external host dependency
+    upstream conversations_service {
+        server ${CONVERSATIONS_UPSTREAM};
         keepalive 16;
     }
 
@@ -440,6 +451,62 @@ http {
             limit_req zone=settings burst=10 nodelay;
 
             proxy_pass http://settings_service;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_set_header X-Auth-User $auth_user;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ------------------------------------------------------------------
+        # Conversation history service — per-user auto-saved chat history
+        # persisted server-side (FastAPI + SQLite on a named volume).
+        # Session-gated like every other route. The username recovered by the
+        # auth sub-request is captured with auth_request_set and forwarded as
+        # X-Auth-User via proxy_set_header — which OVERWRITES any client-
+        # supplied X-Auth-User, so the service can trust it. GET reads the
+        # metadata or full record; PUT/DELETE mutate the history. Bodies carry
+        # a full conversation history, so client_max_body_size is raised to 2m.
+        # Two blocks cover the bare /conversations and the /conversations/...
+        # sub-paths (search, get/put/delete by id).
+        # ------------------------------------------------------------------
+        location = /conversations {
+            auth_request /auth/verify;
+            error_page 401 = @login_redirect;
+            auth_request_set $auth_user $upstream_http_x_auth_user;
+
+            limit_except GET PUT DELETE {
+                deny all;
+            }
+            limit_req zone=conversations burst=20 nodelay;
+
+            client_max_body_size 2m;
+
+            proxy_pass http://conversations_service;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_set_header X-Auth-User $auth_user;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /conversations/ {
+            auth_request /auth/verify;
+            error_page 401 = @login_redirect;
+            auth_request_set $auth_user $upstream_http_x_auth_user;
+
+            limit_except GET PUT DELETE {
+                deny all;
+            }
+            limit_req zone=conversations burst=20 nodelay;
+
+            client_max_body_size 2m;
+
+            proxy_pass http://conversations_service;
             proxy_http_version 1.1;
             proxy_set_header Connection "";
             proxy_set_header X-Auth-User $auth_user;

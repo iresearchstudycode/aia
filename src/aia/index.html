@@ -34,6 +34,7 @@
   <script type="application/javascript" src="./scripts/api.js"></script>
   <script type="application/javascript" src="./scripts/nav-rail.js"></script>
   <script type="application/javascript" src="./scripts/settings.js"></script>
+  <script type="application/javascript" src="./scripts/history.js"></script>
   <script type="application/javascript" src="./scripts/main.js"></script>
 </head>
 
@@ -111,10 +112,11 @@
             <button type="button" id="clearBtn">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="3 6 5 6 21 6"/>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                <line x1="12" y1="8" x2="12" y2="14"/>
+                <line x1="9" y1="11" x2="15" y2="11"/>
               </svg>
-              Clear
+              New chat
             </button>
             <button type="button" id="closeBtn">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -123,6 +125,14 @@
                 <line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
               Close
+            </button>
+            <button type="button" id="historyMenuItem">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              History
             </button>
             <hr class="dropdown-divider">
             <button type="button" id="settingsMenuItem">
@@ -274,6 +284,7 @@
 
     <div id="navRail" class="nav-rail" aria-hidden="true"></div>
     <div id="settingsRoot"></div>
+    <div id="historyRoot"></div>
   </div>
 
 </body>

@@ -530,16 +530,21 @@ function addContextTrimNotice() {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-// Clear chat function
-function clearChat() {
-  if (confirm('Are you sure you want to clear the chat history?')) {
-    stopSpeaking(); // Stop any ongoing speech (this will resume recognition if needed)
-    conversationHistory = [];
-    document.getElementById('chatMessages').innerHTML = '';
-    clearImagePreview();
-    clearDocumentPreview();
-    updateSystemPromptState(); // Re-enable system prompt selector
+// "New chat" — archive the current conversation to the history service first,
+// then reset. Nothing is lost, so there is no destructive confirm any more.
+// hcArchiveCurrent() PUTs a snapshot of the still-populated conversationHistory;
+// it is awaited so the snapshot is sent before the array is wiped below.
+async function clearChat() {
+  if (typeof hcArchiveCurrent === 'function') {
+    await hcArchiveCurrent();
   }
+  stopSpeaking(); // Stop any ongoing speech (this will resume recognition if needed)
+  conversationHistory = [];
+  document.getElementById('chatMessages').innerHTML = '';
+  clearImagePreview();
+  clearDocumentPreview();
+  updateSystemPromptState(); // Re-enable persona switching
+  if (typeof hcNewConversationId === 'function') hcNewConversationId();
 }
 
 // Close window function
