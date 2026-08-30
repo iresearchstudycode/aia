@@ -74,10 +74,15 @@ function chatTitleFrom(history) {
  * `editorView` when truthy, and drop the in-memory `imageBase64` / `imageDataUrl`
  * blobs. (Logic is copied here on purpose — history.js never imports chat.js.)
  *
- * @param {string} id
+ * The id is intentionally NOT part of the returned object: it travels in the
+ * PUT URL path, and the service rejects any body key outside
+ * `{title, persona_key, message_count, body}` with a 422. `id` stays a
+ * parameter only so callers still document which conversation the record is for.
+ *
+ * @param {string} id - the conversation id (used by the caller for the URL, not embedded)
  * @param {?Array<object>} history
  * @param {?string} personaKey
- * @returns {{id: string, title: string, persona_key: string,
+ * @returns {{title: string, persona_key: string,
  *   message_count: number, body: Array<object>}}
  */
 function conversationRecordFrom(id, history, personaKey) {
@@ -90,7 +95,6 @@ function conversationRecordFrom(id, history, personaKey) {
     return entry;
   });
   return {
-    id: id,
     title: chatTitleFrom(list),
     persona_key: personaKey || '',
     message_count: list.length,
