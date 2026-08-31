@@ -1428,9 +1428,15 @@ body {
   border-radius: 8px;
 }
 
+/* Flowcharts render at natural size (useMaxWidth:false) and scroll horizontally
+   inside .mermaid-diagram when wide — legible beats shrink-to-fit. Other
+   diagram types keep mermaid's own fit-to-width inline style. display:block +
+   auto margins centre a narrow diagram but let a wide one scroll from its left
+   edge (margin:auto collapses to 0 once the element overflows its container). */
 .mermaid-diagram svg {
-  max-width: 100%;
   height: auto;
+  display: block;
+  margin: 0 auto;
 }
 
 /* Safety net over mermaid's own theming — guarantee legible dark text on the
