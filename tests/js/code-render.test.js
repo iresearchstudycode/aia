@@ -26,6 +26,7 @@ const {
   renderMermaidIn,
   _repairMermaid,
   _cleanupMermaidOrphan,
+  _colourCodeMermaidNodes,
   _addMarkdownCopyBtn,
   personaIconEl,
 } = require('../../src/aia/scripts/chat.js');
@@ -170,6 +171,50 @@ describe('_cleanupMermaidOrphan', () => {
     document.body.appendChild(host);
     _cleanupMermaidOrphan('mmd-abc');
     expect(document.getElementById('dmmd-abc')).not.toBeNull();
+  });
+});
+
+describe('_colourCodeMermaidNodes', () => {
+  const NS = 'http://www.w3.org/2000/svg';
+  function nodeWith(childTag, attrs = {}) {
+    const wrapper = document.createElement('div');
+    const svg = document.createElementNS(NS, 'svg');
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('class', 'node');
+    const shape = document.createElementNS(NS, childTag);
+    Object.entries(attrs).forEach(([k, v]) => shape.setAttribute(k, v));
+    g.appendChild(shape);
+    svg.appendChild(g);
+    wrapper.appendChild(svg);
+    return { wrapper, shape };
+  }
+
+  test('a polygon (decision) node is filled with the amber decision colour', () => {
+    const { wrapper, shape } = nodeWith('polygon', { points: '0,10 10,0 20,10 10,20' });
+    _colourCodeMermaidNodes(wrapper);
+    expect(shape.style.fill).toBe('#ffe7ba');
+  });
+
+  test('a circle (terminator) node is filled with the sage terminator colour', () => {
+    const { wrapper, shape } = nodeWith('circle', { r: '12' });
+    _colourCodeMermaidNodes(wrapper);
+    expect(shape.style.fill).toBe('#dceedc');
+  });
+
+  test('a stadium rect (rx ≈ height/2) is treated as a terminator', () => {
+    const { wrapper, shape } = nodeWith('rect', { rx: '20', height: '40' });
+    _colourCodeMermaidNodes(wrapper);
+    expect(shape.style.fill).toBe('#dceedc');
+  });
+
+  test('a plain rectangle (process) is left for the themeVariables fill', () => {
+    const { wrapper, shape } = nodeWith('rect', { rx: '0', height: '40' });
+    _colourCodeMermaidNodes(wrapper);
+    expect(shape.style.fill).toBe('');
+  });
+
+  test('does not throw on an empty wrapper', () => {
+    expect(() => _colourCodeMermaidNodes(document.createElement('div'))).not.toThrow();
   });
 });
 

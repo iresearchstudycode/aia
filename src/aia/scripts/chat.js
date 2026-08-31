@@ -185,12 +185,52 @@ async function renderMermaidIn(element) {
       wrapper.innerHTML = DOMPurify.sanitize(svg, {
         USE_PROFILES: { svg: true, svgFilters: true }
       });
+      _colourCodeMermaidNodes(wrapper);
       pre.replaceWith(wrapper);
     } else {
       pre.classList.add('mermaid-error');
     }
     _cleanupMermaidOrphan(id);
   }
+}
+
+// Rational Rose-style colour coding, applied to the already-sanitised SVG in
+// the DOM (no innerHTML — plain DOM `.style` writes, so no new sanitiser
+// surface). mermaid.initialize() themeVariables already give every box the
+// cornsilk fill + dark border + near-black text; this only *recolours by
+// shape* so a flowchart reads at a glance: decisions amber, terminators sage.
+// Other diagram types (sequence, class, …) have no matching shapes and are
+// left with the themeVariables treatment alone.
+function _colourCodeMermaidNodes(wrapper) {
+  const css =
+    typeof getComputedStyle === 'function'
+      ? getComputedStyle(document.documentElement)
+      : null;
+  const tok = (name, fallback) =>
+    (css && css.getPropertyValue(name).trim()) || fallback;
+  const decision = tok('--mermaid-decision-bg', '#ffe7ba');
+  const terminator = tok('--mermaid-terminator-bg', '#dceedc');
+
+  wrapper.querySelectorAll('g.node').forEach((node) => {
+    let fill = null;
+    if (node.querySelector('polygon')) {
+      fill = decision; // rhombus / hexagon / parallelogram → decision
+    } else if (node.querySelector('circle') || node.querySelector('ellipse')) {
+      fill = terminator; // (double) circle → start / end
+    } else {
+      const rect = node.querySelector('rect');
+      if (rect) {
+        const rx = parseFloat(rect.getAttribute('rx') || '0');
+        const h = parseFloat(rect.getAttribute('height') || '0');
+        if (rx > 0 && h > 0 && rx >= h / 2 - 1) fill = terminator; // stadium
+      }
+    }
+    if (fill) {
+      node.querySelectorAll('rect, polygon, circle, ellipse, path').forEach((shape) => {
+        shape.style.fill = fill;
+      });
+    }
+  });
 }
 
 // Every post-render enrichment pass in one place, so a new render site in
@@ -1108,7 +1148,85 @@ if (typeof hljs !== 'undefined') {
 }
 if (typeof mermaid !== 'undefined') {
   // strict: HTML labels off, no click handlers, no external resource fetches.
-  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
+  //
+  // Rational Rose look: the 'base' theme + themeVariables give a light "paper"
+  // canvas, cornsilk (cornsilk = the classic Rose class-box yellow) node fills,
+  // crisp dark-navy borders and near-black text — legible in both app themes.
+  // The hex values mirror the --mermaid-* tokens in style.css (keep in sync);
+  // _colourCodeMermaidNodes() then recolours flowchart nodes by shape.
+  const ROSE = {
+    canvas: '#fbfaf3',
+    ink: '#33334d',
+    text: '#1a1a2e',
+    node: '#fff8dc',
+    note: '#fff6c8',
+    noteBorder: '#c9b458',
+    cluster: '#efebda',
+    clusterBorder: '#b7ae90'
+  };
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: 'base',
+    fontFamily: "'Inter', ui-sans-serif, -apple-system, 'Segoe UI', Roboto, sans-serif",
+    // htmlLabels: false is REQUIRED, not cosmetic — mermaid v10 renders node
+    // labels inside <foreignObject> XHTML by default even under securityLevel
+    // 'strict', and DOMPurify's SVG profile strips <foreignObject>, so every
+    // label would vanish. Forcing plain SVG <text>/<tspan> keeps the text.
+    htmlLabels: false,
+    flowchart: {
+      htmlLabels: false,
+      curve: 'linear',
+      nodeSpacing: 45,
+      rankSpacing: 55,
+      useMaxWidth: true
+    },
+    class: { htmlLabels: false },
+    er: { htmlLabels: false },
+    themeVariables: {
+      fontSize: '15px',
+      background: ROSE.canvas,
+      primaryColor: ROSE.node,
+      primaryBorderColor: ROSE.ink,
+      primaryTextColor: ROSE.text,
+      secondaryColor: ROSE.cluster,
+      secondaryBorderColor: ROSE.clusterBorder,
+      secondaryTextColor: ROSE.text,
+      tertiaryColor: ROSE.canvas,
+      tertiaryBorderColor: ROSE.clusterBorder,
+      tertiaryTextColor: ROSE.text,
+      mainBkg: ROSE.node,
+      nodeBorder: ROSE.ink,
+      lineColor: ROSE.ink,
+      textColor: ROSE.text,
+      titleColor: ROSE.text,
+      edgeLabelBackground: ROSE.canvas,
+      clusterBkg: ROSE.cluster,
+      clusterBorder: ROSE.clusterBorder,
+      nodeTextColor: ROSE.text,
+      // sequence diagrams
+      actorBkg: ROSE.node,
+      actorBorder: ROSE.ink,
+      actorTextColor: ROSE.text,
+      actorLineColor: ROSE.ink,
+      signalColor: ROSE.ink,
+      signalTextColor: ROSE.text,
+      labelBoxBkgColor: ROSE.node,
+      labelBoxBorderColor: ROSE.ink,
+      labelTextColor: ROSE.text,
+      loopTextColor: ROSE.text,
+      noteBkgColor: ROSE.note,
+      noteBorderColor: ROSE.noteBorder,
+      noteTextColor: ROSE.text,
+      activationBkgColor: ROSE.cluster,
+      activationBorderColor: ROSE.ink,
+      sequenceNumberColor: ROSE.canvas,
+      // class / state / ER
+      classText: ROSE.text,
+      attributeBackgroundColorOdd: ROSE.canvas,
+      attributeBackgroundColorEven: ROSE.node
+    }
+  });
 }
 
 // Node.js compat — lets Jest import the render helpers for unit tests; no-op in
@@ -1120,6 +1238,7 @@ if (typeof module !== 'undefined') {
     renderMermaidIn,
     _repairMermaid,
     _cleanupMermaidOrphan,
+    _colourCodeMermaidNodes,
     _addMarkdownCopyBtn,
     enrichRenderedContent,
     renderMarkdownToHtml,
