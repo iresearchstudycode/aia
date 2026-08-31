@@ -105,31 +105,56 @@ function highlightCodeIn(element) {
   });
 }
 
-// Best-effort repair of the one Mermaid mistake local models make constantly:
-// unquoted parentheses / brackets / braces / '#' inside flowchart node labels
-// (e.g. `D{Web Application Firewall (WAF)}`, `G[NACL / guardrail]`), which make
-// mermaid.render() throw "Parse error … Expecting 'SQE', 'DOUBLECIRCLEEND', …".
-// Wrapping the label text in double quotes is the documented fix. Only touches
-// `graph` / `flowchart` diagrams; every other diagram type is returned as-is.
-// Doubled shapes (`[[ ]]`, `{{ }}`, `([ ])`) are left alone. Pure — unit-tested.
+// Best-effort repair of the mistakes local models make in `flowchart` / `graph`
+// Mermaid — unquoted punctuation in node *and* edge labels
+// (`D{Web Application Firewall (WAF)}`, `-->|GET /api {"x":1}|`), a literal `\n`
+// or `& \n` between node defs, `classDef` / `:::class` colouring we do
+// ourselves — any of which makes `mermaid.render()` throw. This runs ONLY as
+// the second attempt, after the raw source has already failed, so it can be
+// aggressive: the goal is "render something legible", not byte fidelity. Only
+// touches `graph` / `flowchart`; every other diagram type is returned as-is.
+// Pure — unit-tested in tests/js/code-render.test.js.
 function _repairMermaid(src) {
   if (typeof src !== 'string') return src;
   const head = (src.trim().split(/\s+/)[0] || '').toLowerCase();
   if (head !== 'graph' && head !== 'flowchart') return src;
-  const q = (t) => t.replace(/"/g, '&quot;');
-  // {rhombus} — label may contain ( ) [ ]
-  src = src.replace(/([A-Za-z0-9_]+)\{(?!\{)([^{}\n"]+)\}(?!\})/g, (m, id, txt) =>
-    /[()[\]#]/.test(txt) ? `${id}{"${q(txt)}"}` : m
-  );
-  // [rect] — label may contain ( ) { } / #
-  src = src.replace(/([A-Za-z0-9_]+)\[(?![[(])([^[\]\n"|]+)\](?![\])])/g, (m, id, txt) =>
-    /[(){}#]/.test(txt) ? `${id}["${q(txt)}"]` : m
-  );
-  // (round) — only when a nested (...) inside makes the boundary ambiguous
-  src = src.replace(
-    /([A-Za-z0-9_]+)\((?!\()([^()\n"]*\([^()\n"]*\)[^()\n"]*)\)/g,
-    (m, id, txt) => `${id}("${q(txt)}")`
-  );
+  const clean = (t) =>
+    t.replace(/<br\s*\/?>/gi, ' ').replace(/"/g, "'").replace(/\s+/g, ' ').trim();
+  // Anything past word chars / whitespace / slash / dot / dash needs quoting.
+  const needsQuote = (t) => /[^\w\s/.\-]/.test(t);
+
+  // 1. A literal "\n" (and the "& \n" node-chain form) the model sometimes
+  //    emits where it meant a line break.
+  src = src.replace(/&\s*\\n\s*/g, '\n    ').replace(/\\n/g, ' ');
+
+  // 2. Drop styling directives — nodes are colour-coded by shape
+  //    (_colourCodeMermaidNodes) and a hardcoded fill fights the theme.
+  src = src
+    .replace(/^[ \t]*(?:classDef|linkStyle|style)[ \t]+.*$/gim, '')
+    .replace(/:::[A-Za-z0-9_-]+/g, '');
+
+  // 3. Quote edge-label text — -->|text| -.->|text| ==>|text| ---|text|
+  src = src.replace(/\|([^|\n]+)\|/g, (m, txt) => {
+    const t = txt.trim();
+    if (t.startsWith('"') && t.endsWith('"')) return m;
+    return needsQuote(t) ? `|"${clean(t)}"|` : m;
+  });
+
+  // 4. Quote node-label text in the common shapes. Doubled shapes ([[ ]],
+  //    {{ }}, [( )], (( ))) are matched before the single-bracket forms.
+  const shapes = [
+    [/([A-Za-z0-9_]+)\{(?!\{)([^{}\n"]+)\}(?!\})/g, '{', '}'],
+    [/([A-Za-z0-9_]+)\[\(([^[\]\n"]+)\)\]/g, '[(', ')]'],
+    [/([A-Za-z0-9_]+)\[\[([^[\]\n"]+)\]\]/g, '[[', ']]'],
+    [/([A-Za-z0-9_]+)\(\(([^()\n"]+)\)\)/g, '((', '))'],
+    [/([A-Za-z0-9_]+)\[(?![[(])([^[\]\n"|]+)\]/g, '[', ']'],
+    [/([A-Za-z0-9_]+)\((?![(])([^()\n"]*\([^()\n"]*\)[^()\n"]*)\)/g, '(', ')']
+  ];
+  for (const [re, open, close] of shapes) {
+    src = src.replace(re, (m, id, txt) =>
+      needsQuote(txt) ? `${id}${open}"${clean(txt)}"${close}` : m
+    );
+  }
   return src;
 }
 
@@ -1179,7 +1204,10 @@ if (typeof mermaid !== 'undefined') {
       curve: 'linear',
       nodeSpacing: 45,
       rankSpacing: 55,
-      useMaxWidth: true
+      // Render at natural size and let a wide diagram scroll inside
+      // .mermaid-diagram (overflow-x: auto) rather than shrink to where the
+      // label text is unreadable.
+      useMaxWidth: false
     },
     class: { htmlLabels: false },
     er: { htmlLabels: false },

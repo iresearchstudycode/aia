@@ -135,6 +135,42 @@ describe('_repairMermaid', () => {
     expect(fixed).toContain('{"Web Application Firewall (WAF)"}');
     expect(fixed).toContain('{"NACL (Subnet Guardrail)"}');
   });
+
+  test('quotes an edge label containing braces / quotes / slashes', () => {
+    const src =
+      'flowchart TD\n  A -->|GET /api/generate {"model": "x"}| B[Server]';
+    const fixed = _repairMermaid(src);
+    expect(fixed).toContain("|\"GET /api/generate {'model': 'x'}\"|");
+  });
+
+  test('leaves a clean edge label unquoted', () => {
+    const src = 'flowchart LR\n  A[Foo] -->|does a thing| B[Bar]';
+    expect(_repairMermaid(src)).toBe(src);
+  });
+
+  test('strips classDef lines and :::class applications', () => {
+    const src = [
+      'flowchart TD',
+      '  A[Start]:::hot --> B[End]',
+      '  classDef hot fill:#e8f5e9,stroke:#4caf50;',
+    ].join('\n');
+    const fixed = _repairMermaid(src);
+    expect(fixed).not.toMatch(/classDef/);
+    expect(fixed).not.toMatch(/:::/);
+    expect(fixed).toContain('A[Start] --> B[End]');
+  });
+
+  test('collapses a literal "\\n" and the "& \\n" node-chain form', () => {
+    const src = 'flowchart TD\n  X[a] & \\nY[b] -.-> Z[c]';
+    const fixed = _repairMermaid(src);
+    expect(fixed).not.toMatch(/\\n/);
+  });
+
+  test('drops <br/> inside a quoted node label', () => {
+    const src = 'flowchart TD\n  M[Gemma Service<br/>(GPU accelerated)] --> K';
+    const fixed = _repairMermaid(src);
+    expect(fixed).toContain('M["Gemma Service (GPU accelerated)"]');
+  });
 });
 
 describe('_cleanupMermaidOrphan', () => {
