@@ -24,6 +24,7 @@ const {
   renderMarkdownToHtml,
   highlightCodeIn,
   renderMermaidIn,
+  personaIconEl,
 } = require('../../src/aia/scripts/chat.js');
 
 describe('renderMarkdownToHtml — fenced code blocks', () => {
@@ -85,5 +86,43 @@ describe('renderMermaidIn', () => {
     await expect(renderMermaidIn(el)).resolves.toBeUndefined();
     // The <pre> is left in place for a browser (where mermaid is loaded) to render.
     expect(el.querySelector('pre code.language-mermaid')).not.toBeNull();
+  });
+});
+
+describe('personaIconEl', () => {
+  afterEach(() => {
+    delete global.window.vpalSettings;
+    delete global.personaIcons;
+  });
+
+  test('returns a sanitised <svg> element from vpalSettings.personas[key].icon', () => {
+    global.window.vpalSettings = {
+      personas: { teacher: { icon: '<svg viewBox="0 0 24 24"><path d="M2 4h6"/></svg>' } },
+    };
+    const el = personaIconEl('teacher');
+    expect(el).not.toBeNull();
+    expect(el.tagName.toLowerCase()).toBe('svg');
+    expect(el.querySelector('path')).not.toBeNull();
+  });
+
+  test('falls back to the personaIcons global when the settings copy is absent', () => {
+    global.personaIcons = { legal: '<svg viewBox="0 0 24 24"><line x1="0" y1="0" x2="9" y2="9"/></svg>' };
+    const el = personaIconEl('legal');
+    expect(el && el.tagName.toLowerCase()).toBe('svg');
+  });
+
+  test('strips scripts / event handlers from a hostile icon string', () => {
+    global.window.vpalSettings = {
+      personas: {
+        x: { icon: '<svg onload="alert(1)"><script>alert(2)<\/script><path d="M0 0"/></svg>' },
+      },
+    };
+    const el = personaIconEl('x');
+    expect(el.getAttribute('onload')).toBeNull();
+    expect(el.querySelector('script')).toBeNull();
+  });
+
+  test('returns null when there is no icon for the key', () => {
+    expect(personaIconEl('nope')).toBeNull();
   });
 });

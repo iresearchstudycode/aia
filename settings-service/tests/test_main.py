@@ -84,26 +84,44 @@ class TestGetSettingsFresh:
     def test_fresh_user_persona_overrides_all_null(self, client: TestClient) -> None:
         body = _get(client)
         assert set(body["personas"]) == set(main._PERSONA_KEYS)
-        assert body["personas"]["assistant"] == {
-            "thinking_enabled": None,
-            "thinking_depth": None,
-            "tts_engine": None,
-        }
+        entry = body["personas"]["assistant"]
+        assert entry["thinking_enabled"] is None
+        assert entry["thinking_depth"] is None
+        assert entry["tts_engine"] is None
+
+    def test_claude_prompt_compressor_persona_is_gone(self, client: TestClient) -> None:
+        assert "claudePromptCompressor" not in main._PERSONA_KEYS
+        assert "claudePromptCompressor" not in _get(client)["personas"]
+        assert len(main._PERSONA_KEYS) == 10
+
+    def test_every_persona_carries_a_read_only_svg_icon(self, client: TestClient) -> None:
+        personas = _get(client)["personas"]
+        for key in main._PERSONA_KEYS:
+            icon = personas[key]["icon"]
+            assert isinstance(icon, str) and icon.startswith("<svg") and icon.endswith("</svg>")
+        # icon is not a writable override key
+        r = client.put("/settings/persona/assistant", headers=_HEADERS, json={"icon": "<svg/>"})
+        assert r.status_code == 422
+        assert _get(client)["personas"]["assistant"]["icon"] == main._PERSONA_ICONS["assistant"]
 
     def test_english_editor_has_editor_mode_clean(self, client: TestClient) -> None:
-        body = _get(client)
-        assert body["personas"]["englishEditor"] == {
-            "thinking_enabled": None,
-            "thinking_depth": None,
-            "tts_engine": None,
-            "editor_mode": "clean",
-        }
+        entry = _get(client)["personas"]["englishEditor"]
+        assert entry["thinking_enabled"] is None
+        assert entry["thinking_depth"] is None
+        assert entry["tts_engine"] is None
+        assert entry["editor_mode"] == "clean"
 
     def test_only_english_editor_has_editor_mode(self, client: TestClient) -> None:
         body = _get(client)
         for key, entry in body["personas"].items():
             if key != "englishEditor":
                 assert "editor_mode" not in entry
+
+    def test_removed_active_persona_falls_back_to_default(self, client: TestClient) -> None:
+        # Simulate a row stored before the persona was removed.
+        with main._db() as conn, conn:
+            main._upsert(conn, _USER, "global", "active_persona", "claudePromptCompressor")
+        assert _get(client)["global"]["active_persona"] == "englishEditor"
 
     def test_defaults_block_shape(self, client: TestClient) -> None:
         body = _get(client)
@@ -222,6 +240,7 @@ class TestPutPersona:
             "thinking_depth": None,
             "tts_engine": None,
             "editor_mode": "changes",
+            "icon": main._PERSONA_ICONS["englishEditor"],
         }
         assert _get(client)["personas"]["englishEditor"]["editor_mode"] == "changes"
 
@@ -395,6 +414,7 @@ class TestReset:
             "thinking_depth": None,
             "tts_engine": None,
             "editor_mode": "clean",
+            "icon": main._PERSONA_ICONS["englishEditor"],
         }
         # global untouched
         assert body["global"]["chat_model"] == "custom"

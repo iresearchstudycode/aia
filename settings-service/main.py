@@ -35,12 +35,11 @@ logger = logging.getLogger("settings_service")
 
 _DEFAULT_DB_PATH = "/data/settings.db"
 
-# The 11 persona keys — must match ``src/aia/scripts/config.js`` ``systemPrompts``
+# The 10 persona keys — must match ``src/aia/scripts/config.js`` ``systemPrompts``
 # minus ``englishEditorExplained``.
 _PERSONA_KEYS: tuple[str, ...] = (
     "assistant",
     "casual",
-    "claudePromptCompressor",
     "creative",
     "englishEditor",
     "legal",
@@ -50,6 +49,51 @@ _PERSONA_KEYS: tuple[str, ...] = (
     "technical",
     "transcriptai",
 )
+
+# Per-persona SVG icon, delivered read-only in the ``GET /settings`` ``personas``
+# block (``_resolved_persona`` adds it after the stored-value merge, so it can
+# never be PUT or reset). Inline line-icons: 24x24, ``stroke="currentColor"`` so
+# they follow the UI theme; no hardcoded colours. The frontend sanitises the
+# string through DOMPurify (svg profile) before it reaches innerHTML — same
+# boundary as Mermaid output. ``src/aia/scripts/config.js`` ``personaIcons``
+# mirrors this for the offline fallback; keep the two in sync.
+_ICON_HEAD = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+)
+_PERSONA_ICONS: dict[str, str] = {
+    "assistant": _ICON_HEAD
+    + '<path d="M9.5 3 11 7.5 15.5 9 11 10.5 9.5 15 8 10.5 3.5 9 8 7.5z"/>'
+    + '<path d="M18 13.5 18.8 16 21 16.8 18.8 17.5 18 20 17.2 17.5 15 16.8 17.2 16z"/></svg>',
+    "casual": _ICON_HEAD
+    + '<circle cx="12" cy="12" r="9"/><path d="M8 14s1.4 2 4 2 4-2 4-2"/>'
+    + '<line x1="9" y1="9.5" x2="9.01" y2="9.5"/>'
+    + '<line x1="15" y1="9.5" x2="15.01" y2="9.5"/></svg>',
+    "creative": _ICON_HEAD
+    + '<path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/>'
+    + '<line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>',
+    "englishEditor": _ICON_HEAD
+    + '<path d="m6 16 6-12 6 12"/><path d="M8.5 12h7"/>'
+    + '<path d="m15 20 2 2 4-4"/></svg>',
+    "legal": _ICON_HEAD
+    + '<path d="M12 3v18"/><path d="M7 21h10"/><path d="M5 7h14"/>'
+    + '<path d="M5 7 2 13a3 3 0 0 0 6 0z"/><path d="M19 7l-3 6a3 3 0 0 0 6 0z"/>'
+    + '<path d="m9 4 6-1"/></svg>',
+    "medical": _ICON_HEAD + '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+    "professional": _ICON_HEAD
+    + '<rect x="2" y="7" width="20" height="14" rx="2"/>'
+    + '<path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+    "teacher": _ICON_HEAD
+    + '<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/>'
+    + '<path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></svg>',
+    "technical": _ICON_HEAD
+    + '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+    "transcriptai": _ICON_HEAD
+    + '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
+    + '<polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>'
+    + '<line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>',
+}
 
 _GLOBAL_KEYS: tuple[str, ...] = (
     "chat_model",
@@ -210,6 +254,10 @@ def _resolved_global(conn: sqlite3.Connection, username: str) -> dict[str, Any]:
     for key, value in _stored(conn, username, "global").items():
         if key in _GLOBAL_KEYS:
             resolved[key] = value
+    # A stored active_persona for a since-removed persona (e.g.
+    # ``claudePromptCompressor``) falls back to the house default.
+    if resolved.get("active_persona") not in _PERSONA_KEYS:
+        resolved["active_persona"] = _env_defaults()["active_persona"]
     return resolved
 
 
@@ -225,6 +273,8 @@ def _resolved_persona(conn: sqlite3.Connection, username: str, persona_key: str)
     for key, value in _stored(conn, username, f"persona:{persona_key}").items():
         if key in entry:
             entry[key] = value
+    # Read-only, set last so nothing stored can shadow it.
+    entry["icon"] = _PERSONA_ICONS.get(persona_key, "")
     return entry
 
 
