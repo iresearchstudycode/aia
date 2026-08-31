@@ -242,7 +242,10 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
       savedContent = (data.message && data.message.content) || '';
       const answerHtml = renderMarkdownToHtml(savedContent);
       contentDiv.innerHTML = answerHtml || '<p class="status-muted">No response received.</p>';
-      if (answerHtml) enrichRenderedContent(contentDiv);
+      if (answerHtml) {
+        enrichRenderedContent(contentDiv);
+        _addMarkdownCopyBtn(contentDiv, savedContent);
+      }
 
     } else {
       // ---------------------------------------------------------------
@@ -342,9 +345,11 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
           '</details>' +
           '<div class="answer-content">' + renderMarkdownToHtml(savedContent) + capNote + '</div>';
         enrichRenderedContent(contentDiv);
+        _addMarkdownCopyBtn(contentDiv, savedContent);
       } else {
         contentDiv.innerHTML = renderMarkdownToHtml(savedContent);
         enrichRenderedContent(contentDiv);
+        _addMarkdownCopyBtn(contentDiv, savedContent);
       }
     }
 
@@ -422,6 +427,7 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
           contentDiv.innerHTML = partialHtml;
         }
         enrichRenderedContent(contentDiv);
+        _addMarkdownCopyBtn(contentDiv, savedContent);
         const copyBtn = messageDiv.querySelector('.copy-btn');
         if (copyBtn) copyBtn.dataset.content = savedContent;
         const speakBtn = messageDiv.querySelector('.speak-btn');
