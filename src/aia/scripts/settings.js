@@ -241,14 +241,19 @@ var SETTINGS_FIELD_DEFS = {
     label: 'Default thinking depth',
     options: [['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]
   },
-  nav_rail: { type: 'toggle', label: 'Show the conversation navigator rail' }
+  nav_rail: { type: 'toggle', label: 'Show the conversation navigator rail' },
+  theme: {
+    type: 'select',
+    label: 'Theme',
+    options: [['system', 'Match system'], ['light', 'Light'], ['dark', 'Dark']]
+  }
 };
 
 var SETTINGS_CATEGORY_FIELDS = {
   models: ['chat_model', 'vision_model'],
   voice: ['tts_engine', 'auto_speak', 'stt_lang'],
   reasoning: ['thinking_enabled', 'thinking_depth'],
-  interface: ['nav_rail']
+  interface: ['theme', 'nav_rail']
 };
 
 // Cached list of installed Ollama model names (populated lazily on first open
@@ -1567,6 +1572,7 @@ function applyResolvedSettings() {
   var ttsEngine = resolveTtsEngine(active, s);
   var thinkingMode = resolveThinkingMode(active, s);
   var navRail = !!resolveSetting('nav_rail', null, s);
+  var theme = resolveSetting('theme', null, s) || 'system';
   var editorMode = 'clean';
   if (s.personas && s.personas.englishEditor && s.personas.englishEditor.editor_mode) {
     editorMode = s.personas.englishEditor.editor_mode;
@@ -1580,6 +1586,7 @@ function applyResolvedSettings() {
   if (typeof currentNavRailEnabled !== 'undefined') currentNavRailEnabled = navRail;
   if (typeof window !== 'undefined') window.currentNavRailEnabled = navRail;
   if (typeof setNavRailEnabled === 'function') setNavRailEnabled(navRail);
+  _applyTheme(theme);
 
   // The chat model may have just changed — re-cap num_ctx to its context window.
   recomputeNumCtx();
@@ -1609,6 +1616,43 @@ function applyResolvedSettings() {
  *
  * @returns {void}
  */
+/**
+ * Apply a resolved theme choice: set `currentTheme`, stamp (or clear) the
+ * `data-theme` attribute on <html>, and mirror the choice to
+ * localStorage[THEME_KEY] so theme-boot.js can paint it before first paint on
+ * the next load. `'system'` clears the attribute and lets the CSS
+ * `@media (prefers-color-scheme)` block decide — no matchMedia needed.
+ *
+ * @param {('system'|'light'|'dark')} mode
+ * @returns {void}
+ */
+function _applyTheme(mode) {
+  var m = mode === 'light' || mode === 'dark' ? mode : 'system';
+  if (typeof currentTheme !== 'undefined') currentTheme = m;
+  if (typeof document !== 'undefined' && document.documentElement) {
+    var root = document.documentElement;
+    // Suppress transitions across the swap + force one synchronous recalc:
+    // some Chromium versions don't re-evaluate a `transition`ed
+    // `background: var(--token)` when the token changes via an ancestor
+    // `[data-theme]` toggle, leaving e.g. the send button the wrong colour
+    // until the next reflow. The `.theme-switching` rule zeroes transitions;
+    // reading offsetWidth flushes style; a 0ms timer restores them.
+    root.classList.add('theme-switching');
+    if (m === 'system') root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', m);
+    void root.offsetWidth;
+    setTimeout(function () {
+      root.classList.remove('theme-switching');
+    }, 0);
+  }
+  try {
+    var key = typeof THEME_KEY !== 'undefined' ? THEME_KEY : 'vpalTheme';
+    localStorage.setItem(key, m);
+  } catch {
+    /* storage disabled — the attribute is set for this session regardless */
+  }
+}
+
 function recomputeNumCtx() {
   if (typeof currentNumCtx === 'undefined' || typeof resolveNumCtx !== 'function') return;
   var ceiling = typeof OLLAMA_NUM_CTX !== 'undefined' ? OLLAMA_NUM_CTX : 16384;
@@ -1687,6 +1731,7 @@ if (typeof module !== 'undefined') {
     resolveTtsEngine: resolveTtsEngine,
     diffSettings: diffSettings,
     buildMigrationPayload: buildMigrationPayload,
-    setActivePersona: setActivePersona
+    setActivePersona: setActivePersona,
+    _applyTheme: _applyTheme
   };
 }

@@ -25,6 +25,7 @@ const PERSONA_PREFS_KEY = 'personaPrefs'; // legacy localStorage key — read on
 const EDITOR_MODE_KEY = 'editorMode'; // legacy localStorage key — read only by the one-time settings migration
 const NAV_RAIL_KEY = 'navRailEnabled'; // legacy localStorage key — read only by the one-time settings migration
 const SIDEBAR_STATE_KEY = 'sidebarCollapsed'; // pure client view state (desktop sidebar collapsed) — never synced to the settings-service
+const THEME_KEY = 'vpalTheme'; // localStorage mirror of the per-user `theme` setting — read by theme-boot.js before first paint (no-FOUC), written by settings.js
 
 // Human-readable persona names, keyed by the same keys as `systemPrompts` (minus
 // `englishEditorExplained`). Formerly the <option> label text in the persona
@@ -74,6 +75,7 @@ let currentTTSEngine = 'piper'; // 'piper' | 'voicebox'
 let currentEditorMode = 'clean'; // 'clean' | 'changes' | 'explain' — English Editor output mode
 let currentNavRailEnabled = true; // conversation navigator rail visible; toolbar toggle, persisted to localStorage[NAV_RAIL_KEY]
 window.currentNavRailEnabled = currentNavRailEnabled; // nav-rail.js reads the flag off window to avoid script load-order issues
+let currentTheme = 'system'; // 'system' | 'light' | 'dark' — resolved from vpalSettings.global.theme by applyResolvedSettings(); _applyTheme() (settings.js) sets <html data-theme> + the localStorage[THEME_KEY] mirror
 let currentNumCtx = OLLAMA_NUM_CTX; // num_ctx actually sent to Ollama: OLLAMA_NUM_CTX, reduced to the active model's advertised context window when that is smaller. Recomputed by recomputeNumCtx() (settings.js) via resolveNumCtx(); never raised above OLLAMA_NUM_CTX
 let modelContextLengths = {}; // { modelName: contextLength } parsed from GET /api/tags `details.context_length`; populated at load (main.js) and whenever the Settings dialog opens. {} until the first successful fetch — until then every model uses OLLAMA_NUM_CTX
 let pendingDocumentText = null; // extracted text, folded into the next outgoing message

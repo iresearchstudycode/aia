@@ -7,6 +7,12 @@
 
   <link rel="icon" href="images/icon.ico" type="image/x-icon">
   <title>AI Assistant (Local)</title>
+  <meta name="color-scheme" content="light dark">
+
+  <!-- Must run before style.css so the theme is on <html> before first paint
+       (CSP `script-src 'self'` forbids an inline script — hence a real file). -->
+  <script type="application/javascript" src="./scripts/theme-boot.js"></script>
+
   <link rel="stylesheet" href="css/katex.min.css"
     integrity="sha256-D7cRycdMsXGGYZM5SLZT+8CaYn2l3eiSa00QWFNwmT4=">
   <link rel="stylesheet" href="css/highlight.min.css"

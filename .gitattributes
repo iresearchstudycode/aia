@@ -14,3 +14,9 @@ src/aia/scripts/diff-match-patch.js       binary
 src/aia/scripts/mermaid.min.js            binary
 src/aia/css/katex.min.css                 binary
 src/aia/css/highlight.min.css             binary
+
+# Vendored fonts (not SRI-pinned — SRI covers only the top-level tag, not the
+# @font-face `url()` it fetches). `binary` keeps git from touching them.
+src/aia/css/fonts/*.woff2                  binary
+src/aia/css/fonts/*.woff                   binary
+src/aia/css/fonts/*.ttf                    binary
