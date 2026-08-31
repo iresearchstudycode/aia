@@ -247,6 +247,26 @@ document.addEventListener('DOMContentLoaded', async function () {
   applyResolvedSettings();
   updateSystemPromptState();
 
+  // Fetch the installed models' context windows once, so num_ctx can be capped
+  // to the active model's real limit on the very first turn (settings.js also
+  // refreshes this map whenever the Settings dialog is opened). Fire-and-forget:
+  // any failure just leaves num_ctx at OLLAMA_NUM_CTX — the pre-existing
+  // behaviour. `redirect: 'manual'` so an expired session reloads to login
+  // instead of resolving to the login HTML, mirroring api.js / settings.js.
+  if (typeof OLLAMA_TAGS_URL !== 'undefined' && typeof fetch === 'function') {
+    fetch(OLLAMA_TAGS_URL, { redirect: 'manual', credentials: 'same-origin' })
+      .then(function (r) {
+        if (r && r.type === 'opaqueredirect') { window.location.reload(); return null; }
+        return r && r.ok ? r.json() : null;
+      })
+      .then(function (json) {
+        if (!json || typeof parseModelContextLengths !== 'function') return;
+        modelContextLengths = parseModelContextLengths(json);
+        if (typeof recomputeNumCtx === 'function') recomputeNumCtx();
+      })
+      .catch(function () {});
+  }
+
   // --- Sidebar collapse (desktop) / drawer (mobile) --------------------------
   const app = document.getElementById('app');
   const sidebarBackdrop = document.getElementById('sidebarBackdrop');

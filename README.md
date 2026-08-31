@@ -409,7 +409,7 @@ Every *user preference* — chat model, vision model, TTS engine, auto-speak, sp
 
 - **Models**: chosen in Settings → Models from your installed models (`ollama list` / `GET /api/tags`); `MODEL_NAME` / `VISION_MODEL_NAME` in `config.js` are only the offline fallbacks. `gemma4:e4b` has no vision encoder, so a separate vision model is required.
 - **API URLs**: `OLLAMA_API_URL` (chat, default `https://localhost/ollama/api/chat`) and `OLLAMA_TAGS_URL` (model list, default `https://localhost/ollama/api/tags`) in `config.js`
-- **Context length**: `OLLAMA_NUM_CTX` in `config.js` (default: `16384`) — must match the Ollama server's actual configured context length (`OLLAMA_CONTEXT_LENGTH` env var, or `PARAMETER num_ctx` in the model's Modelfile); sent explicitly as `num_ctx` on every text/thinking and multi-turn-vision request so behavior never silently depends on Ollama's own default. `MAX_HISTORY_MESSAGES` in `config.js` (default: `40`, i.e. 20 exchanges) additionally bounds how many past messages are kept regardless of their token cost
+- **Context length**: `OLLAMA_NUM_CTX` in `config.js` (default: `16384`) is the **ceiling** — keep it ≤ your Ollama server's configured context length (`OLLAMA_CONTEXT_LENGTH` env var, or `PARAMETER num_ctx` in the Modelfile) and what the host can afford as KV cache. The `num_ctx` actually sent is this value **reduced to the selected model's advertised context window when that is smaller** (from `GET /api/tags`; models that don't report one just use the ceiling) — so picking a small-context model no longer lets Ollama silently clamp the request. It is never raised above the ceiling. `MAX_HISTORY_MESSAGES` in `config.js` (default: `40`, i.e. 20 exchanges) additionally bounds how many past messages are kept regardless of their token cost
 
 ### Voice settings
 
@@ -481,7 +481,7 @@ Self-contained — no external app to configure, and these only bound worst-case
 ### Known limitations
 
 - **In-memory auth state** — brute-force lockout counters and TOTP replay protection are stored in process memory. Restarting the `vpal-auth` container (`docker-compose restart auth`) clears this state, giving an attacker a fresh attempt window within the 90-second TOTP validity period. For a local-only, 1–5-user deployment this is an accepted trade-off; adding a persistent backing store (Redis, SQLite) would close the gap if the threat model requires it.
-- **Model selector ignores per-model context length, and the vision model isn't selectable** — `options.num_ctx` is always sent as `OLLAMA_NUM_CTX` (16384) regardless of which model the toolbar selector picks, so choosing a model with a smaller context window lets Ollama silently clamp/truncate context rather than erroring. Image turns always use `VISION_MODEL_NAME` (`gemma3:4b`) no matter what's selected. Per-model context detection and a selectable vision model were left out of scope.
+- **`num_ctx` adapts down per model, never up** — the `num_ctx` sent is `OLLAMA_NUM_CTX` (16384) reduced to the selected model's advertised context window when that is smaller, but it is never raised above the ceiling even for a 128K-context model, because a larger KV cache is a memory-budget decision for the host operator rather than something to enable automatically. Models whose `GET /api/tags` entry omits `context_length` (the gemma line, at time of writing) always use the full ceiling. `MAX_DOCUMENT_TEXT_CHARS` is still sized against the ceiling, so a genuinely small-context model plus a large attached document can still overflow context.
 
 ## 🎯 Features
 

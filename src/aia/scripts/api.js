@@ -7,8 +7,10 @@ let streamAbortController = null;
 // Returns { requestBody, isVision, hasCurrentImage } — the flags are needed by
 // the caller to choose stream vs non-stream paths and the abort handler.
 // numCtx defaults to 16384, mirroring OLLAMA_NUM_CTX in config.js — callers should
-// always pass that constant explicitly; the default only exists so tests that don't
-// care about num_ctx can omit it.
+// always pass a value explicitly; the default only exists so tests that don't
+// care about num_ctx can omit it. The real call site passes `currentNumCtx`
+// (config.js), which is OLLAMA_NUM_CTX capped down to the active model's
+// advertised context window — see recomputeNumCtx() / resolveNumCtx().
 function _buildRequestBody(imageBase64, history, systemPrompt, modelName, visionModelName, thinkingMode = 'off', numCtx = 16384) {
   // isVision: true when this message or any history entry contains an image.
   // hasCurrentImage: true only when a new image is attached to this specific message.
@@ -177,8 +179,9 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
     addContextTrimNotice();
   }
 
+  const _numCtx = typeof currentNumCtx === 'number' && currentNumCtx > 0 ? currentNumCtx : OLLAMA_NUM_CTX;
   const { requestBody, isVision, hasCurrentImage } = _buildRequestBody(
-    imageBase64, conversationHistory, currentSystemPrompt, currentModel, currentVisionModel, currentThinkingMode, OLLAMA_NUM_CTX
+    imageBase64, conversationHistory, currentSystemPrompt, currentModel, currentVisionModel, currentThinkingMode, _numCtx
   );
   // Captured once so all three render sites (live loop, final, abort) agree on whether
   // thinking is active for this request. When false, splitThinkingContent is bypassed
