@@ -1,41 +1,120 @@
 /* ============================================================
-   Design tokens
+   Design tokens + theming
    ============================================================
    Single source of truth for the palette / spacing / radius /
-   elevation / focus-ring that used to be hardcoded literals
-   scattered across this file. New surfaces (app shell, sidebar,
-   menus) and the shared modal/menu base below consume these;
-   older component rules are migrated opportunistically. */
+   elevation / focus-ring. Every colour in this file resolves from
+   one of these tokens; the *values* below are ChatGPT-style
+   monochrome (light). Dark values are redefined in two blocks
+   after this `:root`:
+     - `@media (prefers-color-scheme: dark)` guarded with
+       `:root:not([data-theme="dark-off"])` … actually
+       `:root:not([data-theme="light"])` — for the "system" default
+       (no `data-theme` attribute).
+     - `:root[data-theme="dark"]` — for an explicit Dark choice,
+       winning even under a light OS.
+   An explicit Light choice (`data-theme="light"`) is excluded from
+   the media block, so bare `:root` (light) applies.
+   `theme-boot.js` stamps `data-theme` before first paint from
+   `localStorage['vpalTheme']`; `settings.js` keeps it in sync with
+   the per-user `theme` setting. */
 :root {
-  /* palette */
-  --color-accent: #0ea5e9;
-  --color-accent-strong: #0284c7;
-  --color-accent-deep: #0369a1;
-  --color-accent-bright: #38bdf8;
-  --color-accent-bg: #e0f2fe;
-  --color-accent-bg-subtle: #f0f9ff;
-  --color-ink: #0f172a;
-  --color-ink-soft: #1e293b;
-  --color-text: #1e293b;
-  --color-text-muted: #475569;
-  --color-text-subtle: #64748b;
-  --color-text-faint: #94a3b8;
-  --color-border: #e2e8f0;
-  --color-border-strong: #cbd5e1;
+  color-scheme: light;
+
+  /* base hues as `r, g, b` triples so tinted rgba() values track one source */
+  --color-accent-rgb: 13, 13, 13;
+  --color-accent-bright-rgb: 110, 110, 110;
+  --color-ink-rgb: 13, 13, 13;
+  --color-danger-rgb: 220, 38, 38;
+  --color-black-rgb: 0, 0, 0;
+  --color-white-rgb: 255, 255, 255;
+
+  /* accent = the primary-action colour (black in light, white in dark). Most
+     "accent" uses in this file are hovers / focus rings / small ticks. */
+  --color-accent: #0d0d0d;
+  --color-accent-strong: #2d2d2d;
+  --color-accent-deep: #0d0d0d;
+  --color-accent-bright: #6e6e6e;
+  --color-accent-bg: #ececec;
+  --color-accent-bg-subtle: #f4f4f4;
+  --color-accent-tint-03: rgba(var(--color-accent-rgb), 0.04);
+  --color-accent-tint-04: rgba(var(--color-accent-rgb), 0.05);
+  --color-accent-tint-08: rgba(var(--color-accent-rgb), 0.06);
+  --color-accent-tint-10: rgba(var(--color-accent-rgb), 0.08);
+  --color-accent-tint-12: rgba(var(--color-accent-rgb), 0.1);
+  --color-accent-tint-15: rgba(var(--color-accent-rgb), 0.12);
+  --color-accent-tint-18: rgba(var(--color-accent-rgb), 0.14);
+  --color-accent-tint-25: rgba(var(--color-accent-rgb), 0.16);
+  --color-link: #0066cc;
+
+  --color-ink: #0d0d0d;
+  --color-ink-soft: #2d2d2d;
+  --color-text-strong: #0d0d0d;
+  --color-text: #0d0d0d;
+  --color-text-mid: #3d3d3d;
+  --color-text-muted: #5d5d5d;
+  --color-text-subtle: #6e6e6e;
+  --color-text-faint: #8f8f8f;
+  --color-text-placeholder: #9b9b9b;
+  --color-icon-neutral: #6e6e6e;
+  --color-on-accent: #ffffff;
+
+  --color-border: #e5e5e5;
+  --color-border-strong: #d5d5d5;
+  --color-border-overlay: rgba(var(--color-black-rgb), 0.1);
+  --color-border-overlay-soft: rgba(var(--color-black-rgb), 0.08);
+
   --color-surface: #ffffff;
-  --color-surface-sunken: #f8fafc;
-  --color-app-bg: #f1f5f9;
-  --color-danger: #ef4444;
-  --color-danger-strong: #dc2626;
-  --color-danger-bg: #fff5f5;
-  --color-backdrop: rgba(15, 23, 42, 0.6);
-  /* dark-sidebar contrast set (light text/hover on the navy sidebar) */
-  --color-sidebar-bg: #0f172a;
-  --color-sidebar-text: rgba(255, 255, 255, 0.82);
-  --color-sidebar-text-faint: rgba(255, 255, 255, 0.5);
-  --color-sidebar-hover: rgba(255, 255, 255, 0.08);
-  --color-sidebar-active: rgba(56, 189, 248, 0.16);
-  --color-sidebar-border: rgba(255, 255, 255, 0.1);
+  --color-surface-sunken: #f4f4f4;
+  --color-surface-note: #f9f9f9;
+  --color-app-bg: #ffffff;
+
+  /* chat surfaces */
+  --color-bubble-user-bg: #f4f4f4;
+  --color-bubble-ai-bg: #ffffff;
+  --color-bubble-ai-border: #e5e5e5;
+  --code-bg: #0d0d0d;
+  --code-text: #e3e3e3;
+  --color-panel-dark: #303030;
+  --color-panel-dark-text: #ffffff;
+  --color-panel-dark-text-soft: #c5c5c5;
+  --color-toast-bg: #303030;
+
+  /* feedback — semantic hues kept (muted), not monochrome */
+  --color-danger: #dc2626;
+  --color-danger-strong: #b91c1c;
+  --color-danger-bg: #fdf2f2;
+  --color-danger-border: #f0b4b4;
+  --color-danger-tint-15: rgba(var(--color-danger-rgb), 0.12);
+  --color-danger-text-alt: #b42318;
+  --color-danger-bg-alt: #fbe3e0;
+  --color-warning: #b45309;
+  --color-warning-bg: #fdf1e0;
+  --color-warning-bg-soft: #fdf6ec;
+  --color-warning-border: #f0d3a8;
+  --color-warning-strong: #c2410c;
+  --color-warning-text: #92400e;
+  --color-success: #15803d;
+  --color-success-strong: #15803d;
+  --color-success-text: #0f6b39;
+  --color-success-bg: #e3f4e9;
+  --color-recording-bg: #fbe3e0;
+  --color-speaking-bg: #e3f4e9;
+
+  /* controls */
+  --color-btn-disabled-bg: #e0e0e0;
+  --color-note-text: #6e6e6e;
+
+  --color-backdrop: rgba(var(--color-black-rgb), 0.5);
+  /* sidebar contrast set — light-grey sidebar with dark text (dark theme
+     rebases it to near-black with light text). */
+  --color-sidebar-bg: #f9f9f9;
+  --color-sidebar-text: #0d0d0d;
+  --color-sidebar-text-faint: #8f8f8f;
+  --color-sidebar-hover: rgba(var(--color-black-rgb), 0.05);
+  --color-sidebar-hover-strong: rgba(var(--color-black-rgb), 0.08);
+  --color-sidebar-active: rgba(var(--color-black-rgb), 0.08);
+  --color-sidebar-border: #e5e5e5;
+  --color-sidebar-card-bg: rgba(var(--color-white-rgb), 0.7);
   /* spacing (4px base) */
   --space-1: 4px;
   --space-2: 8px;
@@ -50,18 +129,19 @@
   --radius-lg: 12px;
   --radius-xl: 16px;
   /* elevation */
-  --shadow-menu: 0 8px 28px rgba(0, 0, 0, 0.2);
-  --shadow-modal: 0 24px 64px rgba(15, 23, 42, 0.45);
-  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
-  /* focus ring — the outline:2px solid #0ea5e9 idiom repeated ~15x */
+  --shadow-menu: 0 8px 28px rgba(var(--color-black-rgb), 0.2);
+  --shadow-modal: 0 24px 64px rgba(var(--color-ink-rgb), 0.45);
+  --shadow-card: 0 8px 24px rgba(var(--color-black-rgb), 0.35);
+  --shadow-toast: 0 8px 24px rgba(var(--color-black-rgb), 0.4);
+  /* focus ring — the outline:2px solid var(--color-accent) idiom repeated ~15x */
   --focus-ring: 2px solid var(--color-accent);
   --focus-ring-offset: 2px;
-  --focus-ring-on-dark: 2px solid rgba(56, 189, 248, 0.8);
+  --focus-ring-on-dark: 2px solid rgba(var(--color-accent-bright-rgb), 0.8);
   /* scrollbars — one thin treatment everywhere (see "Scrollbars" section) */
   --scrollbar-thumb: var(--color-border-strong);
   --scrollbar-thumb-hover: var(--color-text-faint);
-  --scrollbar-thumb-dark: rgba(255, 255, 255, 0.22);
-  --scrollbar-thumb-dark-hover: rgba(255, 255, 255, 0.42);
+  --scrollbar-thumb-dark: rgba(var(--color-white-rgb), 0.22);
+  --scrollbar-thumb-dark-hover: rgba(var(--color-white-rgb), 0.42);
   /* layout / stacking */
   --sidebar-width: 272px;
   --z-nav-rail: 20;
@@ -71,15 +151,194 @@
   --z-toast: 9999;
 }
 
+/* --- Dark theme -------------------------------------------------------------
+   The same override list appears twice: once for the "system" default (no
+   `data-theme`, honour the OS via the media query) and once for an explicit
+   `data-theme="dark"` (wins under a light OS). `data-theme="light"` is
+   excluded from the media block so bare `:root` (light) applies to it. Keep
+   the two lists identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-accent-rgb: 255, 255, 255;
+    --color-accent-bright-rgb: 165, 165, 165;
+    --color-danger-rgb: 248, 113, 113;
+    --color-accent: #ffffff;
+    --color-accent-strong: #d9d9d9;
+    --color-accent-deep: #ffffff;
+    --color-accent-bright: #a5a5a5;
+    --color-accent-bg: #2f2f2f;
+    --color-accent-bg-subtle: #2b2b2b;
+    --color-link: #7ab7ff;
+    --color-text-strong: #ffffff;
+    --color-text: #ececec;
+    --color-text-mid: #cdcdcd;
+    --color-text-muted: #b4b4b4;
+    --color-text-subtle: #a5a5a5;
+    --color-text-faint: #8f8f8f;
+    --color-text-placeholder: #8f8f8f;
+    --color-icon-neutral: #b4b4b4;
+    --color-on-accent: #0d0d0d;
+    --color-border: #3a3a3a;
+    --color-border-strong: #4a4a4a;
+    --color-border-overlay: rgba(var(--color-white-rgb), 0.14);
+    --color-border-overlay-soft: rgba(var(--color-white-rgb), 0.1);
+    --color-surface: #212121;
+    --color-surface-sunken: #2f2f2f;
+    --color-surface-note: #2a2a2a;
+    --color-app-bg: #212121;
+    --color-bubble-user-bg: #2f2f2f;
+    --color-bubble-ai-bg: #262626;
+    --color-bubble-ai-border: #3a3a3a;
+    --color-panel-dark: #2f2f2f;
+    --color-panel-dark-text: #ececec;
+    --color-panel-dark-text-soft: #a5a5a5;
+    --color-toast-bg: #2f2f2f;
+    --color-danger: #f87171;
+    --color-danger-strong: #ef4444;
+    --color-danger-bg: rgba(248, 113, 113, 0.12);
+    --color-danger-border: rgba(248, 113, 113, 0.4);
+    --color-danger-text-alt: #f87171;
+    --color-danger-bg-alt: rgba(248, 113, 113, 0.16);
+    --color-warning: #fbbf24;
+    --color-warning-bg: rgba(251, 191, 36, 0.14);
+    --color-warning-bg-soft: rgba(251, 191, 36, 0.1);
+    --color-warning-border: rgba(251, 191, 36, 0.35);
+    --color-warning-strong: #f59e0b;
+    --color-warning-text: #fcd34d;
+    --color-success: #4ade80;
+    --color-success-strong: #4ade80;
+    --color-success-text: #86efac;
+    --color-success-bg: rgba(74, 222, 128, 0.15);
+    --color-recording-bg: rgba(248, 113, 113, 0.16);
+    --color-speaking-bg: rgba(74, 222, 128, 0.16);
+    --color-btn-disabled-bg: #3d3d3d;
+    --color-note-text: #a5a5a5;
+    --color-backdrop: rgba(var(--color-black-rgb), 0.6);
+    --color-sidebar-bg: #171717;
+    --color-sidebar-text: rgba(var(--color-white-rgb), 0.85);
+    --color-sidebar-text-faint: rgba(var(--color-white-rgb), 0.5);
+    --color-sidebar-hover: rgba(var(--color-white-rgb), 0.06);
+    --color-sidebar-hover-strong: rgba(var(--color-white-rgb), 0.1);
+    --color-sidebar-active: rgba(var(--color-white-rgb), 0.1);
+    --color-sidebar-border: rgba(var(--color-white-rgb), 0.1);
+    --color-sidebar-card-bg: rgba(var(--color-white-rgb), 0.08);
+    --scrollbar-thumb: rgba(var(--color-white-rgb), 0.22);
+    --scrollbar-thumb-hover: rgba(var(--color-white-rgb), 0.4);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-accent-rgb: 255, 255, 255;
+  --color-accent-bright-rgb: 165, 165, 165;
+  --color-danger-rgb: 248, 113, 113;
+  --color-accent: #ffffff;
+  --color-accent-strong: #d9d9d9;
+  --color-accent-deep: #ffffff;
+  --color-accent-bright: #a5a5a5;
+  --color-accent-bg: #2f2f2f;
+  --color-accent-bg-subtle: #2b2b2b;
+  --color-link: #7ab7ff;
+  --color-text-strong: #ffffff;
+  --color-text: #ececec;
+  --color-text-mid: #cdcdcd;
+  --color-text-muted: #b4b4b4;
+  --color-text-subtle: #a5a5a5;
+  --color-text-faint: #8f8f8f;
+  --color-text-placeholder: #8f8f8f;
+  --color-icon-neutral: #b4b4b4;
+  --color-on-accent: #0d0d0d;
+  --color-border: #3a3a3a;
+  --color-border-strong: #4a4a4a;
+  --color-border-overlay: rgba(var(--color-white-rgb), 0.14);
+  --color-border-overlay-soft: rgba(var(--color-white-rgb), 0.1);
+  --color-surface: #212121;
+  --color-surface-sunken: #2f2f2f;
+  --color-surface-note: #2a2a2a;
+  --color-app-bg: #212121;
+  --color-bubble-user-bg: #2f2f2f;
+  --color-bubble-ai-bg: #262626;
+  --color-bubble-ai-border: #3a3a3a;
+  --color-panel-dark: #2f2f2f;
+  --color-panel-dark-text: #ececec;
+  --color-panel-dark-text-soft: #a5a5a5;
+  --color-toast-bg: #2f2f2f;
+  --color-danger: #f87171;
+  --color-danger-strong: #ef4444;
+  --color-danger-bg: rgba(248, 113, 113, 0.12);
+  --color-danger-border: rgba(248, 113, 113, 0.4);
+  --color-danger-text-alt: #f87171;
+  --color-danger-bg-alt: rgba(248, 113, 113, 0.16);
+  --color-warning: #fbbf24;
+  --color-warning-bg: rgba(251, 191, 36, 0.14);
+  --color-warning-bg-soft: rgba(251, 191, 36, 0.1);
+  --color-warning-border: rgba(251, 191, 36, 0.35);
+  --color-warning-strong: #f59e0b;
+  --color-warning-text: #fcd34d;
+  --color-success: #4ade80;
+  --color-success-strong: #4ade80;
+  --color-success-text: #86efac;
+  --color-success-bg: rgba(74, 222, 128, 0.15);
+  --color-recording-bg: rgba(248, 113, 113, 0.16);
+  --color-speaking-bg: rgba(74, 222, 128, 0.16);
+  --color-btn-disabled-bg: #3d3d3d;
+  --color-note-text: #a5a5a5;
+  --color-backdrop: rgba(var(--color-black-rgb), 0.6);
+  --color-sidebar-bg: #171717;
+  --color-sidebar-text: rgba(var(--color-white-rgb), 0.85);
+  --color-sidebar-text-faint: rgba(var(--color-white-rgb), 0.5);
+  --color-sidebar-hover: rgba(var(--color-white-rgb), 0.06);
+  --color-sidebar-hover-strong: rgba(var(--color-white-rgb), 0.1);
+  --color-sidebar-active: rgba(var(--color-white-rgb), 0.1);
+  --color-sidebar-border: rgba(var(--color-white-rgb), 0.1);
+  --color-sidebar-card-bg: rgba(var(--color-white-rgb), 0.08);
+  --scrollbar-thumb: rgba(var(--color-white-rgb), 0.22);
+  --scrollbar-thumb-hover: rgba(var(--color-white-rgb), 0.4);
+}
+
+/* Inter — vendored variable woff2 (latin subset), self-hosted so it works
+   under the `font-src 'self'` CSP fallback. See CLAUDE.md "Fonts". */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('fonts/inter-latin-wght-normal.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('fonts/inter-latin-wght-italic.woff2') format('woff2-variations');
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+/* Zero every transition/animation for the one frame settings.js swaps the
+   theme (`_applyTheme` adds/removes `.theme-switching` on <html>). Prevents a
+   colour-fade smear across the whole UI and works around a Chromium quirk
+   where a `transition`ed `background: var(--token)` isn't re-evaluated when
+   the token changes via the `[data-theme]` toggle. */
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Helvetica, 'Apple Color Emoji', Arial, sans-serif, 'Segoe UI Emoji', 'Segoe UI Symbol';
   background: var(--color-app-bg);
+  color: var(--color-text);
   height: 100dvh;
 }
 
@@ -377,7 +636,7 @@ body {
 }
 
 .sidebar-new-chat:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--color-sidebar-hover-strong);
 }
 
 .sidebar-icon-btn {
@@ -505,7 +764,7 @@ body {
   display: inline-block;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(56, 189, 248, 0.18);
+  background: rgba(var(--color-accent-bright-rgb), 0.18);
   color: var(--color-accent-bright);
   font-size: 10px;
   font-weight: 600;
@@ -531,8 +790,8 @@ body {
 }
 
 .history-card-delete:hover {
-  background: rgba(239, 68, 68, 0.15);
-  color: #fca5a5;
+  background: var(--color-danger-tint-15);
+  color: var(--color-danger-border);
 }
 
 #historyEmpty,
@@ -557,7 +816,7 @@ body {
   background: var(--color-accent);
   border: none;
   border-radius: var(--radius-sm);
-  color: #fff;
+  color: var(--color-on-accent);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -846,7 +1105,7 @@ body {
   overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
-  background: #ffffff;
+  background: var(--color-surface);
 }
 
 .message {
@@ -877,7 +1136,7 @@ body {
 
 .message-timestamp {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--color-text-faint);
   margin-top: 6px;
 }
 
@@ -890,12 +1149,12 @@ body {
 }
 
 .user-message .message-label {
-  color: #0ea5e9;
+  color: var(--color-accent);
   text-align: right;
 }
 
 .ai-message .message-label {
-  color: #0f172a;
+  color: var(--color-text-strong);
 }
 
 .message-content {
@@ -904,9 +1163,9 @@ body {
   line-height: 1.65;
 }
 
-/* User bubble — right-aligned sky-blue pill */
+/* User bubble — right-aligned pill */
 .user-message .message-content {
-  background: #dbeafe;
+  background: var(--color-bubble-user-bg);
   border: none;
   border-radius: 18px 18px 4px 18px;
   max-width: 82%;
@@ -919,8 +1178,8 @@ body {
 
 /* AI response — clean card */
 .ai-message .message-content {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--color-bubble-ai-bg);
+  border: 1px solid var(--color-bubble-ai-border);
   border-radius: 4px 18px 18px 18px;
 }
 
@@ -935,7 +1194,7 @@ body {
   margin-bottom: 12px;
   font-weight: 600;
   line-height: 1.3;
-  color: #0f172a;
+  color: var(--color-text-strong);
 }
 
 .message-content h1 { font-size: 28px; }
@@ -956,7 +1215,7 @@ body {
 
 .message-content p {
   margin-bottom: 12px;
-  color: #1e293b;
+  color: var(--color-text);
 }
 
 .message-content p:last-child {
@@ -971,21 +1230,21 @@ body {
 
 .message-content li {
   margin: 6px 0;
-  color: #1e293b;
+  color: var(--color-text);
 }
 
 .message-content code {
-  background: #1e293b;
-  color: #e2e8f0;
+  background: var(--code-bg);
+  color: var(--code-text);
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: 'Courier New', monospace;
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Menlo, Consolas, monospace;
   font-size: 14px;
 }
 
 .message-content pre {
-  background: #1e293b;
-  color: #e2e8f0;
+  background: var(--code-bg);
+  color: var(--code-text);
   padding: 16px;
   border-radius: 8px;
   overflow-x: auto;
@@ -999,11 +1258,11 @@ body {
 
 /* highlight.js (atom-one-dark theme, vendored): highlightElement() adds the
    .hljs class to each <code> block. Override the theme's own #282c34 ground so
-   a highlighted block sits on the same #1e293b slate as an unhighlighted one
+   a highlighted block sits on the same `--code-bg` as an unhighlighted one
    (.message-content pre); token colours from the vendored stylesheet are left
    as-is. Same "adapt vendored CSS to the app's chrome" move as .katex-display. */
 .message-content .hljs {
-  background: #1e293b;
+  background: var(--code-bg);
 }
 
 /* Mermaid diagrams: a wide diagram scrolls in its own container rather than
@@ -1022,7 +1281,7 @@ body {
 }
 
 .mermaid-error {
-  border-left: 3px solid #c53030;
+  border-left: 3px solid var(--color-danger-text-alt);
 }
 
 /* KaTeX display-mode math ($$...$$, \[...\]) — katex.min.css sets
@@ -1037,17 +1296,17 @@ body {
 }
 
 .message-content blockquote {
-  border-left: 3px solid #0ea5e9;
+  border-left: 3px solid var(--color-accent);
   padding-left: 16px;
   margin: 16px 0;
-  color: #475569;
+  color: var(--color-text-muted);
   font-style: italic;
 }
 
 .message-content a {
-  color: #0ea5e9;
+  color: var(--color-link);
   text-decoration: none;
-  border-bottom: 1px solid #0ea5e9;
+  border-bottom: 1px solid var(--color-link);
   transition: opacity 0.2s;
 }
 
@@ -1064,19 +1323,19 @@ body {
 .message-content th,
 .message-content td {
   padding: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   text-align: left;
 }
 
 .message-content th {
-  background: #f1f5f9;
+  background: var(--color-app-bg);
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text-strong);
 }
 
 .message-content hr {
   border: none;
-  border-top: 2px solid #e2e8f0;
+  border-top: 2px solid var(--color-border);
   margin: 24px 0;
 }
 
@@ -1088,7 +1347,7 @@ body {
 
 .message-content strong {
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text-strong);
 }
 
 .message-content em {
@@ -1113,8 +1372,8 @@ body {
 }
 
 .chat-input-container:focus-within {
-  border-color: #0ea5e9;
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-tint-12);
 }
 
 .chat-input textarea {
@@ -1126,7 +1385,7 @@ body {
   font-size: 15px;
   font-family: inherit;
   line-height: 1.5;
-  color: #0f172a;
+  color: var(--color-text-strong);
   resize: none;
   overflow-y: auto;
   max-height: 180px;
@@ -1134,15 +1393,15 @@ body {
 
 .char-counter {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--color-text-placeholder);
   pointer-events: none;
   display: none;
   white-space: nowrap;
 }
 
 .char-counter.visible { display: block; }
-.char-counter.warning { color: #f59e0b; }
-.char-counter.danger  { color: #ef4444; }
+.char-counter.warning { color: var(--color-warning); }
+.char-counter.danger  { color: var(--color-danger); }
 
 .chat-input-toolbar {
   display: flex;
@@ -1166,8 +1425,8 @@ body {
 /* Base voice/toolbar button */
 .voice-btn {
   padding: 10px;
-  background: white;
-  border: 1.5px solid #e2e8f0;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
@@ -1178,8 +1437,8 @@ body {
 }
 
 .voice-btn:hover {
-  background: #f0f9ff;
-  border-color: #0ea5e9;
+  background: var(--color-accent-bg-subtle);
+  border-color: var(--color-accent);
 }
 
 .voice-btn:active {
@@ -1187,25 +1446,25 @@ body {
 }
 
 .voice-btn:focus-visible {
-  outline: 2px solid #0ea5e9;
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
 .voice-btn.recording {
-  background: #fee2e2;
-  border-color: #ef4444;
+  background: var(--color-recording-bg);
+  border-color: var(--color-danger);
   animation: pulse 1.5s infinite;
 }
 
 .voice-btn.paused {
-  background: #fef3c7;
-  border-color: #f59e0b;
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning);
   opacity: 0.7;
 }
 
 .voice-btn.speaking {
-  background: #dcfce7;
-  border-color: #22c55e;
+  background: var(--color-speaking-bg);
+  border-color: var(--color-success);
 }
 
 @keyframes pulse {
@@ -1227,7 +1486,7 @@ body {
   background: transparent;
   border: 1.5px solid transparent;
   border-radius: 8px;
-  color: #64748b;
+  color: var(--color-text-subtle);
   transition: background 0.15s, color 0.15s;
   display: flex;
   align-items: center;
@@ -1241,9 +1500,9 @@ body {
 }
 
 .toolbar-icon-btn:hover {
-  background: rgba(14, 165, 233, 0.08);
+  background: var(--color-accent-tint-08);
   border-color: transparent;
-  color: #0ea5e9;
+  color: var(--color-accent);
   transform: none;
   box-shadow: none;
 }
@@ -1253,15 +1512,15 @@ body {
 }
 
 .toolbar-icon-btn:focus-visible {
-  outline: 2px solid #0ea5e9;
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
 /* VoiceBox generation in progress (#speakerBtn shown early, before playback) */
 .toolbar-icon-btn.generating {
-  background: #e0f2fe;
-  border-color: #0ea5e9;
-  color: #0369a1;
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent);
+  color: var(--color-accent-deep);
 }
 
 /* English Editor "Changes" view — word-level tracked changes. pre-wrap keeps
@@ -1274,16 +1533,16 @@ body {
 
 .editor-diff del {
   text-decoration: line-through;
-  color: #c53030;
-  background: #fed7d7;
+  color: var(--color-danger-text-alt);
+  background: var(--color-danger-bg-alt);
   border-radius: 3px;
   padding: 0 1px;
 }
 
 .editor-diff ins {
   text-decoration: underline;
-  color: #276749;
-  background: #c6f6d5;
+  color: var(--color-success-text);
+  background: var(--color-success-bg);
   border-radius: 3px;
   padding: 0 1px;
 }
@@ -1294,10 +1553,10 @@ body {
   height: 28px;
   margin-left: 6px;
   padding: 0 4px 0 6px;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--color-border);
   border-radius: 8px;
-  background: white;
-  color: #64748b;
+  background: var(--color-surface);
+  color: var(--color-text-subtle);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -1305,44 +1564,44 @@ body {
 }
 
 .editor-view-switch:hover {
-  background: #f0f9ff;
-  border-color: #0ea5e9;
-  color: #0ea5e9;
+  background: var(--color-accent-bg-subtle);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .editor-view-switch:focus-visible {
-  outline: 2px solid #0ea5e9;
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
-/* Send button — sky blue circle */
+/* Send button — solid accent circle */
 .send-btn {
   width: 34px;
   height: 34px;
   min-width: 34px;
   padding: 0;
-  background: #0ea5e9;
+  background: var(--color-accent);
   border: none;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--color-on-accent);
   transition: background 0.15s;
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #0284c7;
+  background: var(--color-accent-strong);
 }
 
 .send-btn:disabled {
-  background: #d1d5db;
+  background: var(--color-btn-disabled-bg);
   cursor: not-allowed;
 }
 
 .send-btn:focus-visible {
-  outline: 2px solid #0ea5e9;
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1352,29 +1611,29 @@ body {
   flex-shrink: 0;
 }
 
-/* Stop-streaming button — dark navy circle */
+/* Stop-streaming button — dark circle */
 .stop-streaming-btn {
   width: 34px;
   height: 34px;
   min-width: 34px;
   padding: 0;
-  background: #0f172a;
+  background: var(--color-ink);
   border: none;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--color-on-accent);
   transition: background 0.15s;
 }
 
 .stop-streaming-btn:hover {
-  background: #1e293b;
+  background: var(--color-ink-soft);
 }
 
 .stop-streaming-btn:focus-visible {
-  outline: 2px solid #0ea5e9;
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1389,11 +1648,11 @@ body {
   position: fixed;
   right: 20px;
   bottom: 20px;
-  background: rgba(15, 23, 42, 0.95);
-  color: #fff;
+  background: var(--color-toast-bg);
+  color: var(--color-panel-dark-text);
   padding: 10px 14px;
   border-radius: var(--radius-sm);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-toast);
   font-size: 14px;
   z-index: var(--z-toast);
   opacity: 0;
@@ -1409,7 +1668,7 @@ body {
 /* Status messages */
 .status-muted   { opacity: 0.5; }
 .status-stopped { opacity: 0.5; font-size: 0.85em; margin-top: 4px; }
-.status-error   { color: #ef4444; }
+.status-error   { color: var(--color-danger); }
 .status-hint    { opacity: 0.7; font-size: 0.85em; }
 
 /* Live elapsed-time / token-count meta on the "Thinking…" summary */
@@ -1423,9 +1682,9 @@ body {
 /* Thinking block */
 .thinking-block {
   margin-bottom: 12px;
-  border: 1px solid rgba(14, 165, 233, 0.25);
+  border: 1px solid var(--color-accent-tint-25);
   border-radius: 6px;
-  background: rgba(14, 165, 233, 0.04);
+  background: var(--color-accent-tint-04);
   overflow: hidden;
 }
 
@@ -1433,7 +1692,7 @@ body {
   cursor: pointer;
   padding: 6px 12px;
   font-size: 0.78rem;
-  color: #0ea5e9;
+  color: var(--color-accent);
   font-style: italic;
   user-select: none;
   list-style: none;
@@ -1458,7 +1717,7 @@ body {
 }
 
 .thinking-block summary:focus-visible {
-  outline: 2px solid #0ea5e9;
+  outline: var(--focus-ring);
   outline-offset: -2px;
   border-radius: 4px;
 }
@@ -1466,10 +1725,10 @@ body {
 .thinking-content {
   padding: 8px 12px;
   font-size: 0.8rem;
-  color: #64748b;
+  color: var(--color-text-subtle);
   font-family: inherit;
   line-height: 1.55;
-  border-top: 1px solid rgba(14, 165, 233, 0.15);
+  border-top: 1px solid var(--color-accent-tint-15);
   max-height: 400px;
   overflow-y: auto;
 }
@@ -1503,12 +1762,12 @@ body {
 /* Context trim divider */
 .context-trim-notice {
   text-align: center;
-  color: #94a3b8;
+  color: var(--color-text-faint);
   font-size: 0.75rem;
   padding: 4px 0;
   margin: 4px 0;
-  border-top: 1px dashed #cbd5e1;
-  border-bottom: 1px dashed #cbd5e1;
+  border-top: 1px dashed var(--color-border-strong);
+  border-bottom: 1px dashed var(--color-border-strong);
 }
 
 /* Image preview strip */
@@ -1517,8 +1776,8 @@ body {
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  border-bottom: 1px solid rgba(14, 165, 233, 0.1);
-  background: rgba(14, 165, 233, 0.03);
+  border-bottom: 1px solid var(--color-accent-tint-10);
+  background: var(--color-accent-tint-03);
 }
 
 .image-preview-thumb {
@@ -1527,12 +1786,12 @@ body {
   max-width: 120px;
   border-radius: 6px;
   object-fit: cover;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--color-border-overlay);
   display: block;
 }
 
 .remove-image-btn {
-  background: rgba(0, 0, 0, 0.07);
+  background: rgba(var(--color-black-rgb), 0.07);
   border: none;
   border-radius: 50%;
   width: 22px;
@@ -1542,7 +1801,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #555;
+  color: var(--color-icon-neutral);
   flex-shrink: 0;
   line-height: 1;
 }
@@ -1554,18 +1813,18 @@ body {
 }
 
 .remove-image-btn:hover {
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(var(--color-black-rgb), 0.15);
 }
 
 .remove-image-btn:focus-visible {
-  outline: 2px solid #0ea5e9;
+  outline: var(--focus-ring);
   outline-offset: 1px;
 }
 
 /* Attach menu button active state — set when an image or document is pending */
 #attachMenuBtn.active {
-  color: #0ea5e9;
-  background: rgba(14, 165, 233, 0.12);
+  color: var(--color-accent);
+  background: var(--color-accent-tint-12);
   border-color: transparent;
 }
 
@@ -1577,15 +1836,15 @@ body {
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  border-bottom: 1px solid rgba(14, 165, 233, 0.1);
-  background: rgba(14, 165, 233, 0.03);
+  border-bottom: 1px solid var(--color-accent-tint-10);
+  background: var(--color-accent-tint-03);
 }
 
 .document-preview-icon {
   width: 22px;
   height: 22px;
   flex-shrink: 0;
-  color: #0ea5e9;
+  color: var(--color-accent);
 }
 
 .document-preview-name {
@@ -1595,7 +1854,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-  color: #334155;
+  color: var(--color-text-mid);
 }
 
 /* Image in user message bubble */
@@ -1608,7 +1867,7 @@ body {
   object-fit: contain;
   display: block;
   margin-bottom: 6px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--color-border-overlay-soft);
 }
 
 /* Document chip in user message bubble — shown above the folded-in question;
@@ -1620,10 +1879,10 @@ body {
   padding: 5px 10px;
   margin-bottom: 6px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--color-sidebar-card-bg);
+  border: 1px solid var(--color-border-overlay-soft);
   font-size: 13px;
-  color: #334155;
+  color: var(--color-text-mid);
   max-width: 100%;
 }
 
@@ -1631,7 +1890,7 @@ body {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  color: #0ea5e9;
+  color: var(--color-accent);
 }
 
 .user-message-document span {
@@ -1646,7 +1905,7 @@ body {
   align-items: center;
   gap: 5px;
   font-style: italic;
-  color: #94a3b8;
+  color: var(--color-text-faint);
   font-size: 0.85rem;
   margin-bottom: 4px;
 }
@@ -1672,7 +1931,7 @@ body {
   background: transparent;
   border: none;
   border-radius: 6px;
-  color: #94a3b8;
+  color: var(--color-text-faint);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1681,12 +1940,12 @@ body {
 }
 
 .action-btn:hover {
-  background: rgba(14, 165, 233, 0.08);
-  color: #0ea5e9;
+  background: var(--color-accent-tint-08);
+  color: var(--color-accent);
 }
 
 .action-btn:focus-visible {
-  outline: 2px solid #0ea5e9;
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1697,20 +1956,20 @@ body {
 }
 
 .copy-btn.copied {
-  color: #10b981;
+  color: var(--color-success-strong);
 }
 
 .speak-btn.speaking {
-  color: #0ea5e9;
-  background: rgba(14, 165, 233, 0.1);
+  color: var(--color-accent);
+  background: var(--color-accent-tint-10);
 }
 
 /* VoiceBox generation in progress — spinner replaces the icon on the
    per-message button; #speakerBtn keeps its own icon but still spins it,
    giving a header-level indicator for auto-TTS where there is no button. */
 .speak-btn.generating {
-  color: #0ea5e9;
-  background: rgba(14, 165, 233, 0.1);
+  color: var(--color-accent);
+  background: var(--color-accent-tint-10);
 }
 
 .generating svg {
@@ -1746,10 +2005,10 @@ body {
    position: relative), pinned just inside its right edge and spanning roughly
    the vertical band occupied by .chat-messages (header above, .chat-input
    below). It is a non-blocking overlay — pointer-events are re-enabled only on
-   the interactive markers and cards. Colours reuse the app's muted slate
-   (#94a3b8, as in .message-timestamp / .image-placeholder), the sky-blue
-   accent (#0ea5e9, used throughout), and the dark toast palette
-   (rgba(15, 23, 42, …), as in .toast) for the floating card. */
+   the interactive markers and cards. Colours come from the shared tokens —
+   `--color-text-faint` for the idle marker, `--color-accent` for the active
+   one, and the `--color-panel-dark*` set (shared with .toast) for the
+   floating card. */
 .nav-rail {
   position: absolute;
   right: 12px;
@@ -1795,7 +2054,7 @@ body {
   width: 14px;
   height: 2px;
   border-radius: 2px;
-  background-color: #94a3b8;
+  background-color: var(--color-text-faint);
   transition: width 0.12s ease, background-color 0.12s ease;
 }
 
@@ -1807,7 +2066,7 @@ body {
 .nav-rail__marker--active::before,
 .nav-rail:hover .nav-rail__marker--active::before {
   width: 26px;
-  background-color: #0ea5e9;
+  background-color: var(--color-accent);
 }
 
 /* Floating preview card — dark panel to the left of the rail. JS sets `top`
@@ -1818,10 +2077,10 @@ body {
   max-width: 260px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.97);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  color: #fff;
+  background: var(--color-panel-dark);
+  border: 1px solid rgba(var(--color-white-rgb), 0.12);
+  box-shadow: var(--shadow-card);
+  color: var(--color-panel-dark-text);
   pointer-events: auto;
 }
 
@@ -1839,7 +2098,7 @@ body {
   height: 0;
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
-  border-left: 6px solid rgba(15, 23, 42, 0.97);
+  border-left: 6px solid var(--color-panel-dark);
 }
 
 .nav-rail__card-title {
@@ -1854,14 +2113,14 @@ body {
   margin-top: 4px;
   font-size: 0.78rem;
   line-height: 1.4;
-  color: #cbd5e1;
+  color: var(--color-panel-dark-text-soft);
 }
 
 /* Transient flash on a message bubble when its rail marker is clicked. */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes navRailFlash {
     0% {
-      background-color: rgba(14, 165, 233, 0.18);
+      background-color: var(--color-accent-tint-18);
     }
 
     100% {
@@ -1876,7 +2135,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .message.nav-rail-flash {
-    outline: 2px solid rgba(14, 165, 233, 0.5);
+    outline: 2px solid rgba(var(--color-accent-rgb), 0.5);
     outline-offset: 4px;
   }
 }
@@ -1912,8 +2171,8 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  background: #0f172a;
-  color: #ffffff;
+  background: var(--color-ink);
+  color: var(--color-panel-dark-text);
 }
 
 #settingsLightbox .settings-title {
@@ -1926,15 +2185,15 @@ body {
   background: transparent;
   border: none;
   border-radius: 6px;
-  color: #cbd5e1;
+  color: var(--color-panel-dark-text-soft);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
 }
 
 #settingsLightbox .settings-close:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
+  background: rgba(var(--color-white-rgb), 0.12);
+  color: var(--color-panel-dark-text);
 }
 
 #settingsLightbox .settings-body {
@@ -1950,8 +2209,8 @@ body {
   gap: 2px;
   padding: 10px;
   overflow-y: auto;
-  background: #f8fafc;
-  border-right: 1px solid #e2e8f0;
+  background: var(--color-surface-sunken);
+  border-right: 1px solid var(--color-border);
 }
 
 #settingsNav .settings-nav-btn {
@@ -1960,25 +2219,25 @@ body {
   border: none;
   border-radius: 8px;
   font-size: 13px;
-  color: #1e293b;
+  color: var(--color-text);
   text-align: left;
   cursor: pointer;
 }
 
 #settingsNav .settings-nav-btn:hover {
-  background: #f0f9ff;
-  color: #0ea5e9;
+  background: var(--color-accent-bg-subtle);
+  color: var(--color-accent);
 }
 
 #settingsNav .settings-nav-btn.is-active {
-  background: #e0f2fe;
-  color: #0369a1;
+  background: var(--color-accent-bg);
+  color: var(--color-accent-deep);
   font-weight: 600;
-  box-shadow: inset 3px 0 0 #0ea5e9;
+  box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
 #settingsNav .settings-nav-btn:focus-visible {
-  outline: 2px solid #0ea5e9;
+  outline: var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -2011,35 +2270,35 @@ body {
 #settingsPanel .settings-field label {
   font-size: 13px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text);
 }
 
 #settingsPanel .settings-field-hint {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--color-text-faint);
 }
 
 #settingsPanel .settings-field input[type="text"],
 #settingsPanel .settings-field select {
   padding: 8px 10px;
-  border: 2px solid #e2e8f0;
+  border: 2px solid var(--color-border);
   border-radius: 8px;
-  background: #ffffff;
-  color: #2d3748;
+  background: var(--color-surface);
+  color: var(--color-text);
   font-size: 13px;
 }
 
 #settingsPanel .settings-field input[type="text"]:focus,
 #settingsPanel .settings-field select:focus {
   outline: none;
-  border-color: #0ea5e9;
+  border-color: var(--color-accent);
 }
 
 #settingsPanel .settings-field input[type="checkbox"] {
   width: 16px;
   height: 16px;
   align-self: flex-start;
-  accent-color: #0ea5e9;
+  accent-color: var(--color-accent);
   cursor: pointer;
 }
 
@@ -2048,7 +2307,7 @@ body {
   background: transparent;
   border: none;
   border-radius: 6px;
-  color: #0ea5e9;
+  color: var(--color-accent);
   font-size: 13px;
   cursor: pointer;
 }
@@ -2058,16 +2317,16 @@ body {
 }
 
 #settingsPanel .settings-field-reset:hover {
-  background: #f0f9ff;
+  background: var(--color-accent-bg-subtle);
 }
 
 #settingsPanel .settings-note {
   padding: 6px 10px;
-  background: #f7fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--color-surface-note);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 12px;
-  color: #718096;
+  color: var(--color-note-text);
 }
 
 #settingsPanel .settings-persona-overrides {
@@ -2075,17 +2334,17 @@ body {
   flex-direction: column;
   gap: 15px;
   padding: 12px 0 4px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--color-border);
 }
 
 #settingsPanel .settings-prompt-details {
   font-size: 12px;
-  color: #475569;
+  color: var(--color-text-muted);
 }
 
 #settingsPanel .settings-prompt-details summary {
   cursor: pointer;
-  color: #0369a1;
+  color: var(--color-accent-deep);
 }
 
 #settingsPanel .settings-prompt-view {
@@ -2106,15 +2365,15 @@ body {
   gap: 8px;
   margin-top: 4px;
   padding-top: 14px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--color-border);
 }
 
 #settingsPanel .settings-save {
   padding: 8px 16px;
-  background: #0ea5e9;
+  background: var(--color-accent);
   border: none;
   border-radius: 8px;
-  color: #ffffff;
+  color: var(--color-on-accent);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -2127,10 +2386,10 @@ body {
 
 #settingsPanel .settings-cancel {
   padding: 8px 14px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
   border-radius: 8px;
-  color: #1e293b;
+  color: var(--color-text);
   font-size: 13px;
   cursor: pointer;
 }
@@ -2144,7 +2403,7 @@ body {
   margin-left: auto;
   background: transparent;
   border: none;
-  color: #64748b;
+  color: var(--color-text-subtle);
   font-size: 12px;
   text-decoration: underline;
   cursor: pointer;
@@ -2155,11 +2414,11 @@ body {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
+  background: var(--color-warning-bg-soft);
+  border: 1px solid var(--color-warning-border);
   border-radius: 8px;
   font-size: 13px;
-  color: #9a3412;
+  color: var(--color-warning-text);
 }
 
 #settingsPanel .settings-confirm button {
@@ -2171,14 +2430,14 @@ body {
 }
 
 #settingsPanel .settings-confirm .settings-confirm-yes {
-  background: #ea580c;
-  color: #ffffff;
+  background: var(--color-warning-strong);
+  color: var(--color-on-accent);
 }
 
 #settingsPanel .settings-confirm .settings-confirm-no {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  color: #1e293b;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
 }
 
 #settingsPanel .settings-unavailable {
@@ -2225,7 +2484,7 @@ body {
 
 #settingsResetAll {
   background: transparent;
-  border: 1px solid #fca5a5;
+  border: 1px solid var(--color-danger-border);
   color: var(--color-danger-strong);
 }
 
@@ -2246,8 +2505,8 @@ body {
 }
 
 /* Toolbar badges — compact, muted, non-interactive in appearance but clickable
-   (they open the lightbox). #thinkingBadge.is-on borrows the sky-blue accent
-   triad (#e0f2fe / #0ea5e9 / #0369a1). */
+   (they open the lightbox). #thinkingBadge.is-on borrows the accent triad
+   (--color-accent-bg / --color-accent / --color-accent-deep). */
 #modelBadge,
 #thinkingBadge {
   display: inline-flex;
@@ -2256,10 +2515,10 @@ body {
   height: 32px;
   max-width: 180px;
   padding: 0 10px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  color: #64748b;
+  color: var(--color-text-subtle);
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -2270,20 +2529,20 @@ body {
 
 #modelBadge:hover,
 #thinkingBadge:hover {
-  border-color: #0ea5e9;
-  color: #0369a1;
+  border-color: var(--color-accent);
+  color: var(--color-accent-deep);
 }
 
 #modelBadge:focus-visible,
 #thinkingBadge:focus-visible {
-  outline: 2px solid #0ea5e9;
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
 #thinkingBadge.is-on {
-  background: #e0f2fe;
-  border-color: #0ea5e9;
-  color: #0369a1;
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent);
+  color: var(--color-accent-deep);
 }
 
 /* Open/close motion for the settings shell comes from `.lightbox__backdrop` /
@@ -2316,7 +2575,7 @@ body {
     flex-direction: row;
     overflow-x: auto;
     border-right: none;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid var(--color-border);
   }
 
   #settingsNav .settings-nav-btn {
@@ -2324,7 +2583,7 @@ body {
   }
 
   #settingsNav .settings-nav-btn.is-active {
-    box-shadow: inset 0 -3px 0 #0ea5e9;
+    box-shadow: inset 0 -3px 0 var(--color-accent);
   }
 
   #modelBadge,

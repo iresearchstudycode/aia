@@ -77,6 +77,7 @@ class TestGetSettingsFresh:
             "thinking_enabled": False,
             "thinking_depth": "medium",
             "nav_rail": True,
+            "theme": "system",
             "active_persona": "englishEditor",
         }
 
@@ -160,11 +161,19 @@ class TestPutGlobal:
             "thinking_enabled": True,
             "thinking_depth": "low",
             "nav_rail": False,
+            "theme": "dark",
             "active_persona": "legal",
         }
         response = client.put("/settings/global", headers=_HEADERS, json=payload)
         assert response.status_code == 200
         assert response.json()["global"] == payload
+
+    @pytest.mark.parametrize("value", ["system", "light", "dark"])
+    def test_theme_choices_accepted(self, client: TestClient, value: str) -> None:
+        response = client.put("/settings/global", headers=_HEADERS, json={"theme": value})
+        assert response.status_code == 200
+        assert response.json()["global"]["theme"] == value
+        assert _get(client)["global"]["theme"] == value
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +290,8 @@ class TestValidation:
             {"stt_lang": "english"},
             {"stt_lang": "EN-us"},
             {"nav_rail": None},
+            {"theme": "solarized"},
+            {"theme": None},
             {"active_persona": "wizard"},
             {"totally_unknown_key": "x"},
         ],

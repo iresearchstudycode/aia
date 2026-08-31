@@ -60,6 +60,7 @@ _GLOBAL_KEYS: tuple[str, ...] = (
     "thinking_enabled",
     "thinking_depth",
     "nav_rail",
+    "theme",
     "active_persona",
 )
 
@@ -72,6 +73,7 @@ _PERSONA_OVERRIDE_KEYS: tuple[str, ...] = (
 _TTS_ENGINES: tuple[str, ...] = ("piper", "voicebox")
 _THINKING_DEPTHS: tuple[str, ...] = ("low", "medium", "high")
 _EDITOR_MODES: tuple[str, ...] = ("clean", "changes", "explain")
+_THEMES: tuple[str, ...] = ("system", "light", "dark")
 
 _BOOL_GLOBAL_KEYS: frozenset[str] = frozenset({"auto_speak", "thinking_enabled", "nav_rail"})
 
@@ -112,6 +114,7 @@ def _env_defaults() -> dict[str, Any]:
         "thinking_enabled": _as_bool(os.environ.get("VPAL_DEFAULT_THINKING"), False),
         "thinking_depth": os.environ.get("VPAL_DEFAULT_THINKING_DEPTH", "medium"),
         "nav_rail": _as_bool(os.environ.get("VPAL_DEFAULT_NAV_RAIL"), True),
+        "theme": os.environ.get("VPAL_DEFAULT_THEME", "system"),
         "active_persona": "englishEditor",
     }
 
@@ -264,6 +267,8 @@ def _validate_global(key: str, value: Any) -> Any:
         return _require_choice(key, value, _TTS_ENGINES)
     if key == "thinking_depth":
         return _require_choice(key, value, _THINKING_DEPTHS)
+    if key == "theme":
+        return _require_choice(key, value, _THEMES)
     if key == "stt_lang":
         if not isinstance(value, str) or not _STT_LANG_RE.match(value):
             raise ValidationError("stt_lang must be a BCP-47-style tag (e.g. en, en-US)")

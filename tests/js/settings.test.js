@@ -10,6 +10,7 @@ const {
   diffSettings,
   buildMigrationPayload,
   setActivePersona,
+  _applyTheme,
 } = require('../../src/aia/scripts/settings.js');
 
 // Minimal snapshot in the `GET /settings` shape.
@@ -24,6 +25,7 @@ function makeSnapshot(overrides) {
       thinking_enabled: false,
       thinking_depth: 'medium',
       nav_rail: true,
+      theme: 'system',
       active_persona: 'englishEditor',
     },
     personas: {
@@ -45,6 +47,7 @@ function makeSnapshot(overrides) {
         thinking_enabled: false,
         thinking_depth: 'medium',
         nav_rail: true,
+        theme: 'system',
         active_persona: 'englishEditor',
       },
       persona: {
@@ -98,6 +101,50 @@ describe('resolveSetting', () => {
   test('unknown persona key is ignored, global used', () => {
     const s = makeSnapshot();
     expect(resolveSetting('tts_engine', 'nope', s)).toBe('piper');
+  });
+
+  test('theme resolves from global, else the default', () => {
+    const s = makeSnapshot();
+    expect(resolveSetting('theme', null, s)).toBe('system');
+    s.global.theme = 'dark';
+    expect(resolveSetting('theme', null, s)).toBe('dark');
+  });
+});
+
+describe('_applyTheme', () => {
+  afterEach(() => {
+    document.documentElement.removeAttribute('data-theme');
+    try {
+      localStorage.removeItem('vpalTheme');
+    } catch {
+      /* jsdom without storage — ignore */
+    }
+  });
+
+  test('light / dark set the data-theme attribute', () => {
+    _applyTheme('dark');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    _applyTheme('light');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  test('system clears the attribute (CSS @media takes over)', () => {
+    _applyTheme('dark');
+    _applyTheme('system');
+    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+  });
+
+  test('an unknown value is treated as system', () => {
+    _applyTheme('dark');
+    _applyTheme('solarized');
+    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+  });
+
+  test('mirrors the choice to localStorage', () => {
+    _applyTheme('dark');
+    expect(localStorage.getItem('vpalTheme')).toBe('dark');
+    _applyTheme('system');
+    expect(localStorage.getItem('vpalTheme')).toBe('system');
   });
 });
 

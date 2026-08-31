@@ -194,6 +194,7 @@ def _login_html(error: str = "") -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>Sign in — {_APP_TITLE}</title>
   <link rel="stylesheet" href="/auth/static/login.css">
 </head>
@@ -245,6 +246,7 @@ def _setup_html(users: dict[str, str]) -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>Setup — {_APP_TITLE}</title>
   <link rel="stylesheet" href="/auth/static/login.css">
 </head>
