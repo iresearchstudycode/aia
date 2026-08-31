@@ -107,6 +107,7 @@ const crossModuleGlobals = {
   renderMermaidIn: 'readonly',
   _repairMermaid: 'readonly',
   _cleanupMermaidOrphan: 'readonly',
+  _colourCodeMermaidNodes: 'readonly',
   _addMarkdownCopyBtn: 'readonly',
   personaIconEl: 'readonly',
   enrichRenderedContent: 'readonly',
