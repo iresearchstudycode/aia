@@ -171,6 +171,34 @@ describe('_repairMermaid', () => {
     const fixed = _repairMermaid(src);
     expect(fixed).toContain('M["Gemma Service (GPU accelerated)"]');
   });
+
+  test('appends a missing `end` when a subgraph is left unclosed', () => {
+    const src = [
+      'flowchart TD',
+      '  A --> B',
+      '  subgraph Cluster ["Ollama"]',
+      '    B --> C',
+      '  end',
+      '  subgraph Stray thing', // model junk at the tail, no `end`
+    ].join('\n');
+    const fixed = _repairMermaid(src);
+    const opens = (fixed.match(/^[ \t]*subgraph\b/gim) || []).length;
+    const ends = (fixed.match(/^[ \t]*end\b/gim) || []).length;
+    expect(opens).toBe(ends);
+  });
+
+  test('leaves a balanced multi-word subgraph title untouched', () => {
+    const src = [
+      'graph TD',
+      '  C --> D{Web Application Firewall (WAF)}', // forces the repair path
+      '  subgraph Egress Path Controls',
+      '    I --> J',
+      '  end',
+    ].join('\n');
+    const fixed = _repairMermaid(src);
+    expect(fixed).toContain('subgraph Egress Path Controls');
+    expect((fixed.match(/^[ \t]*end\b/gim) || []).length).toBe(1);
+  });
 });
 
 describe('_cleanupMermaidOrphan', () => {

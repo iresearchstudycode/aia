@@ -1,4 +1,4 @@
-# Session Status — 2026-08-31 (rev 13)
+# Session Status — 2026-08-31 (rev 14)
 
 Handoff note for resuming work. Overwrite freely.
 
@@ -6,10 +6,20 @@ Handoff note for resuming work. Overwrite freely.
 
 | | |
 |---|---|
-| `master` / `dev` | **v1.31.0** at `06e660b`, zero drift |
-| `fix/mermaid-repair-edge-labels` | **v1.31.1** — `_repairMermaid` edge labels/classDef + wide-flowchart scroll; PR into `dev` |
+| `master` / `dev` | **v1.31.1** at `a11cb4d`, zero drift |
+| `fix/mermaid-repair-subgraph` | **v1.31.2** — `_repairMermaid` balances `subgraph`/`end`; PR into `dev` |
 | Working tree | clean |
 | Docker stack | 7 services healthy. Still owed: a full `docker compose up -d --build` for the Inter woff2, `VPAL_DEFAULT_THEME` default, and the `auth` `<meta color-scheme>` tag. v1.30–1.31.x are all frontend-only — no service / image / env changes. |
+
+## ▶ Mermaid repair — running tally
+
+`_repairMermaid` runs **only** as the retry after a raw `mermaid.render()` failure, so it's free to be aggressive. It now handles, for `graph`/`flowchart`:
+- unquoted punctuation in **node** labels (v1.30.0) and **edge** labels (v1.31.1)
+- literal `\n` / `& \n`, `<br/>` (v1.31.x)
+- `classDef` / `style` / `linkStyle` lines + `:::class` (v1.31.1 — we colour-code by shape instead)
+- **unclosed `subgraph`** — appends missing `end`s (v1.31.2)
+
+Plus `flowchart.useMaxWidth: false` (v1.31.1) so wide flowcharts scroll at natural size instead of shrinking to unreadable. Each fix came from a real failing AI response the user pasted; verify new ones in the faithful harness (real script order + CSP `<meta>` + `css/style.css` — NOT root `style.css`).
 
 ## ▶ v1.31.1 — what shipped
 
