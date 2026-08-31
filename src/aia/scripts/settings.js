@@ -395,10 +395,11 @@ function initSettings() {
 
   // Backup block — export the raw GET /settings JSON to a file, or import one
   // back. Ids are `settings*`-scoped so the history lightbox's `history-*` CSS
-  // never collides; they lean on the existing `.settings-*` button styles.
+  // never collides. `.settings-backup-btn` gives them the same neutral pill as
+  // `#settingsResetAll` so the footer reads as one row of peer buttons.
   var exportBtn = _settingsEl('button', {
     id: 'settingsExportBtn',
-    class: 'settings-section-reset',
+    class: 'settings-backup-btn',
     type: 'button',
     text: 'Export settings'
   });
@@ -406,7 +407,7 @@ function initSettings() {
 
   var importBtn = _settingsEl('button', {
     id: 'settingsImportBtn',
-    class: 'settings-section-reset',
+    class: 'settings-backup-btn',
     type: 'button',
     text: 'Import settings'
   });

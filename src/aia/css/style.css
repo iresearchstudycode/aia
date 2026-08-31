@@ -57,6 +57,11 @@
   --focus-ring: 2px solid var(--color-accent);
   --focus-ring-offset: 2px;
   --focus-ring-on-dark: 2px solid rgba(56, 189, 248, 0.8);
+  /* scrollbars — one thin treatment everywhere (see "Scrollbars" section) */
+  --scrollbar-thumb: var(--color-border-strong);
+  --scrollbar-thumb-hover: var(--color-text-faint);
+  --scrollbar-thumb-dark: rgba(255, 255, 255, 0.22);
+  --scrollbar-thumb-dark-hover: rgba(255, 255, 255, 0.42);
   /* layout / stacking */
   --sidebar-width: 272px;
   --z-nav-rail: 20;
@@ -232,6 +237,90 @@ body {
     from { opacity: 0; transform: translate(-50%, -46%); }
     to   { opacity: 1; transform: translate(-50%, -50%); }
   }
+}
+
+/* ============================================================
+   Scrollbars
+   ============================================================
+   One thin, unobtrusive treatment for every scroll container so
+   they all match instead of falling back to the ~16px native bar.
+   Light surfaces use the grey border/-faint thumb; the dark navy
+   sidebar history list and the slate code blocks use a
+   translucent-white thumb. Firefox gets `scrollbar-*`, Chromium/
+   WebKit the `::-webkit-scrollbar-*` pseudo-elements. */
+.chat-messages,
+#settingsNav,
+#settingsPanel,
+.thinking-content,
+.settings-prompt-view,
+.message-content .katex-display,
+.mermaid-diagram {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.chat-messages::-webkit-scrollbar,
+#settingsNav::-webkit-scrollbar,
+#settingsPanel::-webkit-scrollbar,
+.thinking-content::-webkit-scrollbar,
+.settings-prompt-view::-webkit-scrollbar,
+.message-content .katex-display::-webkit-scrollbar,
+.mermaid-diagram::-webkit-scrollbar,
+#historyList::-webkit-scrollbar,
+.message-content pre::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.chat-messages::-webkit-scrollbar-track,
+#settingsNav::-webkit-scrollbar-track,
+#settingsPanel::-webkit-scrollbar-track,
+.thinking-content::-webkit-scrollbar-track,
+.settings-prompt-view::-webkit-scrollbar-track,
+.message-content .katex-display::-webkit-scrollbar-track,
+.mermaid-diagram::-webkit-scrollbar-track,
+#historyList::-webkit-scrollbar-track,
+.message-content pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-messages::-webkit-scrollbar-thumb,
+#settingsNav::-webkit-scrollbar-thumb,
+#settingsPanel::-webkit-scrollbar-thumb,
+.thinking-content::-webkit-scrollbar-thumb,
+.settings-prompt-view::-webkit-scrollbar-thumb,
+.message-content .katex-display::-webkit-scrollbar-thumb,
+.mermaid-diagram::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover,
+#settingsNav::-webkit-scrollbar-thumb:hover,
+#settingsPanel::-webkit-scrollbar-thumb:hover,
+.thinking-content::-webkit-scrollbar-thumb:hover,
+.settings-prompt-view::-webkit-scrollbar-thumb:hover,
+.message-content .katex-display::-webkit-scrollbar-thumb:hover,
+.mermaid-diagram::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+/* Dark contexts — navy sidebar history list, slate code blocks. */
+#historyList,
+.message-content pre {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-dark) transparent;
+}
+
+#historyList::-webkit-scrollbar-thumb,
+.message-content pre::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-dark);
+  border-radius: 4px;
+}
+
+#historyList::-webkit-scrollbar-thumb:hover,
+.message-content pre::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-dark-hover);
 }
 
 /* ============================================================
@@ -1679,32 +1768,11 @@ body {
   display: none;
 }
 
-/* Thin custom scrollbar on the messages list so the rail's right-edge markers
-   clear it — the app otherwise has no scrollbar styling, leaving a ~16px native
-   bar sitting on top of the interactive markers on Windows Chrome. This is the
-   only rule in this section outside the .nav-rail* / #navRail* namespace, and it
-   is purely additive to the existing .chat-messages rule. */
+/* `scrollbar-gutter: stable` keeps the rail's right-edge markers clear of the
+   messages-list scrollbar on Windows Chrome. The scrollbar's *appearance* is
+   set once for every scroll container in the "Scrollbars" section below. */
 .chat-messages {
   scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
-}
-
-.chat-messages::-webkit-scrollbar {
-  width: 8px;
-}
-
-.chat-messages::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.chat-messages::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
-  border-radius: 4px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover {
-  background-color: #94a3b8;
 }
 
 /* One marker per conversation turn. The element itself is a transparent,
@@ -2023,10 +2091,12 @@ body {
 #settingsPanel .settings-prompt-view {
   margin-top: 6px;
   padding: 8px 10px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   white-space: pre-wrap;
+  max-height: 220px;
+  overflow-y: auto;
 }
 
 #settingsPanel .settings-actions {
@@ -2121,8 +2191,8 @@ body {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 18px;
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
+  background: var(--color-surface-sunken);
+  border-top: 1px solid var(--color-border);
 }
 
 /* Backup row (Export / Import settings JSON) — sits opposite Reset all. */
@@ -2137,21 +2207,42 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #94a3b8;
+  color: var(--color-text-faint);
 }
 
-#settingsResetAll {
+/* Footer buttons — one shared pill. Reset all keeps the danger outline;
+   Export / Import are the neutral variant. Same box metrics so the row
+   reads as three peers. (8px radius matches the Save/Cancel buttons in
+   the panel above — the settings dialog predates the --radius-* tokens
+   and is uniformly 8px.) */
+#settingsResetAll,
+.settings-backup-btn {
   padding: 7px 14px;
-  background: transparent;
-  border: 1px solid #fca5a5;
   border-radius: 8px;
-  color: #dc2626;
   font-size: 12px;
   cursor: pointer;
 }
 
+#settingsResetAll {
+  background: transparent;
+  border: 1px solid #fca5a5;
+  color: var(--color-danger-strong);
+}
+
 #settingsResetAll:hover {
-  background: #fef2f2;
+  background: var(--color-danger-bg);
+}
+
+.settings-backup-btn {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.settings-backup-btn:hover {
+  background: var(--color-accent-bg-subtle);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 /* Toolbar badges — compact, muted, non-interactive in appearance but clickable
