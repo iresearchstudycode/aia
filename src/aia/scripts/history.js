@@ -154,6 +154,63 @@ function resolveActiveCardId(list, currentId) {
   return null;
 }
 
+/**
+ * Display name for a persona key: the live label maps first, then the
+ * removed-persona map, then the raw key. `labels` overrides the browser globals
+ * for tests.
+ *
+ * @param {string} key
+ * @param {?Object<string,string>} [labels]
+ * @returns {string}
+ */
+function _hcPersonaLabel(key, labels) {
+  if (labels && labels[key]) return labels[key];
+  if (typeof personaLabels !== 'undefined' && personaLabels && personaLabels[key]) {
+    return personaLabels[key];
+  }
+  if (HISTORY_PERSONA_LABELS[key]) return HISTORY_PERSONA_LABELS[key];
+  if (HISTORY_REMOVED_LABELS[key]) return HISTORY_REMOVED_LABELS[key];
+  return key;
+}
+
+/**
+ * Bucket a newest-first conversation list into persona groups. Group order =
+ * first-seen order, so the persona with the most recent activity comes first.
+ * Conversations with no `persona_key` fall into a trailing "Unassigned" group;
+ * a since-removed persona (e.g. `claudePromptCompressor`) keeps its own group
+ * so those threads stay identifiable.
+ *
+ * @param {?Array<object>} list - GET /conversations metadata entries (newest-first)
+ * @param {?Object<string,string>} [labels] - persona key -> name override (tests)
+ * @returns {Array<{key:string,label:string,items:Array<object>}>}
+ */
+function groupConversationsByPersona(list, labels) {
+  var arr = Array.isArray(list) ? list : [];
+  var order = [];
+  var groups = {};
+  arr.forEach(function (item) {
+    if (!item) return;
+    var key =
+      typeof item.persona_key === 'string' && item.persona_key ? item.persona_key : '';
+    if (!Object.prototype.hasOwnProperty.call(groups, key)) {
+      groups[key] = [];
+      order.push(key);
+    }
+    groups[key].push(item);
+  });
+  var out = order
+    .filter(function (k) {
+      return k !== '';
+    })
+    .map(function (k) {
+      return { key: k, label: _hcPersonaLabel(k, labels), items: groups[k] };
+    });
+  if (groups['']) {
+    out.push({ key: '', label: 'Unassigned', items: groups[''] });
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Browser-only state + wiring. None of this runs at require() time; every entry
 // point re-checks the DOM / globals and returns early when they are absent.
@@ -179,7 +236,6 @@ var _hcTouchPending = false;
 var HISTORY_PERSONA_LABELS = {
   assistant: 'Assistant',
   casual: 'Casual Friend',
-  claudePromptCompressor: 'Claude Prompt Compressor',
   creative: 'Creative Writer',
   englishEditor: 'English Editor',
   legal: 'Legal Assistant',
@@ -188,6 +244,12 @@ var HISTORY_PERSONA_LABELS = {
   professional: 'Professional Consultant',
   technical: 'Technical Expert',
   transcriptai: 'Transcript-Based Assistant'
+};
+
+// Personas removed from the app but still stamped on old conversations — keeps
+// their history group heading readable instead of showing the raw key.
+var HISTORY_REMOVED_LABELS = {
+  claudePromptCompressor: 'Claude Prompt Compressor'
 };
 
 /**
@@ -609,9 +671,37 @@ function _hcRenderError(list) {
   if (empty) empty.hidden = true;
 }
 
+/** @returns {Array<string>} persona keys whose history group is collapsed. */
+function _hcCollapsedGroups() {
+  try {
+    var key = typeof HISTORY_GROUPS_KEY !== 'undefined' ? HISTORY_GROUPS_KEY : 'historyGroupsCollapsed';
+    var raw = localStorage.getItem(key);
+    var arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.filter(function (k) { return typeof k === 'string'; }) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Toggle a persona group's collapsed state and persist the set. */
+function _hcToggleGroupCollapsed(personaKey) {
+  var set = _hcCollapsedGroups();
+  var i = set.indexOf(personaKey);
+  if (i === -1) set.push(personaKey);
+  else set.splice(i, 1);
+  try {
+    var key = typeof HISTORY_GROUPS_KEY !== 'undefined' ? HISTORY_GROUPS_KEY : 'historyGroupsCollapsed';
+    localStorage.setItem(key, JSON.stringify(set));
+  } catch {
+    /* storage disabled — collapse is session-only */
+  }
+  return set.indexOf(personaKey) !== -1;
+}
+
 /**
- * Render `items` as `.history-card`s into `#historyList`. Shows `#historyEmpty`
- * when the list is empty.
+ * Render `items` into `#historyList` as collapsible per-persona groups (most
+ * recently active persona first, "Unassigned" last). The group holding the
+ * active conversation is always expanded and scrolled into view.
  *
  * @param {?Array<object>} items
  * @returns {void}
@@ -626,10 +716,76 @@ function _hcRenderList(items) {
     return;
   }
   if (empty) empty.hidden = true;
+
   var activeId = resolveActiveCardId(items, hcCurrentId());
-  items.forEach(function (item) {
-    list.appendChild(_hcBuildCard(item, activeId));
+  var groups = groupConversationsByPersona(items);
+  var collapsed = _hcCollapsedGroups();
+  var activeGroupEl = null;
+
+  groups.forEach(function (grp) {
+    var groupHasActive =
+      activeId &&
+      grp.items.some(function (it) {
+        return it && String(it.id) === String(activeId);
+      });
+    var isCollapsed = collapsed.indexOf(grp.key) !== -1 && !groupHasActive;
+
+    var groupEl = document.createElement('div');
+    groupEl.className = 'history-group' + (isCollapsed ? ' is-collapsed' : '');
+    groupEl.setAttribute('data-persona', grp.key);
+
+    var header = document.createElement('button');
+    header.type = 'button';
+    header.className = 'history-group-header';
+    header.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+
+    var caret = document.createElement('span');
+    caret.className = 'history-group-caret';
+    caret.setAttribute('aria-hidden', 'true');
+    caret.textContent = '▸';
+    header.appendChild(caret);
+
+    if (grp.key && typeof personaIconEl === 'function') {
+      var icon = personaIconEl(grp.key);
+      if (icon) {
+        var iconWrap = document.createElement('span');
+        iconWrap.className = 'history-group-icon';
+        iconWrap.appendChild(icon);
+        header.appendChild(iconWrap);
+      }
+    }
+
+    var labelEl = document.createElement('span');
+    labelEl.className = 'history-group-label';
+    labelEl.textContent = grp.label;
+    header.appendChild(labelEl);
+
+    var countEl = document.createElement('span');
+    countEl.className = 'history-group-count';
+    countEl.textContent = String(grp.items.length);
+    header.appendChild(countEl);
+
+    var body = document.createElement('div');
+    body.className = 'history-group-body';
+    grp.items.forEach(function (item) {
+      body.appendChild(_hcBuildCard(item, activeId));
+    });
+
+    header.addEventListener('click', function () {
+      var nowCollapsed = _hcToggleGroupCollapsed(grp.key);
+      groupEl.classList.toggle('is-collapsed', nowCollapsed);
+      header.setAttribute('aria-expanded', nowCollapsed ? 'false' : 'true');
+    });
+
+    groupEl.appendChild(header);
+    groupEl.appendChild(body);
+    list.appendChild(groupEl);
+    if (groupHasActive) activeGroupEl = groupEl;
   });
+
+  if (activeGroupEl && typeof activeGroupEl.scrollIntoView === 'function') {
+    activeGroupEl.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 /**
@@ -670,13 +826,6 @@ function _hcBuildCard(item, activeId) {
   if (when) parts.push(when);
   parts.push(count + (count === 1 ? ' msg' : ' msgs'));
   meta.textContent = parts.join(' · ');
-  if (item && item.persona_key) {
-    meta.appendChild(document.createTextNode(' · '));
-    var chip = document.createElement('span');
-    chip.className = 'history-persona-chip';
-    chip.textContent = _hcPersonaLabel(item.persona_key);
-    meta.appendChild(chip);
-  }
   main.appendChild(meta);
   card.appendChild(main);
 
@@ -768,19 +917,6 @@ function _hcRenderFooter() {
 }
 
 /**
- * Human-readable persona label for the card chip.
- *
- * @param {string} key
- * @returns {string}
- */
-function _hcPersonaLabel(key) {
-  if (typeof personaLabels !== 'undefined' && personaLabels && personaLabels[key]) {
-    return personaLabels[key];
-  }
-  return HISTORY_PERSONA_LABELS[key] || key;
-}
-
-/**
  * Format a byte count as a short "12.3 MB" / "456 KB" string.
  *
  * @param {number} bytes
@@ -829,6 +965,8 @@ if (typeof module !== 'undefined') {
     chatTitleFrom: chatTitleFrom,
     conversationRecordFrom: conversationRecordFrom,
     filterConversations: filterConversations,
-    resolveActiveCardId: resolveActiveCardId
+    resolveActiveCardId: resolveActiveCardId,
+    groupConversationsByPersona: groupConversationsByPersona,
+    _hcPersonaLabel: _hcPersonaLabel
   };
 }

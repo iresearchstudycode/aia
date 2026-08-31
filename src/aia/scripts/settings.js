@@ -195,7 +195,6 @@ var SETTINGS_CATEGORIES = [
 var SETTINGS_PERSONA_LABELS = {
   assistant: 'Assistant',
   casual: 'Casual Friend',
-  claudePromptCompressor: 'Claude Prompt Compressor',
   creative: 'Creative Writer',
   englishEditor: 'English Editor (Australian)',
   legal: 'Legal Assistant',
@@ -209,7 +208,6 @@ var SETTINGS_PERSONA_LABELS = {
 var SETTINGS_PERSONA_KEYS = [
   'assistant',
   'casual',
-  'claudePromptCompressor',
   'creative',
   'englishEditor',
   'legal',
@@ -1053,6 +1051,25 @@ function _settingsPersonaOverrideDefault(key, snapshot) {
 function _settingsRenderPersonaOverrideFields(snapshot) {
   var group = _settingsEl('div', { class: 'settings-persona-overrides' });
   var key = _settingsEditPersona;
+
+  // Persona identity row — its icon + name (the icon comes from the
+  // settings-service, see personaIconEl in chat.js).
+  var idRow = _settingsEl('div', { class: 'settings-persona-identity' });
+  if (typeof personaIconEl === 'function') {
+    var pIcon = personaIconEl(key);
+    if (pIcon) {
+      var iconWrap = _settingsEl('span', { class: 'settings-persona-icon' });
+      iconWrap.appendChild(pIcon);
+      idRow.appendChild(iconWrap);
+    }
+  }
+  idRow.appendChild(
+    _settingsEl('span', {
+      class: 'settings-persona-name',
+      text: SETTINGS_PERSONA_LABELS[key] || key
+    })
+  );
+  group.appendChild(idRow);
 
   var defs = SETTINGS_OVERRIDE_DEFS.slice();
   if (key === 'englishEditor') {

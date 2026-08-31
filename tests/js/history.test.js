@@ -8,6 +8,8 @@ const {
   conversationRecordFrom,
   filterConversations,
   resolveActiveCardId,
+  groupConversationsByPersona,
+  _hcPersonaLabel,
 } = require('../../src/aia/scripts/history.js');
 
 describe('chatTitleFrom', () => {
@@ -189,5 +191,59 @@ describe('resolveActiveCardId', () => {
   test('skips malformed entries and matches by string equality', () => {
     expect(resolveActiveCardId([null, {}, { id: 42 }], '42')).toBe('42');
     expect(resolveActiveCardId([{ id: 'c-a' }], 'c-z')).toBeNull();
+  });
+});
+
+describe('groupConversationsByPersona', () => {
+  const L = { assistant: 'Assistant', teacher: 'Patient Teacher', legal: 'Legal Assistant' };
+
+  test('buckets by persona_key in first-seen (recently-used) order', () => {
+    const list = [
+      { id: '1', persona_key: 'teacher' },
+      { id: '2', persona_key: 'assistant' },
+      { id: '3', persona_key: 'teacher' },
+      { id: '4', persona_key: 'legal' },
+    ];
+    const groups = groupConversationsByPersona(list, L);
+    expect(groups.map((g) => g.key)).toEqual(['teacher', 'assistant', 'legal']);
+    expect(groups[0].label).toBe('Patient Teacher');
+    expect(groups[0].items.map((i) => i.id)).toEqual(['1', '3']);
+  });
+
+  test('empty / missing persona_key → trailing "Unassigned" group', () => {
+    const list = [
+      { id: '1', persona_key: 'assistant' },
+      { id: '2' },
+      { id: '3', persona_key: '' },
+    ];
+    const groups = groupConversationsByPersona(list, L);
+    expect(groups.map((g) => g.key)).toEqual(['assistant', '']);
+    const last = groups[groups.length - 1];
+    expect(last.label).toBe('Unassigned');
+    expect(last.items.map((i) => i.id)).toEqual(['2', '3']);
+  });
+
+  test('a since-removed persona keeps its own labelled group', () => {
+    const groups = groupConversationsByPersona([
+      { id: '1', persona_key: 'claudePromptCompressor' },
+    ]);
+    expect(groups[0].key).toBe('claudePromptCompressor');
+    expect(groups[0].label).toBe('Claude Prompt Compressor');
+  });
+
+  test('nullish / non-array → [] and never throws', () => {
+    expect(groupConversationsByPersona(null)).toEqual([]);
+    expect(groupConversationsByPersona(undefined)).toEqual([]);
+    expect(groupConversationsByPersona('nope')).toEqual([]);
+    expect(groupConversationsByPersona([null, {}])).toHaveLength(1);
+  });
+});
+
+describe('_hcPersonaLabel', () => {
+  test('override map wins, then removed-persona map, then the raw key', () => {
+    expect(_hcPersonaLabel('teacher', { teacher: 'Coach' })).toBe('Coach');
+    expect(_hcPersonaLabel('teacher')).toBe('Patient Teacher');
+    expect(_hcPersonaLabel('claudePromptCompressor')).toBe('Claude Prompt Compressor');
+    expect(_hcPersonaLabel('mystery')).toBe('mystery');
   });
 });
