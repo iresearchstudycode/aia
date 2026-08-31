@@ -32,8 +32,10 @@ const crossModuleGlobals = {
   NAV_RAIL_KEY: 'readonly',
   SIDEBAR_STATE_KEY: 'readonly',
   THEME_KEY: 'readonly',
+  HISTORY_GROUPS_KEY: 'readonly',
   systemPrompts: 'readonly',
   personaLabels: 'readonly',
+  personaIcons: 'readonly',
   // config.js — mutable state
   conversationHistory: 'writable',
   currentSystemPrompt: 'writable',
@@ -103,6 +105,7 @@ const crossModuleGlobals = {
   renderMathIn: 'readonly',
   highlightCodeIn: 'readonly',
   renderMermaidIn: 'readonly',
+  personaIconEl: 'readonly',
   enrichRenderedContent: 'readonly',
   renderMarkdownToHtml: 'readonly',
   _resolveSystemPrompt: 'readonly',
@@ -158,6 +161,7 @@ const crossModuleGlobals = {
   conversationRecordFrom: 'readonly',
   filterConversations: 'readonly',
   resolveActiveCardId: 'readonly',
+  groupConversationsByPersona: 'readonly',
   // main.js
   closeSidebarDrawer: 'readonly',
   // vendored libraries (loaded before app scripts)

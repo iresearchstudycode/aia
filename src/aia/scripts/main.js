@@ -61,7 +61,7 @@ function clearDocumentPreview() {
 // The 11 persona keys (must match config.js `systemPrompts` minus
 // `englishEditorExplained` and the spec's contract).
 const _PERSONA_KEYS = [
-  'assistant', 'casual', 'claudePromptCompressor', 'creative', 'englishEditor',
+  'assistant', 'casual', 'creative', 'englishEditor',
   'legal', 'medical', 'professional', 'teacher', 'technical', 'transcriptai'
 ];
 
@@ -72,7 +72,12 @@ const _PERSONA_KEYS = [
 function _defaultVpalSettings() {
   const personas = {};
   _PERSONA_KEYS.forEach(function (k) {
-    personas[k] = { thinking_enabled: null, thinking_depth: null, tts_engine: null };
+    personas[k] = {
+      thinking_enabled: null,
+      thinking_depth: null,
+      tts_engine: null,
+      icon: (typeof personaIcons !== 'undefined' && personaIcons[k]) || ''
+    };
   });
   personas.englishEditor.editor_mode = 'clean';
 
@@ -431,7 +436,14 @@ document.addEventListener('DOMContentLoaded', async function () {
       item.type = 'button';
       item.setAttribute('role', 'menuitemradio');
       item.dataset.persona = key;
-      item.textContent = personaLabels[key] || key;
+      if (typeof personaIconEl === 'function') {
+        const icon = personaIconEl(key);
+        if (icon) item.appendChild(icon);
+      }
+      const label = document.createElement('span');
+      label.className = 'persona-menu-label';
+      label.textContent = personaLabels[key] || key;
+      item.appendChild(label);
       item.addEventListener('click', function () {
         closePersonaMenu();
         if (typeof setActivePersona === 'function') setActivePersona(key);

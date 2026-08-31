@@ -13,6 +13,37 @@ const DOCUMENT_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 2
 const REGEN_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
 const EDIT_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>';
 
+// Build a persona's icon as a sanitised <svg> element. Source: the string the
+// settings-service delivers in `vpalSettings.personas[key].icon` (from
+// `_PERSONA_ICONS` in settings-service/main.py), with the `config.js`
+// `personaIcons` map as the offline fallback. The string arrives over the wire
+// so it goes through DOMPurify (svg profile) before touching the DOM — same
+// boundary as Mermaid's generated SVG. Returns null when there is no icon.
+function personaIconEl(key) {
+  var svg = '';
+  try {
+    var p =
+      window.vpalSettings &&
+      window.vpalSettings.personas &&
+      window.vpalSettings.personas[key];
+    if (p && typeof p.icon === 'string') svg = p.icon;
+  } catch {
+    /* vpalSettings not ready */
+  }
+  if (!svg && typeof personaIcons !== 'undefined' && personaIcons[key]) {
+    svg = personaIcons[key];
+  }
+  if (!svg || typeof document === 'undefined') return null;
+  var clean =
+    typeof DOMPurify !== 'undefined'
+      ? DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } })
+      : svg;
+  var tpl = document.createElement('template');
+  tpl.innerHTML = String(clean).trim();
+  var node = tpl.content.firstChild;
+  return node && String(node.nodeName).toLowerCase() === 'svg' ? node : null;
+}
+
 // Render $...$, $$...$$, \(...\), \[...\] and AMS environments (\begin{equation}
 // etc.) as typeset math via KaTeX, in place, within the given element. Called
 // after a message's markdown has already been parsed and DOMPurify-sanitized
@@ -439,8 +470,21 @@ function updateSystemPromptState() {
       : 'Choose a persona';
   }
 
+  const key = _currentPersonaKey();
+
   const label = document.getElementById('currentPersonaLabel');
-  if (label) label.textContent = personaLabels[_currentPersonaKey()] || '';
+  if (label) label.textContent = personaLabels[key] || '';
+
+  // Swap the header identity mark for the active persona's icon.
+  const headerIcon = document.querySelector('.header-title .header-bot-icon');
+  if (headerIcon && typeof personaIconEl === 'function') {
+    const fresh = personaIconEl(key);
+    if (fresh && headerIcon.dataset.persona !== key) {
+      fresh.setAttribute('class', 'header-bot-icon');
+      fresh.dataset.persona = key;
+      headerIcon.replaceWith(fresh);
+    }
+  }
 }
 
 // Add a user message bubble. imageDataUrl is a data: URL from FileReader for display.
@@ -983,6 +1027,7 @@ if (typeof module !== 'undefined') {
     renderMermaidIn,
     enrichRenderedContent,
     renderMarkdownToHtml,
+    personaIconEl,
     _lastExchangeIndices,
     _editableTextFor,
     regenerateLastResponse,

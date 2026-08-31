@@ -454,11 +454,19 @@ body {
   color: var(--color-danger);
 }
 
-/* Persona picker (#personaMenu): a plain radio-list of personas. The active one
-   gets a leading check and the accent tint. */
+/* Persona picker (#personaMenu): a radio-list of personas, each `icon | name`
+   (icon via the shared `.menu-popup button svg` rule). The active one gets the
+   accent tint + a trailing check. */
 #personaMenu button {
-  padding-left: 34px;
   position: relative;
+}
+
+#personaMenu .persona-menu-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #personaMenu button.is-active {
@@ -466,16 +474,19 @@ body {
   font-weight: 600;
 }
 
-#personaMenu button.is-active::before {
+#personaMenu button.is-active .persona-menu-label {
+  font-weight: 600;
+}
+
+#personaMenu button.is-active::after {
   content: "";
-  position: absolute;
-  left: 14px;
-  top: 50%;
+  flex: none;
   width: 6px;
   height: 10px;
+  margin-left: 4px;
   border: solid var(--color-accent);
   border-width: 0 2px 2px 0;
-  transform: translateY(-60%) rotate(45deg);
+  transform: translateY(-2px) rotate(45deg);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -716,6 +727,81 @@ body {
   padding: var(--space-2) var(--space-2) var(--space-3);
 }
 
+/* --- Persona groups (history list is grouped by the persona each thread was
+   created with; collapsible, most-recently-used persona first) --- */
+.history-group + .history-group {
+  margin-top: 2px;
+}
+
+.history-group-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-sidebar-text-faint);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.history-group-header:hover {
+  background: var(--color-sidebar-hover);
+  color: var(--color-sidebar-text);
+}
+
+.history-group-header:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.history-group-caret {
+  flex: none;
+  font-size: 9px;
+  line-height: 1;
+  transition: transform 0.12s ease;
+}
+
+.history-group-header[aria-expanded="true"] .history-group-caret {
+  transform: rotate(90deg);
+}
+
+.history-group-icon {
+  flex: none;
+  display: inline-flex;
+}
+
+.history-group-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.history-group-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.history-group-count {
+  flex: none;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.history-group.is-collapsed .history-group-body {
+  display: none;
+}
+
 .history-card {
   display: flex;
   align-items: flex-start;
@@ -760,15 +846,6 @@ body {
   color: var(--color-sidebar-text-faint);
 }
 
-.history-persona-chip {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(var(--color-accent-bright-rgb), 0.18);
-  color: var(--color-accent-bright);
-  font-size: 10px;
-  font-weight: 600;
-}
 
 .history-card-delete {
   flex: none;
@@ -2335,6 +2412,28 @@ body {
   gap: 15px;
   padding: 12px 0 4px;
   border-top: 1px solid var(--color-border);
+}
+
+#settingsPanel .settings-persona-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text);
+}
+
+#settingsPanel .settings-persona-icon {
+  display: inline-flex;
+  color: var(--color-text-subtle);
+}
+
+#settingsPanel .settings-persona-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+#settingsPanel .settings-persona-name {
+  font-size: 13px;
+  font-weight: 600;
 }
 
 #settingsPanel .settings-prompt-details {
