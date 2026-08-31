@@ -467,6 +467,9 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* the label span is a wide flex item, so the <button>'s UA `text-align:
+     center` would otherwise centre the name — pin it left. */
+  text-align: left;
 }
 
 #personaMenu button.is-active {
