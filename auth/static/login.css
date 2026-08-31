@@ -1,3 +1,49 @@
+/* VPAL login / setup — monochrome, matches the app shell. System-preference
+ * only (this page loads before the app and reads no app storage). System font
+ * stack only (the app's Inter woff2 is not shipped into the auth image). */
+
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --card-bg: #ffffff;
+  --card-border: #e5e5e5;
+  --text: #0d0d0d;
+  --text-muted: #5d5d5d;
+  --field-bg: #ffffff;
+  --field-border: #d5d5d5;
+  --field-focus: #0d0d0d;
+  --btn-bg: #0d0d0d;
+  --btn-text: #ffffff;
+  --accent-bar: #0d0d0d;
+  --code-bg: #f4f4f4;
+  --error-bg: #fdf2f2;
+  --error-border: #dc2626;
+  --error-text: #b91c1c;
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #212121;
+    --card-bg: #2a2a2a;
+    --card-border: #3a3a3a;
+    --text: #ececec;
+    --text-muted: #a5a5a5;
+    --field-bg: #1e1e1e;
+    --field-border: #4a4a4a;
+    --field-focus: #ffffff;
+    --btn-bg: #ffffff;
+    --btn-text: #0d0d0d;
+    --accent-bar: #ffffff;
+    --code-bg: #1e1e1e;
+    --error-bg: rgba(248, 113, 113, 0.12);
+    --error-border: rgba(248, 113, 113, 0.4);
+    --error-text: #f87171;
+    --shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -5,8 +51,10 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: linear-gradient(135deg, #6f84e2 0%, #080808 100%);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -15,37 +63,36 @@ body {
 }
 
 .login-card {
-  background: white;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
   border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow);
   padding: 40px;
   width: 100%;
   max-width: 400px;
 }
 
 .login-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  color: var(--text);
   font-size: 20px;
   font-weight: 600;
   text-align: center;
-  padding: 16px;
-  border-radius: 10px;
-  margin-bottom: 20px;
+  padding: 8px 0 4px;
+  margin-bottom: 8px;
 }
 
 .login-subtitle {
   font-size: 13px;
-  color: #718096;
+  color: var(--text-muted);
   text-align: center;
   margin-bottom: 24px;
   line-height: 1.5;
 }
 
 .error-msg {
-  background: #fff5f5;
-  border: 1px solid #e53e3e;
-  color: #c53030;
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  color: var(--error-text);
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 13px;
@@ -56,15 +103,17 @@ label {
   display: block;
   font-size: 13px;
   font-weight: 600;
-  color: #4a5568;
+  color: var(--text);
   margin-bottom: 6px;
 }
 
 input[type="text"] {
   width: 100%;
   padding: 12px 16px;
-  border: 2px solid #e2e8f0;
+  border: 1.5px solid var(--field-border);
   border-radius: 8px;
+  background: var(--field-bg);
+  color: var(--text);
   font-size: 14px;
   margin-bottom: 16px;
   transition: border-color 0.2s;
@@ -72,51 +121,51 @@ input[type="text"] {
 
 input[type="text"]:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--field-focus);
 }
 
 button[type="submit"] {
   width: 100%;
   padding: 13px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--btn-bg);
+  color: var(--btn-text);
   border: none;
   border-radius: 8px;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.2s, transform 0.2s;
+  transition: opacity 0.2s;
   margin-top: 4px;
 }
 
 button[type="submit"]:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
+  opacity: 0.88;
 }
 
 button[type="submit"]:active {
-  transform: translateY(0);
+  opacity: 1;
 }
 
 /* Setup page */
 .setup-container {
-  background: white;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
   border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow);
   padding: 40px;
   width: 100%;
   max-width: 580px;
 }
 
 .setup-card {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--card-border);
   border-radius: 10px;
   padding: 20px;
   margin-top: 20px;
 }
 
 .setup-card h3 {
-  color: #4a5568;
+  color: var(--text);
   margin-bottom: 12px;
   font-size: 16px;
 }
@@ -130,26 +179,27 @@ button[type="submit"]:active {
 .uri-label,
 .secret-label {
   font-size: 12px;
-  color: #718096;
+  color: var(--text-muted);
   margin-top: 10px;
 }
 
 .uri,
 code {
   display: block;
-  background: #f7fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--code-bg);
+  border: 1px solid var(--card-border);
   border-radius: 6px;
   padding: 8px 10px;
   font-size: 11px;
   word-break: break-all;
   margin-top: 4px;
-  font-family: 'Courier New', monospace;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--text);
 }
 
 .setup-container .login-subtitle code {
   display: inline;
-  background: #edf2f7;
+  background: var(--code-bg);
   border: none;
   border-radius: 3px;
   padding: 1px 5px;

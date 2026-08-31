@@ -3,7 +3,7 @@ A secure, voice-enabled AI chat interface that runs entirely on your local machi
 
 ## 📋 Overview
 
-This web application provides a ChatGPT-style chat interface (dark navy header, sky-blue user bubbles, clean card AI responses) with voice input/output, a single "+" attach menu for image attachment (multimodal vision queries) and document attachment (.txt/.md/.pdf Q&A), LaTeX math rendering via KaTeX, syntax-highlighted code blocks (highlight.js) and Mermaid diagram rendering, a conversation navigator rail, and a live collapsible thinking block for reasoning-capable models. Every preference (models, voice, reasoning, personas) is edited in one Settings lightbox and persisted per user server-side, and every conversation is auto-saved to a searchable, per-user history. It connects to locally-hosted AI models through Ollama's REST API with no external dependencies — protected by TOTP authentication for up to five users.
+This web application provides a ChatGPT-style chat interface — near-monochrome design, Inter font, **System / Light / Dark themes** — with voice input/output, a single "+" attach menu for image attachment (multimodal vision queries) and document attachment (.txt/.md/.pdf Q&A), LaTeX math rendering via KaTeX, syntax-highlighted code blocks (highlight.js) and Mermaid diagram rendering, a conversation navigator rail, and a live collapsible thinking block for reasoning-capable models. Every preference (models, voice, reasoning, interface/theme, personas) is edited in one Settings lightbox and persisted per user server-side, and every conversation is auto-saved to a searchable, per-user history. It connects to locally-hosted AI models through Ollama's REST API with no external dependencies — protected by TOTP authentication for up to five users.
 
 ## 🏗️ Architecture
 
@@ -353,8 +353,9 @@ vpal/
 │       │   ├── style.css           # Application styling
 │       │   ├── katex.min.css       # KaTeX math styling (vendored)
 │       │   ├── highlight.min.css   # highlight.js dark theme (vendored, atom-one-dark)
-│       │   └── fonts/              # KaTeX math fonts (vendored)
+│       │   └── fonts/              # KaTeX math fonts + Inter UI font (vendored)
 │       ├── scripts/
+│       │   ├── theme-boot.js        # No-FOUC theme stamp (runs before style.css)
 │       │   ├── config.js           # Constants, system prompts, preference globals
 │       │   ├── utils.js            # Utility functions
 │       │   ├── speech.js           # Voice input (Web Speech recognition) + TTS routing (Piper / VoiceBox)
@@ -402,6 +403,7 @@ Every *user preference* — chat model, vision model, TTS engine, auto-speak, sp
 | `VPAL_DEFAULT_THINKING` | `false` |
 | `VPAL_DEFAULT_THINKING_DEPTH` | `medium` |
 | `VPAL_DEFAULT_NAV_RAIL` | `true` |
+| `VPAL_DEFAULT_THEME` | `system` (`system` \| `light` \| `dark`) |
 
 "Reset to defaults" in the dialog reverts a value to its env default. `SETTINGS_DB_PATH` (default `/data/settings.db`) sets the SQLite location. Existing `localStorage` preferences migrate to the service automatically on first load after upgrade.
 
@@ -497,6 +499,7 @@ Self-contained — no external app to configure, and these only bound worst-case
 - **Document Attachment**: "Add files" in the "+" attach menu attaches a `.txt`, `.md`, or `.pdf` file to ask questions about; `.txt`/`.md` are read directly in the browser, `.pdf` is extracted server-side (see [Document Attachment Path](#document-attachment-path)); the chat bubble shows a compact filename chip and your question, not the full extracted text; follow-up questions work automatically since the extracted text is part of normal conversation history
 - **Thinking Mode**: Toggled in Settings → Reasoning (on/off + reasoning effort Low / Medium / High), with per-persona overrides; a `#thinkingBadge` in the toolbar shows the current state and opens Settings on click; live reasoning displayed in a collapsible `<details>` block (with a running elapsed-time / token count while it reasons) that collapses when the final answer arrives; thinking content excluded from history, copy, and speech. Ollama exposes no true "thinking budget", so Low / Medium apply a generous total-token ceiling (`num_predict` 4096 / 8192) that only bites on a runaway reasoner; High is uncapped. A large model being loaded shows a "Loading model…" note since its first reply can take 30–60 s
 - **Model Selection**: Both the text/thinking model and the vision model are chosen in Settings → Models from the list of models installed locally (Ollama's `GET /api/tags`); a `#modelBadge` in the toolbar shows the active model and opens Settings on click. Changes apply to the next and all subsequent messages with no conversation reset. Falls back to the default with a toast if Ollama's model list can't be loaded
+- **Themes**: **System / Light / Dark**, chosen in Settings → Interface (default: match your OS). ChatGPT-style near-monochrome palette, Inter font (self-hosted, offline). Applies instantly with no reload; the choice is stored per user server-side and mirrored to `localStorage` so a dark-theme reload never flashes light. `VPAL_DEFAULT_THEME` sets the house default. The login page follows the OS preference
 - **Conversation Navigator Rail**: A thin strip of markers down the right edge of the chat, one per completed question. Hover a marker for a preview card (the question + a short snippet of the reply); click it to jump that turn to the top of the view and briefly flash it. The marker for the turn you're looking at stays highlighted as you scroll. Toggled in Settings → Interface (default on); hidden on narrow screens. Mouse-only, and it's purely a view over the current conversation — nothing is added to saved chats
 - **Dual-model Routing**: Text/thinking requests use the chosen chat model (default `gemma4:e4b`, streaming, thinking-capable); image requests and vision follow-ups use the chosen vision model (default `gemma3:4b`); `think: false` sent explicitly to suppress native reasoning when thinking is OFF
 - **Real-time Streaming**: Live token-by-token response display with a stop button

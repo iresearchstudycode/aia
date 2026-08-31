@@ -85,6 +85,7 @@ function _defaultVpalSettings() {
     thinking_enabled: false,
     thinking_depth: 'medium',
     nav_rail: true,
+    theme: 'system',
     active_persona: 'englishEditor'
   };
 

@@ -31,6 +31,7 @@ const crossModuleGlobals = {
   EDITOR_MODE_KEY: 'readonly',
   NAV_RAIL_KEY: 'readonly',
   SIDEBAR_STATE_KEY: 'readonly',
+  THEME_KEY: 'readonly',
   systemPrompts: 'readonly',
   personaLabels: 'readonly',
   // config.js — mutable state
@@ -46,6 +47,7 @@ const crossModuleGlobals = {
   currentEditorMode: 'writable',
   currentNavRailEnabled: 'writable',
   currentNumCtx: 'writable',
+  currentTheme: 'writable',
   modelContextLengths: 'writable',
   pendingDocumentText: 'writable',
   pendingDocumentName: 'writable',
@@ -132,6 +134,7 @@ const crossModuleGlobals = {
   buildMigrationPayload: 'readonly',
   setActivePersona: 'readonly',
   recomputeNumCtx: 'readonly',
+  _applyTheme: 'readonly',
   // api.js
   streamOllamaResponse: 'readonly',
   stopStreaming: 'readonly',
