@@ -1199,7 +1199,10 @@ function _settingsSaveCategory(categoryId) {
 
   _settingsPut(_settingsApi('/global'), changed)
     .then(function (resp) {
-      if (!resp || resp.ok !== true) throw new Error('save failed');
+      if (!resp || resp.ok !== true) {
+        _settingsSaveErrorToast(resp);
+        return;
+      }
       window.vpalSettings = _settingsMergeGlobal(snapshot, resp.global);
       _settingsEdits[categoryId] = {};
       applyResolvedSettings();
@@ -1209,7 +1212,7 @@ function _settingsSaveCategory(categoryId) {
       _settingsRenderPanel();
     })
     .catch(function () {
-      if (typeof showToast === 'function') showToast('Could not save settings');
+      _settingsSaveErrorToast(null);
     });
 }
 
@@ -1223,7 +1226,7 @@ function _settingsSavePersonas(snapshot) {
         _settingsPut(_settingsApi('/global'), {
           active_persona: _settingsEdits.personas.active_persona
         }).then(function (resp) {
-          if (!resp || resp.ok !== true) throw new Error('save failed');
+          if (!resp || resp.ok !== true) throw new Error((resp && resp.error) || '');
           window.vpalSettings = _settingsMergeGlobal(_settingsSnapshot(), resp.global);
         })
       );
@@ -1239,7 +1242,7 @@ function _settingsSavePersonas(snapshot) {
     var pKey = oEdits.personaKey;
     tasks.push(
       _settingsPut(_settingsApi('/persona/' + pKey), body).then(function (resp) {
-        if (!resp || resp.ok !== true) throw new Error('save failed');
+        if (!resp || resp.ok !== true) throw new Error((resp && resp.error) || '');
         var s = _settingsSnapshot();
         s.personas = s.personas || {};
         s.personas[pKey] = resp.persona;
@@ -1258,8 +1261,8 @@ function _settingsSavePersonas(snapshot) {
       if (typeof showToast === 'function') showToast('Personas saved');
       _settingsRenderPanel();
     })
-    .catch(function () {
-      if (typeof showToast === 'function') showToast('Could not save settings');
+    .catch(function (e) {
+      _settingsSaveErrorToast(e && e.message ? { error: e.message } : null);
     });
 }
 
@@ -1483,6 +1486,17 @@ function _settingsReloadSnapshot() {
     .then(function (json) {
       window.vpalSettings = json;
     });
+}
+
+// Toast text for a failed settings write. `resp` is _settingsPut / _settingsPost's
+// parsed body; on a 4xx the service sends `{ ok:false, error:"<reason>" }` —
+// surface that so a rejected value, or a settings-service still running an older
+// image without a newly-added key ("unknown global setting: theme"), is
+// diagnosable instead of a bare "Could not save settings".
+function _settingsSaveErrorToast(resp) {
+  if (typeof showToast !== 'function') return;
+  var detail = resp && typeof resp.error === 'string' && resp.error ? ' — ' + resp.error : '';
+  showToast('Could not save settings' + detail);
 }
 
 function _settingsPut(url, body) {
