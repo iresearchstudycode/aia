@@ -808,6 +808,12 @@ function _settingsEnsureModelNames(cb) {
       if (json === null) return; // reloading for auth
       _settingsModelNames =
         typeof parseOllamaModels === 'function' ? parseOllamaModels(json) : [];
+      // Same payload also carries per-model context windows — refresh the map
+      // and re-cap num_ctx in case the installed models changed since load.
+      if (typeof parseModelContextLengths === 'function' && typeof modelContextLengths !== 'undefined') {
+        modelContextLengths = parseModelContextLengths(json);
+        recomputeNumCtx();
+      }
       cb(_settingsModelNames);
     })
     .catch(function () {
@@ -1574,6 +1580,9 @@ function applyResolvedSettings() {
   if (typeof window !== 'undefined') window.currentNavRailEnabled = navRail;
   if (typeof setNavRailEnabled === 'function') setNavRailEnabled(navRail);
 
+  // The chat model may have just changed — re-cap num_ctx to its context window.
+  recomputeNumCtx();
+
   if (typeof currentSystemPrompt !== 'undefined') {
     if (typeof _resolveSystemPrompt === 'function') {
       currentSystemPrompt = _resolveSystemPrompt(active);
@@ -1587,6 +1596,24 @@ function applyResolvedSettings() {
   // Refresh the header persona label + toggle lock state — a persona change
   // made inside the open dialog reaches the DOM only through this call.
   if (typeof updateSystemPromptState === 'function') updateSystemPromptState();
+}
+
+/**
+ * Re-derive `currentNumCtx` (config.js) from the active chat model and the
+ * `modelContextLengths` map: OLLAMA_NUM_CTX, reduced to the model's advertised
+ * context window when that is smaller. Safe to call before the /api/tags map
+ * has loaded (map is {} → falls back to the ceiling). Called from
+ * applyResolvedSettings() (model may have changed) and after each successful
+ * /api/tags fetch (main.js at load, _settingsEnsureModelNames on dialog open).
+ *
+ * @returns {void}
+ */
+function recomputeNumCtx() {
+  if (typeof currentNumCtx === 'undefined' || typeof resolveNumCtx !== 'function') return;
+  var ceiling = typeof OLLAMA_NUM_CTX !== 'undefined' ? OLLAMA_NUM_CTX : 16384;
+  var map = (typeof modelContextLengths !== 'undefined' && modelContextLengths) || {};
+  var model = typeof currentModel !== 'undefined' ? currentModel : '';
+  currentNumCtx = resolveNumCtx(model, ceiling, map);
 }
 
 // Inline SVG line icons for the toolbar badges — the app uses SVG icons, never

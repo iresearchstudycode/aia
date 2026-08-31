@@ -45,6 +45,8 @@ const crossModuleGlobals = {
   currentTTSEngine: 'writable',
   currentEditorMode: 'writable',
   currentNavRailEnabled: 'writable',
+  currentNumCtx: 'writable',
+  modelContextLengths: 'writable',
   pendingDocumentText: 'writable',
   pendingDocumentName: 'writable',
   pendingDocumentTruncated: 'writable',
@@ -63,6 +65,8 @@ const crossModuleGlobals = {
   parseDocumentMessageContent: 'readonly',
   diffWords: 'readonly',
   parseOllamaModels: 'readonly',
+  parseModelContextLengths: 'readonly',
+  resolveNumCtx: 'readonly',
   // speech.js — functions
   toggleSpeechRecognition: 'readonly',
   speakText: 'readonly',
@@ -127,6 +131,7 @@ const crossModuleGlobals = {
   diffSettings: 'readonly',
   buildMigrationPayload: 'readonly',
   setActivePersona: 'readonly',
+  recomputeNumCtx: 'readonly',
   // api.js
   streamOllamaResponse: 'readonly',
   stopStreaming: 'readonly',
