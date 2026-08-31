@@ -74,6 +74,24 @@
   --color-bubble-ai-border: #e5e5e5;
   --code-bg: #0d0d0d;
   --code-text: #e3e3e3;
+
+  /* Mermaid diagrams — Rational Rose style: a light "paper" canvas, cornsilk
+     class/process boxes, crisp dark-navy borders, near-black text, and colour
+     coding by node shape (decisions amber, terminators sage green). Kept light
+     in BOTH themes on purpose — same call as --code-bg staying dark — so a
+     diagram always reads like a printed model sheet. renderMermaidIn() mirrors
+     these values into mermaid.initialize() themeVariables (keep the two in
+     sync — chat.js has the matching hex + a pointer back here). */
+  --mermaid-canvas: #fbfaf3;
+  --mermaid-ink: #33334d;
+  --mermaid-text: #1a1a2e;
+  --mermaid-node-bg: #fff8dc;
+  --mermaid-decision-bg: #ffe7ba;
+  --mermaid-terminator-bg: #dceedc;
+  --mermaid-note-bg: #fff6c8;
+  --mermaid-note-border: #c9b458;
+  --mermaid-cluster-bg: #efebda;
+  --mermaid-cluster-border: #b7ae90;
   --color-panel-dark: #303030;
   --color-panel-dark-text: #ffffff;
   --color-panel-dark-text-soft: #c5c5c5;
@@ -1394,19 +1412,45 @@ body {
   background: var(--code-bg);
 }
 
-/* Mermaid diagrams: a wide diagram scrolls in its own container rather than
-   overflowing the chat bubble — mirrors .message-content pre / .katex-display.
-   .mermaid-error marks a block whose source failed to parse (its raw text
-   stays visible). */
+/* Mermaid diagrams — Rational Rose look: a light "paper" canvas with a thin
+   border so the diagram reads as a printed model sheet in both themes (mirrors
+   how code blocks stay dark). A wide diagram scrolls in its own container
+   rather than overflowing the chat bubble — like .message-content pre /
+   .katex-display. .mermaid-error marks a block whose source failed to parse
+   (its raw text stays visible). */
 .mermaid-diagram {
   overflow-x: auto;
   margin: 16px 0;
+  padding: 18px;
   text-align: center;
+  background: var(--mermaid-canvas);
+  border: 1px solid var(--mermaid-cluster-border);
+  border-radius: 8px;
 }
 
 .mermaid-diagram svg {
   max-width: 100%;
   height: auto;
+}
+
+/* Safety net over mermaid's own theming — guarantee legible dark text on the
+   cornsilk boxes and the paper canvas regardless of what the vendored theme
+   computes. Targets text nodes only; the edge-label *background* rect is
+   handled separately so it never repaints the label text itself. */
+.mermaid-diagram .nodeLabel,
+.mermaid-diagram .edgeLabel .edgeLabel,
+.mermaid-diagram .cluster-label,
+.mermaid-diagram text,
+.mermaid-diagram tspan {
+  fill: var(--mermaid-text) !important;
+  color: var(--mermaid-text) !important;
+}
+
+.mermaid-diagram .edgeLabel rect,
+.mermaid-diagram .edgeLabels rect,
+.mermaid-diagram .edgeLabel .label-container {
+  fill: var(--mermaid-canvas) !important;
+  opacity: 0.92;
 }
 
 .mermaid-error {

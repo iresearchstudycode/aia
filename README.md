@@ -176,7 +176,7 @@ Unlike the VoiceBox path, this one is entirely self-contained — no local deskt
 | HTML sanitisation | DOMPurify v3.4.11 (vendored, SRI-pinned) |
 | Math typesetting | KaTeX v0.18.1 + auto-render extension (vendored, SRI-pinned) |
 | Syntax highlighting | highlight.js v11.11.1, "common" build (vendored, SRI-pinned); hljs output re-sanitised through DOMPurify |
-| Diagrams | Mermaid v10.9.3 UMD bundle (vendored, SRI-pinned); `securityLevel: 'strict'`, SVG output DOMPurify-sanitised |
+| Diagrams | Mermaid v10.9.3 UMD bundle (vendored, SRI-pinned); `securityLevel: 'strict'` + `htmlLabels: false` (plain-SVG labels survive DOMPurify's SVG profile), Rational Rose-style `themeVariables`, SVG output DOMPurify-sanitised, flowchart nodes colour-coded by shape |
 | Web server | Nginx (`cgr.dev/chainguard/nginx`, distroless, uid=65532) |
 | Auth service | FastAPI + pyotp + itsdangerous (`cgr.dev/chainguard/python:latest`, uid=65532) |
 | Piper TTS service | FastAPI + `piper-tts` (`onnxruntime`) on `python:3.12-slim`, uid=65532 — self-contained neural speech synthesis; `en_US-lessac-medium` ONNX voice model SHA256-pinned, fetched at build time |
@@ -513,7 +513,7 @@ Self-contained — no external app to configure, and these only bound worst-case
 - **Markdown Support**: Rich text formatting in AI responses and thinking blocks via Marked.js + DOMPurify
 - **Math Rendering**: LaTeX expressions typeset via KaTeX — inline (`$...$`, `\(...\)`) and display (`$$...$$`, `\[...\]`, plus `\begin{equation}`/`\begin{align}`/etc.) — in AI responses, thinking blocks, and your own messages; a malformed expression falls back to showing its raw source rather than breaking the rest of the message; math inside code blocks is left alone
 - **Code Highlighting**: Fenced code blocks in AI responses are syntax-highlighted via highlight.js (vendored, ~40 common languages, dark theme matched to the app's slate `<pre>` background); highlight.js output is re-sanitised through DOMPurify; an unrecognised language falls back to plain monospace
-- **Diagram Rendering**: A ` ```mermaid ` fenced block in an AI response renders as an SVG diagram via Mermaid (vendored v10.9.x, `securityLevel: 'strict'`, dark theme; SVG output DOMPurify-sanitised). Local models often emit unquoted `()`/`[]`/`{}` in flowchart node labels, which Mermaid can't parse — a failed diagram is retried once with an auto-repair that double-quotes those labels before it falls back to showing the raw code block; a diagram that's still unparseable leaves the code block visible rather than breaking the message
+- **Diagram Rendering**: A ` ```mermaid ` fenced block in an AI response renders as an SVG diagram via Mermaid (vendored v10.9.x, `securityLevel: 'strict'` + `htmlLabels: false`; SVG output DOMPurify-sanitised). Styled **Rational Rose-style** — a light "paper" canvas, cornsilk boxes, crisp dark borders, near-black text (held in both light and dark app themes), with flowchart nodes **colour-coded by shape**: decisions amber, start/end terminators sage green, everything else cornsilk. Local models often emit unquoted `()`/`[]`/`{}` in flowchart node labels, which Mermaid can't parse — a failed diagram is retried once with an auto-repair that double-quotes those labels before it falls back to showing the raw code block; a diagram that's still unparseable leaves the code block visible rather than breaking the message
 
 ## 🔍 System Requirements
 
