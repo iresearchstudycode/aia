@@ -24,6 +24,9 @@ const {
   renderMarkdownToHtml,
   highlightCodeIn,
   renderMermaidIn,
+  _repairMermaid,
+  _cleanupMermaidOrphan,
+  _addMarkdownCopyBtn,
   personaIconEl,
 } = require('../../src/aia/scripts/chat.js');
 
@@ -86,6 +89,113 @@ describe('renderMermaidIn', () => {
     await expect(renderMermaidIn(el)).resolves.toBeUndefined();
     // The <pre> is left in place for a browser (where mermaid is loaded) to render.
     expect(el.querySelector('pre code.language-mermaid')).not.toBeNull();
+  });
+});
+
+describe('_repairMermaid', () => {
+  test('quotes unquoted parentheses in a {rhombus} node label', () => {
+    const src = 'graph TD\n  A --> D{Web Application Firewall (WAF)};';
+    expect(_repairMermaid(src)).toContain('D{"Web Application Firewall (WAF)"}');
+  });
+
+  test('quotes parentheses inside a [rect] node label', () => {
+    const src = 'flowchart TD\n  G[WAF (L7 OWASP/bot)] --> H;';
+    expect(_repairMermaid(src)).toContain('G["WAF (L7 OWASP/bot)"]');
+  });
+
+  test('leaves a clean label untouched', () => {
+    const src = 'graph TD\n  A[Internet] --> B[Shield];';
+    expect(_repairMermaid(src)).toBe(src);
+  });
+
+  test('leaves doubled shapes ({{ }}) alone', () => {
+    const src = 'graph TD\n  A{{Hexagon}} --> B;';
+    expect(_repairMermaid(src)).toBe(src);
+  });
+
+  test('is a no-op for non-flowchart diagram types', () => {
+    const src = 'sequenceDiagram\n  Alice->>Bob: Hi (there)';
+    expect(_repairMermaid(src)).toBe(src);
+  });
+
+  test('tolerates non-string input', () => {
+    expect(_repairMermaid(undefined)).toBeUndefined();
+  });
+
+  test('the repaired form of the real broken gemma output parses cleanly enough to differ', () => {
+    const broken = [
+      'graph TD',
+      '    A[Internet] --> D{Web Application Firewall (WAF)};',
+      '    D --> G{NACL (Subnet Guardrail)};',
+      '    G --> H{Security Group (Instance State Allowance)};',
+    ].join('\n');
+    const fixed = _repairMermaid(broken);
+    expect(fixed).not.toBe(broken);
+    expect(fixed).toContain('{"Web Application Firewall (WAF)"}');
+    expect(fixed).toContain('{"NACL (Subnet Guardrail)"}');
+  });
+});
+
+describe('_cleanupMermaidOrphan', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  test('removes the throwaway #d<id> container when it is a direct body child', () => {
+    const orphan = document.createElement('div');
+    orphan.id = 'dmmd-abc';
+    document.body.appendChild(orphan);
+    _cleanupMermaidOrphan('mmd-abc');
+    expect(document.getElementById('dmmd-abc')).toBeNull();
+  });
+
+  test('never removes the rendered SVG root, whose id equals the render id', () => {
+    // mermaid ids the returned <svg> after the render id — deleting #<id> would
+    // wipe the diagram. The cleanup must only touch #d<id>.
+    const wrapper = document.createElement('div');
+    wrapper.className = 'mermaid-diagram';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.id = 'mmd-abc';
+    wrapper.appendChild(svg);
+    document.body.appendChild(wrapper);
+    _cleanupMermaidOrphan('mmd-abc');
+    expect(document.getElementById('mmd-abc')).not.toBeNull();
+  });
+
+  test('leaves a #d<id> node alone when it is nested rather than a body child', () => {
+    const host = document.createElement('div');
+    const nested = document.createElement('span');
+    nested.id = 'dmmd-abc';
+    host.appendChild(nested);
+    document.body.appendChild(host);
+    _cleanupMermaidOrphan('mmd-abc');
+    expect(document.getElementById('dmmd-abc')).not.toBeNull();
+  });
+});
+
+describe('_addMarkdownCopyBtn', () => {
+  test('prepends a .md-copy-btn carrying the raw markdown', () => {
+    const el = document.createElement('div');
+    el.innerHTML = '<p>rendered</p>';
+    _addMarkdownCopyBtn(el, '# Heading\n\nbody');
+    const btn = el.querySelector(':scope > .md-copy-btn');
+    expect(btn).not.toBeNull();
+    expect(btn.dataset.markdown).toBe('# Heading\n\nbody');
+    expect(el.firstChild).toBe(btn);
+  });
+
+  test('does nothing for empty / whitespace text', () => {
+    const el = document.createElement('div');
+    _addMarkdownCopyBtn(el, '   ');
+    expect(el.querySelector('.md-copy-btn')).toBeNull();
+  });
+
+  test('is idempotent — a second call refreshes the text, not the button count', () => {
+    const el = document.createElement('div');
+    _addMarkdownCopyBtn(el, 'first');
+    _addMarkdownCopyBtn(el, 'second');
+    expect(el.querySelectorAll('.md-copy-btn')).toHaveLength(1);
+    expect(el.querySelector('.md-copy-btn').dataset.markdown).toBe('second');
   });
 });
 

@@ -1261,6 +1261,55 @@ body {
   background: var(--color-bubble-ai-bg);
   border: 1px solid var(--color-bubble-ai-border);
   border-radius: 4px 18px 18px 18px;
+  position: relative;
+}
+
+/* "Copy markdown" — pinned to the top-right corner of a rendered AI message,
+   copies the raw markdown source. Faint until the message is hovered/focused. */
+.md-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-bubble-ai-bg);
+  color: var(--color-text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  z-index: 1;
+}
+
+.ai-message .message-content:hover .md-copy-btn,
+.md-copy-btn:focus-visible {
+  opacity: 1;
+}
+
+.md-copy-btn:hover {
+  background: var(--color-accent-tint-08);
+  color: var(--color-accent);
+}
+
+.md-copy-btn:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.md-copy-btn svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.md-copy-btn.copied {
+  color: var(--color-success-strong);
+  opacity: 1;
 }
 
 /* Markdown Styles */

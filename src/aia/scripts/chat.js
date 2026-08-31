@@ -105,17 +105,59 @@ function highlightCodeIn(element) {
   });
 }
 
+// Best-effort repair of the one Mermaid mistake local models make constantly:
+// unquoted parentheses / brackets / braces / '#' inside flowchart node labels
+// (e.g. `D{Web Application Firewall (WAF)}`, `G[NACL / guardrail]`), which make
+// mermaid.render() throw "Parse error … Expecting 'SQE', 'DOUBLECIRCLEEND', …".
+// Wrapping the label text in double quotes is the documented fix. Only touches
+// `graph` / `flowchart` diagrams; every other diagram type is returned as-is.
+// Doubled shapes (`[[ ]]`, `{{ }}`, `([ ])`) are left alone. Pure — unit-tested.
+function _repairMermaid(src) {
+  if (typeof src !== 'string') return src;
+  const head = (src.trim().split(/\s+/)[0] || '').toLowerCase();
+  if (head !== 'graph' && head !== 'flowchart') return src;
+  const q = (t) => t.replace(/"/g, '&quot;');
+  // {rhombus} — label may contain ( ) [ ]
+  src = src.replace(/([A-Za-z0-9_]+)\{(?!\{)([^{}\n"]+)\}(?!\})/g, (m, id, txt) =>
+    /[()[\]#]/.test(txt) ? `${id}{"${q(txt)}"}` : m
+  );
+  // [rect] — label may contain ( ) { } / #
+  src = src.replace(/([A-Za-z0-9_]+)\[(?![[(])([^[\]\n"|]+)\](?![\])])/g, (m, id, txt) =>
+    /[(){}#]/.test(txt) ? `${id}["${q(txt)}"]` : m
+  );
+  // (round) — only when a nested (...) inside makes the boundary ambiguous
+  src = src.replace(
+    /([A-Za-z0-9_]+)\((?!\()([^()\n"]*\([^()\n"]*\)[^()\n"]*)\)/g,
+    (m, id, txt) => `${id}("${q(txt)}")`
+  );
+  return src;
+}
+
+// mermaid.render() appends a throwaway measuring container (#d<id>) to <body>
+// and, in the vendored v10 build, does NOT remove it when rendering throws —
+// leaving an orphan behind. Only ever remove a *direct child of <body>*: the
+// rendered SVG's own root element is #<id> (mermaid ids it after the render id),
+// and removing that by getElementById would delete the diagram itself.
+function _cleanupMermaidOrphan(id) {
+  if (typeof document === 'undefined' || !document.body) return;
+  const el = document.getElementById('d' + id);
+  if (el && el.parentNode === document.body) document.body.removeChild(el);
+}
+
 // Render ```mermaid``` fenced blocks as SVG diagrams in place, within the given
 // element. mermaid.render() returns a Promise in v10, so this is async and is
 // called fire-and-forget at the render sites (the diagram pops in a moment
 // later) — the same non-blocking treatment renderMathIn / highlightCodeIn get.
 //
+// A block that fails to parse is retried once with _repairMermaid() (local
+// models routinely emit unquoted punctuation in node labels); only if that also
+// fails does it keep its raw (already sanitized) source visible, marked
+// .mermaid-error, rather than blanking the message.
+//
 // SECURITY: mermaid runs at securityLevel: 'strict' (HTML labels off, no click
 // handlers, no external resource fetches — see the initialize() call at the
 // bottom of this file), and its generated SVG string is still passed through
-// DOMPurify.sanitize() with the SVG profile before it reaches innerHTML. A block
-// that fails to parse keeps its raw (already sanitized) source visible and is
-// marked .mermaid-error rather than blanking the message.
+// DOMPurify.sanitize() with the SVG profile before it reaches innerHTML.
 async function renderMermaidIn(element) {
   if (typeof mermaid === 'undefined') return;
   const blocks = element.querySelectorAll('pre code.language-mermaid');
@@ -123,19 +165,31 @@ async function renderMermaidIn(element) {
     const pre = code.closest('pre');
     if (!pre || pre.dataset.mermaidDone) continue;
     pre.dataset.mermaidDone = '1';
-    const src = code.textContent;
+    const raw = code.textContent;
+    const candidates = [raw];
+    const repaired = _repairMermaid(raw);
+    if (repaired !== raw) candidates.push(repaired);
     const id = 'mmd-' + Math.random().toString(36).slice(2);
-    try {
-      const { svg } = await mermaid.render(id, src);
+    let svg = null;
+    for (const candidate of candidates) {
+      try {
+        svg = (await mermaid.render(id, candidate)).svg;
+        break;
+      } catch {
+        _cleanupMermaidOrphan(id);
+      }
+    }
+    if (svg) {
       const wrapper = document.createElement('div');
       wrapper.className = 'mermaid-diagram';
       wrapper.innerHTML = DOMPurify.sanitize(svg, {
         USE_PROFILES: { svg: true, svgFilters: true }
       });
       pre.replaceWith(wrapper);
-    } catch {
+    } else {
       pre.classList.add('mermaid-error');
     }
+    _cleanupMermaidOrphan(id);
   }
 }
 
@@ -277,6 +331,44 @@ function copyMessageToClipboard(button) {
   }).catch(() => {
     alert('Copy failed — please select and copy the text manually.');
   });
+}
+
+// A "copy markdown" affordance pinned to the top-right corner of a rendered AI
+// message. Unlike the copy button in .message-actions (which also copies the
+// source), this one sits over the rendered content so the raw markdown behind a
+// table / code block / Mermaid diagram is one click away. Idempotent — a second
+// call on the same container just refreshes the stored text; must be called
+// AFTER the container's innerHTML is set (renderMarkdownToHtml would wipe it).
+function _addMarkdownCopyBtn(contentDiv, rawText) {
+  if (!contentDiv || typeof rawText !== 'string' || !rawText.trim()) return;
+  let btn = contentDiv.querySelector(':scope > .md-copy-btn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.className = 'md-copy-btn';
+    btn.type = 'button';
+    btn.title = 'Copy markdown';
+    btn.setAttribute('aria-label', 'Copy raw markdown');
+    btn.innerHTML = COPY_ICON;
+    btn.addEventListener('click', () => _copyRawMarkdown(btn));
+    contentDiv.prepend(btn);
+  }
+  btn.dataset.markdown = rawText;
+}
+
+function _copyRawMarkdown(btn) {
+  const md = btn.dataset.markdown;
+  if (!md || !navigator.clipboard) return;
+  navigator.clipboard
+    .writeText(md)
+    .then(() => {
+      btn.innerHTML = CHECK_ICON;
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.innerHTML = COPY_ICON;
+        btn.classList.remove('copied');
+      }, 2000);
+    })
+    .catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -917,6 +1009,7 @@ function renderConversationHistory() {
       } else {
         contentEl.innerHTML = renderMarkdownToHtml(msg.content);
         enrichRenderedContent(contentEl);
+        _addMarkdownCopyBtn(contentEl, msg.content);
       }
 
       const actionsDiv = document.createElement('div');
@@ -1025,6 +1118,9 @@ if (typeof module !== 'undefined') {
     renderMathIn,
     highlightCodeIn,
     renderMermaidIn,
+    _repairMermaid,
+    _cleanupMermaidOrphan,
+    _addMarkdownCopyBtn,
     enrichRenderedContent,
     renderMarkdownToHtml,
     personaIconEl,
