@@ -133,14 +133,24 @@ function _repairMermaid(src) {
     .replace(/^[ \t]*(?:classDef|linkStyle|style)[ \t]+.*$/gim, '')
     .replace(/:::[A-Za-z0-9_-]+/g, '');
 
-  // 3. Quote edge-label text — -->|text| -.->|text| ==>|text| ---|text|
+  // 3. Balance `subgraph` / `end`. Models routinely drop a closing `end` or
+  //    tack a stray `subgraph X` onto the tail — either leaves the parser
+  //    hanging. Append up to a sane number of missing `end`s (an empty
+  //    subgraph still renders); trim a runaway surplus.
+  const opens = (src.match(/^[ \t]*subgraph\b/gim) || []).length;
+  const ends = (src.match(/^[ \t]*end\b/gim) || []).length;
+  if (opens > ends && opens - ends <= 20) {
+    src = src.replace(/\s*$/, '') + '\n' + Array(opens - ends).fill('end').join('\n') + '\n';
+  }
+
+  // 4. Quote edge-label text — -->|text| -.->|text| ==>|text| ---|text|
   src = src.replace(/\|([^|\n]+)\|/g, (m, txt) => {
     const t = txt.trim();
     if (t.startsWith('"') && t.endsWith('"')) return m;
     return needsQuote(t) ? `|"${clean(t)}"|` : m;
   });
 
-  // 4. Quote node-label text in the common shapes. Doubled shapes ([[ ]],
+  // 5. Quote node-label text in the common shapes. Doubled shapes ([[ ]],
   //    {{ }}, [( )], (( ))) are matched before the single-bracket forms.
   const shapes = [
     [/([A-Za-z0-9_]+)\{(?!\{)([^{}\n"]+)\}(?!\})/g, '{', '}'],
