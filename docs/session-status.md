@@ -1,4 +1,4 @@
-# Session Status — 2026-08-31 (rev 12)
+# Session Status — 2026-08-31 (rev 13)
 
 Handoff note for resuming work. Overwrite freely.
 
@@ -6,11 +6,19 @@ Handoff note for resuming work. Overwrite freely.
 
 | | |
 |---|---|
-| `master` | `a542a20` · **v1.30.0** — released, zero drift |
-| `dev` | `a542a20` · **v1.30.0** |
-| `feat/mermaid-rose-style` | **v1.31.0** — Mermaid Rose styling + missing-label fix; PR into `dev` |
+| `master` / `dev` | **v1.31.0** at `06e660b`, zero drift |
+| `fix/mermaid-repair-edge-labels` | **v1.31.1** — `_repairMermaid` edge labels/classDef + wide-flowchart scroll; PR into `dev` |
 | Working tree | clean |
-| Docker stack | 7 services healthy. Still owed: a full `docker compose up -d --build` for the Inter woff2, `VPAL_DEFAULT_THEME` default, and the `auth` `<meta color-scheme>` tag. v1.30.0 / v1.31.0 are both frontend-only — no service / image / env changes. |
+| Docker stack | 7 services healthy. Still owed: a full `docker compose up -d --build` for the Inter woff2, `VPAL_DEFAULT_THEME` default, and the `auth` `<meta color-scheme>` tag. v1.30–1.31.x are all frontend-only — no service / image / env changes. |
+
+## ▶ v1.31.1 — what shipped
+
+A qwen3.5:9b Technical-Expert flowchart still errored. Its source had unquoted `{}`/`"`/`/` **inside edge labels** (`-->|... {"model":"x"}|`), a literal `& \n`, `<br/>`, `classDef` + `:::class` — none of which v1.30.0's node-label-only `_repairMermaid` touched.
+
+- **`_repairMermaid` rewrite** (still runs only as the post-failure retry → free to be aggressive): drop `classDef`/`style`/`linkStyle` + `:::class`; collapse `\n` junk; strip `<br/>`; quote **node AND edge** label text with punctuation past `\w \s / . -`. Verified e2e against real `mermaid.min.js` + the user's exact diagram → parse error to full render, 40 legible labels.
+- **Wide flowcharts no longer shrink to unreadable** — `flowchart.useMaxWidth: false` + `.mermaid-diagram svg { display:block; margin:0 auto }`: natural size + horizontal scroll inside the card. (This was likely most of "not rendering correctly" — a 2100px-wide diagram was being scaled into ~390px, ~2px text.)
+
+Tests: `code-render.test.js` +5 → JS suite 289. CSP unchanged.
 
 ## ▶ v1.31.0 — what shipped
 
