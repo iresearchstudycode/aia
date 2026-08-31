@@ -1639,9 +1639,9 @@ function applyResolvedSettings() {
 
 /**
  * Re-derive `currentNumCtx` (config.js) from the active chat model and the
- * `modelContextLengths` map: OLLAMA_NUM_CTX, reduced to the model's advertised
- * context window when that is smaller. Safe to call before the /api/tags map
- * has loaded (map is {} → falls back to the ceiling). Called from
+ * `modelContextLengths` map: the model's full advertised context window when
+ * known, else the OLLAMA_NUM_CTX fallback. Safe to call before the /api/tags
+ * map has loaded (map is {} → uses the fallback). Called from
  * applyResolvedSettings() (model may have changed) and after each successful
  * /api/tags fetch (main.js at load, _settingsEnsureModelNames on dialog open).
  *
@@ -1686,10 +1686,10 @@ function _applyTheme(mode) {
 
 function recomputeNumCtx() {
   if (typeof currentNumCtx === 'undefined' || typeof resolveNumCtx !== 'function') return;
-  var ceiling = typeof OLLAMA_NUM_CTX !== 'undefined' ? OLLAMA_NUM_CTX : 16384;
+  var fallback = typeof OLLAMA_NUM_CTX !== 'undefined' ? OLLAMA_NUM_CTX : 16384;
   var map = (typeof modelContextLengths !== 'undefined' && modelContextLengths) || {};
   var model = typeof currentModel !== 'undefined' ? currentModel : '';
-  currentNumCtx = resolveNumCtx(model, ceiling, map);
+  currentNumCtx = resolveNumCtx(model, fallback, map);
 }
 
 // Inline SVG line icons for the toolbar badges — the app uses SVG icons, never
