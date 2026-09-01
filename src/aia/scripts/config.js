@@ -103,6 +103,15 @@ const _CONSULT_TEMPLATES = {
     format:
       'Respond with exactly two markdown sections — "## Pros" then "## Cons" — ' +
       'each a bullet list. No preamble.'
+  },
+  matrix: {
+    label: 'Decision matrix',
+    scaffold: 'Build a decision matrix to choose between: ',
+    format:
+      'Respond with a single markdown table and nothing else. The first column ' +
+      'header is "Option"; add one column per decision criterion. Each row is one ' +
+      'option, scored against every criterion from 1 (poor) to 5 (excellent) as a ' +
+      'bare number. Do not add a Totals column, a weights row, or any prose.'
   }
 };
 
@@ -117,7 +126,7 @@ let currentThinkingMode = 'off'; // 'off' | 'low' | 'medium' | 'high'
 let currentTTSEngine = 'piper'; // 'piper' | 'voicebox'
 let currentEditorMode = 'clean'; // 'clean' | 'changes' | 'explain' — English Editor output mode
 let currentConsultView = 'structured'; // 'structured' | 'text' — default view for a new Professional Consultant analysis artifact; from vpalSettings.personas.professional.default_analysis_view
-let pendingConsultTemplate = null; // 'swot' | 'proscons' — a Consultant template picked from the composer menu, consumed on the next send
+let pendingConsultTemplate = null; // 'swot' | 'proscons' | 'matrix' — a Consultant template picked from the composer menu, consumed on the next send
 let currentNavRailEnabled = true; // conversation navigator rail visible; toolbar toggle, persisted to localStorage[NAV_RAIL_KEY]
 window.currentNavRailEnabled = currentNavRailEnabled; // nav-rail.js reads the flag off window to avoid script load-order issues
 let currentTheme = 'system'; // 'system' | 'light' | 'dark' — resolved from vpalSettings.global.theme by applyResolvedSettings(); _applyTheme() (settings.js) sets <html data-theme> + the localStorage[THEME_KEY] mirror

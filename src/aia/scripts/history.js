@@ -97,6 +97,7 @@ function conversationRecordFrom(id, history, personaKey) {
     if (m.editorView) entry.editorView = m.editorView;
     if (m.consultArtifact) entry.consultArtifact = m.consultArtifact;
     if (m.consultView) entry.consultView = m.consultView;
+    if (Array.isArray(m.consultWeights)) entry.consultWeights = m.consultWeights;
     return entry;
   });
   return {
