@@ -358,8 +358,9 @@ async function streamOllamaResponse(
         // in conversationHistory below; the diff is always derived, never stored.
         renderEditorReply(contentDiv, userMessage, savedContent, currentEditorMode);
       } else if (consultSections) {
-        // SWOT / pros-cons grid + Structured/Text switch. Raw model output is
-        // stored verbatim below; the section split is always re-derived.
+        // SWOT / pros-cons grid / decision matrix + Structured/Text switch. Raw
+        // model output is stored verbatim below; the parse is always re-derived.
+        // A matrix is re-rendered once assistantEntry exists (weights binding).
         renderConsultReply(contentDiv, savedContent, consultTemplate, currentConsultView);
       } else if (finalThinking) {
         contentDiv.innerHTML =
@@ -393,8 +394,15 @@ async function streamOllamaResponse(
       assistantEntry.editorView = currentEditorMode; // 'clean' | 'changes'
     }
     if (consultSections) {
-      assistantEntry.consultArtifact = consultTemplate; // 'swot' | 'proscons'
+      assistantEntry.consultArtifact = consultTemplate; // 'swot' | 'proscons' | 'matrix'
       assistantEntry.consultView = currentConsultView; // 'structured' | 'text'
+      if (consultTemplate === 'matrix') {
+        // Re-render now that the entry exists so the weight sliders read/write
+        // assistantEntry.consultWeights (the render above had no entry).
+        renderConsultReply(
+          contentDiv, savedContent, consultTemplate, currentConsultView, assistantEntry
+        );
+      }
     }
     conversationHistory.push(assistantEntry);
 

@@ -1,4 +1,4 @@
-# Session Status — 2026-09-01 (rev 16)
+# Session Status — 2026-09-01 (rev 17)
 
 Handoff note for resuming work. Overwrite freely.
 
@@ -6,18 +6,24 @@ Handoff note for resuming work. Overwrite freely.
 
 | | |
 |---|---|
-| `master` / `dev` | **v1.31.3** — `resolveNumCtx` sends the model's full context window (PRs #70/#71 merged, zero drift, CI green) |
-| `feat/consultant-templates` | **v1.32.0** — Professional Consultant SWOT / Pros & cons templates; PR into `dev` |
-| Working tree | the v1.32.0 diff + this doc |
-| Docker stack | 7 services healthy. **v1.32.0 adds a settings-service key (`default_analysis_view`)** → needs `docker compose build settings-service && docker compose up -d settings-service` before the live check. Still owed separately: a full `docker compose up -d --build` for the Inter woff2, `VPAL_DEFAULT_THEME`, `auth` `<meta color-scheme>`. |
+| `master` / `dev` | **v1.32.1** at `ad871c9` — Consultant SWOT/pros-cons templates + the "Templates" button hide fix (PRs #72–#75, zero drift, CI green) |
+| `feat/consult-decision-matrix` | **v1.33.0** — the 3rd Consultant template (decision matrix, interactive weights); PR into `dev` |
+| Working tree | the v1.33.0 diff + this doc |
+| Docker stack | 7 services healthy. `vpal-settings` was rebuilt for the v1.32.0 `default_analysis_view` key. **v1.33.0 is frontend-only** — no service change. Still owed separately: a full `docker compose up -d --build` for the Inter woff2, `VPAL_DEFAULT_THEME`, `auth` `<meta color-scheme>`. |
 
-## ▶ v1.32.0 — Professional Consultant analysis templates (first per-persona affordance)
+## ▶ Consultant analysis templates — running tally
 
-Built on the English Editor pattern. With the **Professional Consultant** active, a "Templates" button in the composer (`#consultTemplateBtn`, hidden for other personas) offers **SWOT** / **Pros & cons**. Picking one prefills the prompt + folds in a format instruction; the reply renders as a colour-coded 2×2 SWOT quadrant grid (or two-column pros/cons) with a **Structured / Text** view switch; `consultArtifact`/`consultView` round-trip through reload / JSON save-open / the conversations-service. `default_analysis_view` (structured｜text) is a professional-only Settings → Personas key.
+Per-persona affordance for the Professional Consultant, built on the English Editor pattern (per-persona setting + custom render path + per-message view `<select>` + tag round-tripped through save/load). The "Templates" button (`#consultTemplateBtn`, `.toolbar-left`) is shown only for that persona and offers:
 
-Pieces: `_CONSULT_TEMPLATES` (config.js) · `parseSwotSections`/`parseProsConsSections`/`parseConsultReply` (utils.js, pure) · `renderConsultReply`/`_buildConsultViewSwitch`/`_composeConsultMessage`/`_resolveOutgoing` (chat.js) · `streamOllamaResponse(..., consultTemplate)` tagging (api.js) · `#consultTemplateMenu` wiring + `_syncConsultUiForPersona`/`clearConsultTemplate` (main.js) · `default_analysis_view` (settings-service `_validate_persona`/`_resolved_persona`/`_persona_defaults`; settings.js gained a generalised `def.fallback`). Tests: JS **309** (`consult.test.js` +18), settings-service **75** (+6). Harness-verified light + dark.
+| template | render (Structured view) | state persisted |
+|---|---|---|
+| **SWOT** (v1.32.0) | colour-coded 2×2 quadrant grid | — |
+| **Pros & cons** (v1.32.0) | two-column green/red grid | — |
+| **Decision matrix** (v1.33.0) | scored `<table>` with a 0–5 **weight slider per criterion** — recomputes weighted totals + winning row live | `consultWeights` (int array) |
 
-**Follow-up:** decision matrix (3rd template, interactive weights) is queued as v1.33.0.
+Shared: `_CONSULT_TEMPLATES` (config.js) · `parse{Swot,ProsCons,DecisionMatrix}` + `parseConsultReply` (utils.js, pure) · `renderConsultReply(container, raw, template, view, entry)` / `_renderDecisionMatrix` / `_buildConsultViewSwitch` / `_composeConsultMessage` / `_resolveOutgoing` (chat.js) · `streamOllamaResponse(..., consultTemplate)` tagging + matrix re-render after `assistantEntry` exists (api.js) · `#consultTemplateMenu` wiring + `_syncConsultUiForPersona` (main.js — toggles `[hidden]` **and** `style.display`, `.voice-btn{display:flex}` beats `[hidden]`) · `consultArtifact`/`consultView`/`consultWeights` through the 3 mappers · `default_analysis_view` professional-only settings-service key (v1.32.0). JS suite **318**; settings-service **75**. Harness-verified light + dark.
+
+**Follow-up affordances** (plan `~/.claude/plans/fuzzy-mixing-cascade.md`): Teacher quiz/flashcards, Transcript source pane + citations, Legal jurisdiction selector + disclaimer.
 
 ## ▶ Mermaid repair — running tally
 

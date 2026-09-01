@@ -76,6 +76,7 @@ const crossModuleGlobals = {
   resolveNumCtx: 'readonly',
   parseSwotSections: 'readonly',
   parseProsConsSections: 'readonly',
+  parseDecisionMatrix: 'readonly',
   parseConsultReply: 'readonly',
   // speech.js — functions
   toggleSpeechRecognition: 'readonly',

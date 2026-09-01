@@ -9,6 +9,7 @@ const _utils = require('../../src/aia/scripts/utils.js');
 const {
   parseSwotSections,
   parseProsConsSections,
+  parseDecisionMatrix,
   parseConsultReply
 } = _utils;
 
@@ -21,7 +22,8 @@ global.restoreLatexBackslashes = _utils.restoreLatexBackslashes;
 global.parseConsultReply = _utils.parseConsultReply;
 global._CONSULT_TEMPLATES = {
   swot: { label: 'SWOT analysis', scaffold: 'SWOT analysis of: ', format: 'FMT-SWOT' },
-  proscons: { label: 'Pros & cons', scaffold: 'Weigh the pros and cons of: ', format: 'FMT-PC' }
+  proscons: { label: 'Pros & cons', scaffold: 'Weigh the pros and cons of: ', format: 'FMT-PC' },
+  matrix: { label: 'Decision matrix', scaffold: 'Build a decision matrix to choose between: ', format: 'FMT-MX' }
 };
 
 const {
@@ -104,6 +106,58 @@ describe('parseProsConsSections', () => {
 });
 
 // ---------------------------------------------------------------------------
+// parseDecisionMatrix
+// ---------------------------------------------------------------------------
+describe('parseDecisionMatrix', () => {
+  const table = [
+    '| Option | Cost | Speed | Support |',
+    '| --- | --- | --- | --- |',
+    '| Vendor A | 4 | 3 | 5 |',
+    '| Vendor B | 2 | 5 | 3 |',
+    '| Vendor C | 5 | 2 | 4 |'
+  ].join('\n');
+
+  test('parses criteria and option rows, ignoring the Option header cell', () => {
+    const m = parseDecisionMatrix(table);
+    expect(m.criteria).toEqual(['Cost', 'Speed', 'Support']);
+    expect(m.rows).toEqual([
+      { option: 'Vendor A', scores: [4, 3, 5] },
+      { option: 'Vendor B', scores: [2, 5, 3] },
+      { option: 'Vendor C', scores: [5, 2, 4] }
+    ]);
+  });
+
+  test('clamps scores to 0–5 and treats non-numeric as 0', () => {
+    const m = parseDecisionMatrix(
+      '| Option | A | B |\n| - | - | - |\n| X | 9 | foo |\n| Y | -3 | 4 |'
+    );
+    expect(m.rows[0].scores).toEqual([5, 0]);
+    expect(m.rows[1].scores).toEqual([0, 4]);
+  });
+
+  test('drops a trailing Total column and a Weight row the model adds anyway', () => {
+    const m = parseDecisionMatrix(
+      [
+        '| Option | A | B | Total |',
+        '| - | - | - | - |',
+        '| Weights | 2 | 1 | |',
+        '| X | 4 | 5 | 13 |',
+        '| Y | 3 | 2 | 8 |'
+      ].join('\n')
+    );
+    expect(m.criteria).toEqual(['A', 'B']);
+    expect(m.rows.map((r) => r.option)).toEqual(['X', 'Y']);
+    expect(m.rows[0].scores).toEqual([4, 5]);
+  });
+
+  test('null when there is no table / too few rows / no criteria', () => {
+    expect(parseDecisionMatrix('no pipes here')).toBeNull();
+    expect(parseDecisionMatrix('| Option | A |\n| - | - |\n| X | 3 |')).toBeNull(); // 1 row
+    expect(parseDecisionMatrix(undefined)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // parseConsultReply dispatcher
 // ---------------------------------------------------------------------------
 describe('parseConsultReply', () => {
@@ -113,6 +167,9 @@ describe('parseConsultReply', () => {
       cons: '- b'
     });
     expect(parseConsultReply('## Strengths\n- a\n## Weaknesses\n- b', 'swot')).not.toBeNull();
+    expect(
+      parseConsultReply('| Option | A | B |\n|-|-|-|\n| X | 3 | 4 |\n| Y | 2 | 5 |', 'matrix')
+    ).not.toBeNull();
   });
 
   test('unknown template → null', () => {
@@ -167,6 +224,67 @@ describe('renderConsultReply', () => {
     renderConsultReply(el, 'just a sentence, no headings', 'swot', 'structured');
     expect(el.querySelector('.consult-grid')).toBeNull();
     expect(el.classList.contains('consult-artifact')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renderConsultReply — decision matrix
+// ---------------------------------------------------------------------------
+describe('renderConsultReply — decision matrix', () => {
+  const matrixText = [
+    '| Option | Cost | Speed |',
+    '| - | - | - |',
+    '| A | 4 | 2 |',
+    '| B | 1 | 5 |'
+  ].join('\n');
+
+  test('builds a table with a weight slider per criterion and a total per row', () => {
+    const el = document.createElement('div');
+    const entry = { consultArtifact: 'matrix', consultView: 'structured' };
+    renderConsultReply(el, matrixText, 'matrix', 'structured', entry);
+    expect(el.querySelectorAll('.consult-matrix thead th')).toHaveLength(4); // Option + 2 crit + Total
+    expect(el.querySelectorAll('.consult-matrix__weight input[type="range"]')).toHaveLength(2);
+    const totals = [...el.querySelectorAll('.consult-matrix__total')].map((t) => t.textContent);
+    expect(totals).toEqual(['6', '6']); // weights default 1 → 4+2, 1+5
+  });
+
+  test('default weights are written back to entry.consultWeights', () => {
+    const el = document.createElement('div');
+    const entry = { consultArtifact: 'matrix', consultView: 'structured' };
+    renderConsultReply(el, matrixText, 'matrix', 'structured', entry);
+    expect(entry.consultWeights).toEqual([1, 1]);
+  });
+
+  test('moving a slider recomputes totals, re-marks the winner, and updates the weight', () => {
+    const el = document.createElement('div');
+    const entry = { consultArtifact: 'matrix', consultView: 'structured' };
+    renderConsultReply(el, matrixText, 'matrix', 'structured', entry);
+    const costSlider = el.querySelectorAll('.consult-matrix__weight input[type="range"]')[0];
+    costSlider.value = '5';
+    costSlider.dispatchEvent(new Event('input'));
+
+    expect(entry.consultWeights).toEqual([5, 1]);
+    const totals = [...el.querySelectorAll('.consult-matrix__total')].map((t) => t.textContent);
+    expect(totals).toEqual(['22', '10']); // A: 4*5+2, B: 1*5+5
+    expect(el.querySelectorAll('tbody tr')[0].classList.contains('is-winner')).toBe(true);
+    expect(el.querySelectorAll('tbody tr')[1].classList.contains('is-winner')).toBe(false);
+    expect(el.querySelector('.consult-matrix__wval').textContent).toBe('×5');
+  });
+
+  test('restores saved weights from entry.consultWeights', () => {
+    const el = document.createElement('div');
+    const entry = { consultArtifact: 'matrix', consultView: 'structured', consultWeights: [3, 0] };
+    renderConsultReply(el, matrixText, 'matrix', 'structured', entry);
+    const totals = [...el.querySelectorAll('.consult-matrix__total')].map((t) => t.textContent);
+    expect(totals).toEqual(['12', '3']); // A: 4*3+2*0, B: 1*3+5*0
+    expect(el.querySelectorAll('.consult-matrix__weight input')[0].value).toBe('3');
+  });
+
+  test('ignores a saved weights array of the wrong length', () => {
+    const el = document.createElement('div');
+    const entry = { consultArtifact: 'matrix', consultView: 'structured', consultWeights: [3] };
+    renderConsultReply(el, matrixText, 'matrix', 'structured', entry);
+    expect(entry.consultWeights).toEqual([1, 1]);
   });
 });
 

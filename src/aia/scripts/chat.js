@@ -350,15 +350,18 @@ function _buildEditorViewSwitch(entry, container, originalText, revisedText) {
   return select;
 }
 
-// Professional Consultant analysis replies (SWOT / Pros & cons): the model
-// returns markdown with named sections, and the reader can view it two ways —
-// 'structured' (a colour-coded grid / two columns) or 'text' (rendered like any
-// other reply). `rawText` is the verbatim model output stored in
-// conversationHistory; the section split is always derived here, never stored.
+// Professional Consultant analysis replies (SWOT / Pros & cons / Decision
+// matrix): the model returns structured markdown, and the reader can view it two
+// ways — 'structured' (a colour-coded grid / an interactive weighted table) or
+// 'text' (rendered like any other reply). `rawText` is the verbatim model output
+// stored in conversationHistory; the parse is always derived here, never stored.
+// The decision-matrix weights ARE stored (`entry.consultWeights`) — they're the
+// one piece of user state the artifact carries.
 //
-// SECURITY: every section body still goes through renderMarkdownToHtml() — the
-// one sanitised AI-content -> innerHTML boundary — so the structured view opens
-// no new sink. The grid scaffold is built with createElement.
+// SECURITY: every SWOT/pros-cons section body still goes through
+// renderMarkdownToHtml() — the one sanitised AI-content -> innerHTML boundary.
+// The matrix is built entirely with createElement / .textContent (option and
+// criterion names are plain text), so it opens no new sink.
 const CONSULT_VIEW_LABELS = { structured: 'Structured', text: 'Text' };
 const _SWOT_CELLS = [
   ['strengths', 'Strengths'],
@@ -386,19 +389,121 @@ function _consultCell(modifier, heading, body) {
   return cell;
 }
 
-function renderConsultReply(container, rawText, template, view) {
+// Build the interactive decision-matrix table. `parsed` = { criteria, rows }
+// from parseDecisionMatrix(). `entry` (optional) carries `consultWeights` — an
+// int-per-criterion array the sliders read and write; absent → all 1s. Changing
+// a slider recomputes every weighted total, re-marks the winning row, and
+// mutates entry.consultWeights (persisted by the normal auto-save path).
+function _renderDecisionMatrix(parsed, entry) {
+  const { criteria, rows } = parsed;
+  let weights =
+    entry && Array.isArray(entry.consultWeights) && entry.consultWeights.length === criteria.length
+      ? entry.consultWeights.map((w) => {
+          const n = Math.round(Number(w));
+          return isFinite(n) ? Math.max(0, Math.min(5, n)) : 1;
+        })
+      : criteria.map(() => 1);
+  if (entry) entry.consultWeights = weights;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'consult-matrix-wrap';
+  const table = document.createElement('table');
+  table.className = 'consult-matrix';
+
+  const thead = document.createElement('thead');
+  const hr = document.createElement('tr');
+  hr.appendChild(_matrixTh('Option', 'consult-matrix__opt'));
+  const wValEls = [];
+  criteria.forEach((name, i) => {
+    const th = _matrixTh('', 'consult-matrix__crit');
+    const label = document.createElement('span');
+    label.className = 'consult-matrix__crit-name';
+    label.textContent = name;
+    th.appendChild(label);
+    const wctl = document.createElement('span');
+    wctl.className = 'consult-matrix__weight';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '5';
+    slider.step = '1';
+    slider.value = String(weights[i]);
+    slider.setAttribute('aria-label', 'Weight for ' + name);
+    const wval = document.createElement('span');
+    wval.className = 'consult-matrix__wval';
+    wval.textContent = '×' + weights[i];
+    wValEls.push(wval);
+    slider.addEventListener('input', function () {
+      weights[i] = parseInt(this.value, 10) || 0;
+      wval.textContent = '×' + weights[i];
+      if (entry) entry.consultWeights = weights;
+      recompute();
+    });
+    wctl.appendChild(slider);
+    wctl.appendChild(wval);
+    th.appendChild(wctl);
+    hr.appendChild(th);
+  });
+  hr.appendChild(_matrixTh('Weighted total', 'consult-matrix__total-h'));
+  thead.appendChild(hr);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  const rowEls = rows.map((r) => {
+    const tr = document.createElement('tr');
+    const opt = document.createElement('td');
+    opt.className = 'consult-matrix__opt';
+    opt.textContent = r.option;
+    tr.appendChild(opt);
+    r.scores.forEach((s) => {
+      const td = document.createElement('td');
+      td.className = 'consult-matrix__score';
+      td.textContent = String(s);
+      tr.appendChild(td);
+    });
+    const total = document.createElement('td');
+    total.className = 'consult-matrix__total';
+    tr.appendChild(total);
+    tbody.appendChild(tr);
+    return { tr, total, scores: r.scores };
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+
+  function recompute() {
+    let best = -Infinity;
+    rowEls.forEach((re) => {
+      const t = re.scores.reduce((acc, s, i) => acc + s * weights[i], 0);
+      re.total.textContent = String(t);
+      re._t = t;
+      if (t > best) best = t;
+    });
+    rowEls.forEach((re) => re.tr.classList.toggle('is-winner', re._t === best && best > -Infinity));
+  }
+  recompute();
+  return wrap;
+}
+
+function _matrixTh(text, cls) {
+  const th = document.createElement('th');
+  if (cls) th.className = cls;
+  if (text) th.textContent = text;
+  return th;
+}
+
+function renderConsultReply(container, rawText, template, view, entry) {
   container.classList.remove('consult-artifact');
   container.innerHTML = '';
 
-  const sections = view === 'structured' ? parseConsultReply(rawText, template) : null;
+  const parsed = view === 'structured' ? parseConsultReply(rawText, template) : null;
 
-  if (view === 'structured' && sections) {
+  if (view === 'structured' && parsed) {
     container.classList.add('consult-artifact');
     if (template === 'swot') {
       const grid = document.createElement('div');
       grid.className = 'consult-grid consult-grid--swot';
       _SWOT_CELLS.forEach(([key, label]) => {
-        grid.appendChild(_consultCell(key, label, sections[key]));
+        grid.appendChild(_consultCell(key, label, parsed[key]));
       });
       container.appendChild(grid);
       return;
@@ -406,9 +511,13 @@ function renderConsultReply(container, rawText, template, view) {
     if (template === 'proscons') {
       const cols = document.createElement('div');
       cols.className = 'consult-grid consult-grid--proscons';
-      cols.appendChild(_consultCell('pros', 'Pros', sections.pros));
-      cols.appendChild(_consultCell('cons', 'Cons', sections.cons));
+      cols.appendChild(_consultCell('pros', 'Pros', parsed.pros));
+      cols.appendChild(_consultCell('cons', 'Cons', parsed.cons));
       container.appendChild(cols);
+      return;
+    }
+    if (template === 'matrix') {
+      container.appendChild(_renderDecisionMatrix(parsed, entry));
       return;
     }
   }
@@ -436,7 +545,7 @@ function _buildConsultViewSwitch(entry, container, rawText) {
   select.value = entry.consultView || 'structured';
   select.addEventListener('change', function () {
     entry.consultView = this.value;
-    renderConsultReply(container, rawText, entry.consultArtifact, this.value);
+    renderConsultReply(container, rawText, entry.consultArtifact, this.value, entry);
   });
   return select;
 }
@@ -1034,13 +1143,14 @@ function saveChat() {
   // imageDataUrl) to keep files small; preserve hasImage so loaded history can show
   // a placeholder where an image was attached.
   const exportData = conversationHistory.map(
-    ({ role, content, timestamp, hasImage, editorExchange, editorView, consultArtifact, consultView }) => {
+    ({ role, content, timestamp, hasImage, editorExchange, editorView, consultArtifact, consultView, consultWeights }) => {
       const entry = { role, content, timestamp };
       if (hasImage) entry.hasImage = true;
       if (editorExchange) entry.editorExchange = true;
       if (editorView) entry.editorView = editorView;
       if (consultArtifact) entry.consultArtifact = consultArtifact;
       if (consultView) entry.consultView = consultView;
+      if (Array.isArray(consultWeights)) entry.consultWeights = consultWeights;
       return entry;
     }
   );
@@ -1213,7 +1323,7 @@ function renderConversationHistory() {
 
       if (consultTpl) {
         if (!msg.consultView) msg.consultView = 'structured';
-        renderConsultReply(contentEl, msg.content, consultTpl, msg.consultView);
+        renderConsultReply(contentEl, msg.content, consultTpl, msg.consultView, msg);
       } else if (msg.editorExchange === true && editorOriginal !== null) {
         if (!msg.editorView) msg.editorView = 'clean';
         renderEditorReply(contentEl, editorOriginal, msg.content, msg.editorView);
@@ -1294,6 +1404,10 @@ function handleOpenFile(event) {
         if (typeof item.editorView === 'string') entry.editorView = item.editorView;
         if (typeof item.consultArtifact === 'string') entry.consultArtifact = item.consultArtifact;
         if (typeof item.consultView === 'string') entry.consultView = item.consultView;
+        if (Array.isArray(item.consultWeights)) {
+          entry.consultWeights = item.consultWeights
+            .map((w) => Math.max(0, Math.min(5, Math.round(Number(w)) || 0)));
+        }
         return entry;
       });
 
