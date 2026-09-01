@@ -10,7 +10,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.6.0",
-    "globals": "^17.7.0",
+    "globals": "^17.11.0",
     "htmlhint": "^1.1.4",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1"
