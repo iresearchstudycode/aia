@@ -322,11 +322,54 @@ function parseProsConsSections(text) {
   return s.pros || s.cons ? s : null;
 }
 
+// Decision-matrix reply → { criteria: [name…], rows: [{ option, scores: [n…] }] }
+// from the first markdown pipe table. First header cell (the "Option" label) is
+// dropped; the rest are criteria. Row cells after the option name are coerced to
+// numbers clamped 0–5 (non-numeric → 0). A trailing column whose header matches
+// total/score/weighted and any row whose option matches /weight/i are ignored
+// (models add them despite the instruction). Returns null when there is no
+// usable table (no pipe rows, <1 criterion, or <2 option rows). Pure.
+function parseDecisionMatrix(text) {
+  if (typeof text !== 'string' || text.indexOf('|') === -1) return null;
+  const rowsRaw = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('|') || l.indexOf('|') > 0)
+    .map((l) => l.replace(/^\||\|$/g, '').split('|').map((c) => c.trim()));
+  // Drop the markdown separator row (--- | :--: | - | …).
+  const table = rowsRaw.filter((cells) => !cells.every((c) => /^:?-+:?$/.test(c) || c === ''));
+  if (table.length < 2) return null;
+
+  let criteria = table[0].slice(1);
+  let dataRows = table.slice(1);
+  // Drop a trailing total/score column.
+  if (criteria.length && /^(weighted\s*)?(total|score)$/i.test(criteria[criteria.length - 1])) {
+    criteria = criteria.slice(0, -1);
+    dataRows = dataRows.map((r) => r.slice(0, criteria.length + 1));
+  }
+  criteria = criteria.filter((c) => c !== '');
+  if (!criteria.length) return null;
+
+  const rows = [];
+  for (const cells of dataRows) {
+    const option = cells[0];
+    if (!option || /^weights?$/i.test(option)) continue;
+    const scores = criteria.map((_, i) => {
+      const n = parseFloat(cells[i + 1]);
+      if (!isFinite(n) || n < 0) return 0;
+      return n > 5 ? 5 : n;
+    });
+    rows.push({ option, scores });
+  }
+  return rows.length >= 2 ? { criteria, rows } : null;
+}
+
 // Dispatch a Consultant reply to the parser for its template. Returns the
-// section map or null (unknown template, or the parser rejected the text).
+// parsed structure or null (unknown template, or the parser rejected the text).
 function parseConsultReply(text, template) {
   if (template === 'swot') return parseSwotSections(text);
   if (template === 'proscons') return parseProsConsSections(text);
+  if (template === 'matrix') return parseDecisionMatrix(text);
   return null;
 }
 
@@ -348,6 +391,7 @@ if (typeof module !== 'undefined') {
     resolveNumCtx,
     parseSwotSections,
     parseProsConsSections,
+    parseDecisionMatrix,
     parseConsultReply
   };
 }
