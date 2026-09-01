@@ -350,6 +350,105 @@ function _buildEditorViewSwitch(entry, container, originalText, revisedText) {
   return select;
 }
 
+// Professional Consultant analysis replies (SWOT / Pros & cons): the model
+// returns markdown with named sections, and the reader can view it two ways —
+// 'structured' (a colour-coded grid / two columns) or 'text' (rendered like any
+// other reply). `rawText` is the verbatim model output stored in
+// conversationHistory; the section split is always derived here, never stored.
+//
+// SECURITY: every section body still goes through renderMarkdownToHtml() — the
+// one sanitised AI-content -> innerHTML boundary — so the structured view opens
+// no new sink. The grid scaffold is built with createElement.
+const CONSULT_VIEW_LABELS = { structured: 'Structured', text: 'Text' };
+const _SWOT_CELLS = [
+  ['strengths', 'Strengths'],
+  ['weaknesses', 'Weaknesses'],
+  ['opportunities', 'Opportunities'],
+  ['threats', 'Threats']
+];
+
+function _consultCell(modifier, heading, body) {
+  const cell = document.createElement('div');
+  cell.className = 'consult-cell consult-cell--' + modifier;
+  const h = document.createElement('h4');
+  h.className = 'consult-cell__heading';
+  h.textContent = heading;
+  cell.appendChild(h);
+  const bodyEl = document.createElement('div');
+  bodyEl.className = 'consult-cell__body';
+  if (body && body.trim()) {
+    bodyEl.innerHTML = renderMarkdownToHtml(body);
+    enrichRenderedContent(bodyEl);
+  } else {
+    bodyEl.innerHTML = '<p class="consult-cell__empty">—</p>';
+  }
+  cell.appendChild(bodyEl);
+  return cell;
+}
+
+function renderConsultReply(container, rawText, template, view) {
+  container.classList.remove('consult-artifact');
+  container.innerHTML = '';
+
+  const sections = view === 'structured' ? parseConsultReply(rawText, template) : null;
+
+  if (view === 'structured' && sections) {
+    container.classList.add('consult-artifact');
+    if (template === 'swot') {
+      const grid = document.createElement('div');
+      grid.className = 'consult-grid consult-grid--swot';
+      _SWOT_CELLS.forEach(([key, label]) => {
+        grid.appendChild(_consultCell(key, label, sections[key]));
+      });
+      container.appendChild(grid);
+      return;
+    }
+    if (template === 'proscons') {
+      const cols = document.createElement('div');
+      cols.className = 'consult-grid consult-grid--proscons';
+      cols.appendChild(_consultCell('pros', 'Pros', sections.pros));
+      cols.appendChild(_consultCell('cons', 'Cons', sections.cons));
+      container.appendChild(cols);
+      return;
+    }
+  }
+
+  // 'text' — or a structured view whose parse failed: render like a normal reply.
+  container.innerHTML = renderMarkdownToHtml(rawText);
+  enrichRenderedContent(container);
+  _addMarkdownCopyBtn(container, rawText);
+}
+
+// Build the Structured/Text selector shown alongside a Consultant analysis
+// reply's copy/speak actions. Mutates `entry.consultView` on change (so the
+// choice persists into conversationHistory and every save path) and re-renders
+// `container` in place — no re-send. Mirrors _buildEditorViewSwitch.
+function _buildConsultViewSwitch(entry, container, rawText) {
+  const select = document.createElement('select');
+  select.className = 'editor-view-switch';
+  select.setAttribute('aria-label', 'Analysis reply view');
+  ['structured', 'text'].forEach((v) => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = CONSULT_VIEW_LABELS[v];
+    select.appendChild(opt);
+  });
+  select.value = entry.consultView || 'structured';
+  select.addEventListener('change', function () {
+    entry.consultView = this.value;
+    renderConsultReply(container, rawText, entry.consultArtifact, this.value);
+  });
+  return select;
+}
+
+// Fold a picked Consultant template's format instruction into the outgoing
+// message. Visible in the user bubble (it's two lines) — no parse-back.
+function _composeConsultMessage(rawMessage, template) {
+  const tpl = typeof _CONSULT_TEMPLATES !== 'undefined' && _CONSULT_TEMPLATES[template];
+  if (!tpl) return rawMessage;
+  return (rawMessage || '').trim() + '\n\n' + tpl.format;
+}
+
 // The user turn an editor reply revised — the nearest preceding 'user' entry.
 // Returns null when there is none (shouldn't happen for a tagged exchange).
 function _precedingUserText(history, idx) {
@@ -498,11 +597,13 @@ function _streamInProgress() {
 
 // Shared tail of every send path: render the user bubble, add the AI
 // placeholder, stream the reply. streamOllamaResponse() re-pushes the user
-// entry to conversationHistory itself, so callers must not.
-async function _dispatchSend(message, imageBase64, imageDataUrl) {
+// entry to conversationHistory itself, so callers must not. `consultTemplate`
+// (when set) tells api.js to render the completed reply as a SWOT / pros-cons
+// analysis artifact.
+async function _dispatchSend(message, imageBase64, imageDataUrl, consultTemplate) {
   addUserMessage(message, imageDataUrl);
   const aiMessageDiv = addAIMessagePlaceholder();
-  await streamOllamaResponse(message, aiMessageDiv, imageBase64, imageDataUrl);
+  await streamOllamaResponse(message, aiMessageDiv, imageBase64, imageDataUrl, consultTemplate || null);
 }
 
 // Regenerate the most recent AI reply: drop the trailing user+assistant pair
@@ -652,6 +753,9 @@ function updateSystemPromptState() {
       headerIcon.replaceWith(fresh);
     }
   }
+
+  // Show/hide the Professional Consultant "Templates" composer control.
+  if (typeof _syncConsultUiForPersona === 'function') _syncConsultUiForPersona();
 }
 
 // Add a user message bubble. imageDataUrl is a data: URL from FileReader for display.
@@ -756,6 +860,7 @@ async function clearChat() {
   document.getElementById('chatMessages').innerHTML = '';
   clearImagePreview();
   clearDocumentPreview();
+  if (typeof clearConsultTemplate === 'function') clearConsultTemplate();
   updateSystemPromptState(); // Re-enable persona switching
   if (typeof hcNewConversationId === 'function') hcNewConversationId();
   // Drop the just-archived conversation into the sidebar list and clear the
@@ -818,6 +923,26 @@ function _composeOutgoingMessage(rawMessage) {
   );
 }
 
+// The two send paths share this: resolve the outgoing message text and, when a
+// Consultant template was picked (and no attachment shadows it), fold in its
+// format instruction and return the template key so _dispatchSend can tag the
+// reply. Consumes + clears `pendingConsultTemplate`.
+function _resolveOutgoing(rawMessage) {
+  let message = _composeOutgoingMessage(rawMessage);
+  let consultTemplate = null;
+  if (
+    typeof pendingConsultTemplate !== 'undefined' &&
+    pendingConsultTemplate &&
+    !pendingDocumentText &&
+    !pendingImageBase64
+  ) {
+    consultTemplate = pendingConsultTemplate;
+    message = _composeConsultMessage(message, consultTemplate);
+  }
+  if (typeof clearConsultTemplate === 'function') clearConsultTemplate();
+  return { message, consultTemplate };
+}
+
 async function sendMessageAndContinueListening() {
   const input = document.getElementById('userInput');
   const rawMessage = input.value.trim();
@@ -828,14 +953,14 @@ async function sendMessageAndContinueListening() {
 
     const imageDataUrl = pendingImageDataUrl;
     const imageBase64 = pendingImageBase64;
-    const message = _composeOutgoingMessage(rawMessage);
+    const { message, consultTemplate } = _resolveOutgoing(rawMessage);
     clearImagePreview();
     clearDocumentPreview();
 
     input.value = '';
     input.dispatchEvent(new Event('input'));
 
-    await _dispatchSend(message, imageBase64, imageDataUrl);
+    await _dispatchSend(message, imageBase64, imageDataUrl, consultTemplate);
   }
 }
 
@@ -862,14 +987,14 @@ async function sendMessage() {
 
     const imageDataUrl = pendingImageDataUrl;
     const imageBase64 = pendingImageBase64;
-    const message = _composeOutgoingMessage(rawMessage);
+    const { message, consultTemplate } = _resolveOutgoing(rawMessage);
     clearImagePreview();
     clearDocumentPreview();
 
     input.value = '';
     input.dispatchEvent(new Event('input'));
 
-    await _dispatchSend(message, imageBase64, imageDataUrl);
+    await _dispatchSend(message, imageBase64, imageDataUrl, consultTemplate);
   }
 }
 
@@ -909,11 +1034,13 @@ function saveChat() {
   // imageDataUrl) to keep files small; preserve hasImage so loaded history can show
   // a placeholder where an image was attached.
   const exportData = conversationHistory.map(
-    ({ role, content, timestamp, hasImage, editorExchange, editorView }) => {
+    ({ role, content, timestamp, hasImage, editorExchange, editorView, consultArtifact, consultView }) => {
       const entry = { role, content, timestamp };
       if (hasImage) entry.hasImage = true;
       if (editorExchange) entry.editorExchange = true;
       if (editorView) entry.editorView = editorView;
+      if (consultArtifact) entry.consultArtifact = consultArtifact;
+      if (consultView) entry.consultView = consultView;
       return entry;
     }
   );
@@ -1077,8 +1204,17 @@ function renderConversationHistory() {
       // is somehow missing.
       const editorOriginal =
         msg.editorExchange === true ? _precedingUserText(conversationHistory, idx) : null;
+      const consultTpl =
+        msg.consultArtifact &&
+        typeof _CONSULT_TEMPLATES !== 'undefined' &&
+        _CONSULT_TEMPLATES[msg.consultArtifact]
+          ? msg.consultArtifact
+          : null;
 
-      if (msg.editorExchange === true && editorOriginal !== null) {
+      if (consultTpl) {
+        if (!msg.consultView) msg.consultView = 'structured';
+        renderConsultReply(contentEl, msg.content, consultTpl, msg.consultView);
+      } else if (msg.editorExchange === true && editorOriginal !== null) {
         if (!msg.editorView) msg.editorView = 'clean';
         renderEditorReply(contentEl, editorOriginal, msg.content, msg.editorView);
       } else {
@@ -1092,7 +1228,9 @@ function renderConversationHistory() {
       actionsDiv.appendChild(createCopyButton(msg.content));
       const speakBtnH = createSpeakButton(msg.content);
       if (speakBtnH) actionsDiv.appendChild(speakBtnH);
-      if (msg.editorExchange === true && editorOriginal !== null) {
+      if (consultTpl) {
+        actionsDiv.appendChild(_buildConsultViewSwitch(msg, contentEl, msg.content));
+      } else if (msg.editorExchange === true && editorOriginal !== null) {
         actionsDiv.appendChild(
           _buildEditorViewSwitch(msg, contentEl, editorOriginal, msg.content)
         );
@@ -1154,12 +1292,15 @@ function handleOpenFile(event) {
         if (item.hasImage) entry.hasImage = true;
         if (item.editorExchange === true) entry.editorExchange = true;
         if (typeof item.editorView === 'string') entry.editorView = item.editorView;
+        if (typeof item.consultArtifact === 'string') entry.consultArtifact = item.consultArtifact;
+        if (typeof item.consultView === 'string') entry.consultView = item.consultView;
         return entry;
       });
 
       renderConversationHistory();
       clearImagePreview();
       clearDocumentPreview();
+      if (typeof clearConsultTemplate === 'function') clearConsultTemplate();
       // updateSystemPromptState() is now called inside renderConversationHistory()
     } catch (err) {
       alert('Failed to open chat: ' + err.message);
@@ -1281,6 +1422,9 @@ if (typeof module !== 'undefined') {
     enrichRenderedContent,
     renderMarkdownToHtml,
     personaIconEl,
+    renderConsultReply,
+    _buildConsultViewSwitch,
+    _composeConsultMessage,
     _lastExchangeIndices,
     _editableTextFor,
     regenerateLastResponse,

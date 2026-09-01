@@ -131,7 +131,18 @@ class TestGetSettingsFresh:
             "thinking_depth": None,
             "tts_engine": None,
             "editor_mode": "clean",
+            "default_analysis_view": "structured",
         }
+
+    def test_professional_has_default_analysis_view_structured(self, client: TestClient) -> None:
+        entry = _get(client)["personas"]["professional"]
+        assert entry["default_analysis_view"] == "structured"
+
+    def test_only_professional_has_default_analysis_view(self, client: TestClient) -> None:
+        body = _get(client)
+        for key, entry in body["personas"].items():
+            if key != "professional":
+                assert "default_analysis_view" not in entry
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +284,40 @@ class TestPutPersona:
         )
         assert response.status_code == 422
         assert response.json()["ok"] is False
+
+    def test_default_analysis_view_accepted_for_professional(self, client: TestClient) -> None:
+        response = client.put(
+            "/settings/persona/professional",
+            headers=_HEADERS,
+            json={"default_analysis_view": "text"},
+        )
+        assert response.status_code == 200
+        assert response.json()["persona"]["default_analysis_view"] == "text"
+        assert _get(client)["personas"]["professional"]["default_analysis_view"] == "text"
+
+    def test_default_analysis_view_rejected_for_assistant(self, client: TestClient) -> None:
+        response = client.put(
+            "/settings/persona/assistant",
+            headers=_HEADERS,
+            json={"default_analysis_view": "text"},
+        )
+        assert response.status_code == 422
+
+    def test_default_analysis_view_bad_value_rejected(self, client: TestClient) -> None:
+        response = client.put(
+            "/settings/persona/professional",
+            headers=_HEADERS,
+            json={"default_analysis_view": "grid"},
+        )
+        assert response.status_code == 422
+
+    def test_default_analysis_view_null_rejected(self, client: TestClient) -> None:
+        response = client.put(
+            "/settings/persona/professional",
+            headers=_HEADERS,
+            json={"default_analysis_view": None},
+        )
+        assert response.status_code == 422
 
     def test_unknown_persona_is_404(self, client: TestClient) -> None:
         response = client.put(

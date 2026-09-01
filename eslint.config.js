@@ -36,6 +36,7 @@ const crossModuleGlobals = {
   systemPrompts: 'readonly',
   personaLabels: 'readonly',
   personaIcons: 'readonly',
+  _CONSULT_TEMPLATES: 'readonly',
   // config.js — mutable state
   conversationHistory: 'writable',
   currentSystemPrompt: 'writable',
@@ -47,6 +48,8 @@ const crossModuleGlobals = {
   currentThinkingMode: 'writable',
   currentTTSEngine: 'writable',
   currentEditorMode: 'writable',
+  currentConsultView: 'writable',
+  pendingConsultTemplate: 'writable',
   currentNavRailEnabled: 'writable',
   currentNumCtx: 'writable',
   currentTheme: 'writable',
@@ -71,6 +74,9 @@ const crossModuleGlobals = {
   parseOllamaModels: 'readonly',
   parseModelContextLengths: 'readonly',
   resolveNumCtx: 'readonly',
+  parseSwotSections: 'readonly',
+  parseProsConsSections: 'readonly',
+  parseConsultReply: 'readonly',
   // speech.js — functions
   toggleSpeechRecognition: 'readonly',
   speakText: 'readonly',
@@ -116,6 +122,9 @@ const crossModuleGlobals = {
   _currentPersonaKey: 'readonly',
   renderEditorReply: 'readonly',
   _buildEditorViewSwitch: 'readonly',
+  renderConsultReply: 'readonly',
+  _buildConsultViewSwitch: 'readonly',
+  _composeConsultMessage: 'readonly',
   regenerateLastResponse: 'readonly',
   editLastUserTurn: 'readonly',
   _refreshTurnControls: 'readonly',
@@ -127,6 +136,8 @@ const crossModuleGlobals = {
   // main.js
   clearImagePreview: 'readonly',
   clearDocumentPreview: 'readonly',
+  clearConsultTemplate: 'readonly',
+  _syncConsultUiForPersona: 'readonly',
   _defaultVpalSettings: 'readonly',
   _migrateLegacySettingsIfNeeded: 'readonly',
   // settings.js

@@ -117,6 +117,7 @@ _PERSONA_OVERRIDE_KEYS: tuple[str, ...] = (
 _TTS_ENGINES: tuple[str, ...] = ("piper", "voicebox")
 _THINKING_DEPTHS: tuple[str, ...] = ("low", "medium", "high")
 _EDITOR_MODES: tuple[str, ...] = ("clean", "changes", "explain")
+_ANALYSIS_VIEWS: tuple[str, ...] = ("structured", "text")
 _THEMES: tuple[str, ...] = ("system", "light", "dark")
 
 _BOOL_GLOBAL_KEYS: frozenset[str] = frozenset({"auto_speak", "thinking_enabled", "nav_rail"})
@@ -170,6 +171,7 @@ def _persona_defaults() -> dict[str, Any]:
         "thinking_depth": None,
         "tts_engine": None,
         "editor_mode": "clean",
+        "default_analysis_view": "structured",
     }
 
 
@@ -265,11 +267,14 @@ def _resolved_persona(conn: sqlite3.Connection, username: str, persona_key: str)
     """Return the persona override block: every override key present.
 
     Unset override keys are ``null``; ``editor_mode`` appears (and defaults to
-    ``"clean"``) only for ``englishEditor``.
+    ``"clean"``) only for ``englishEditor``; ``default_analysis_view`` appears
+    (and defaults to ``"structured"``) only for ``professional``.
     """
     entry: dict[str, Any] = {key: None for key in _PERSONA_OVERRIDE_KEYS}
     if persona_key == "englishEditor":
         entry["editor_mode"] = "clean"
+    if persona_key == "professional":
+        entry["default_analysis_view"] = "structured"
     for key, value in _stored(conn, username, f"persona:{persona_key}").items():
         if key in entry:
             entry[key] = value
@@ -332,7 +337,7 @@ def _validate_persona(persona_key: str, key: str, value: Any) -> Any:
 
     ``value is None`` is legal for the nullable override keys (the caller
     turns it into a row delete); ``editor_mode`` is englishEditor-only and
-    must not be null.
+    ``default_analysis_view`` is professional-only, and neither may be null.
     """
     if key == "editor_mode":
         if persona_key != "englishEditor":
@@ -340,6 +345,15 @@ def _validate_persona(persona_key: str, key: str, value: Any) -> Any:
         if value is None:
             raise ValidationError("editor_mode cannot be null")
         return _require_choice(key, value, _EDITOR_MODES)
+
+    if key == "default_analysis_view":
+        if persona_key != "professional":
+            raise ValidationError(
+                "default_analysis_view is only valid for the professional persona"
+            )
+        if value is None:
+            raise ValidationError("default_analysis_view cannot be null")
+        return _require_choice(key, value, _ANALYSIS_VIEWS)
 
     if key not in _PERSONA_OVERRIDE_KEYS:
         raise ValidationError(f"unknown persona setting: {key}")

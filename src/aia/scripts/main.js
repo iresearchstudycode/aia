@@ -57,6 +57,26 @@ function clearDocumentPreview() {
   document.getElementById('sendBtn').disabled = textarea.value.trim().length === 0 && !pendingImageBase64;
 }
 
+// Clears a pending Professional Consultant template pick — resets the global
+// and hides the composer chip. Called from sendMessage/clearChat/handleOpenFile
+// (chat.js) and the chip's ✕ button.
+function clearConsultTemplate() {
+  pendingConsultTemplate = null;
+  const chip = document.getElementById('consultTemplateChip');
+  if (chip) chip.style.display = 'none';
+}
+
+// Show/hide the composer "Templates" button for the active persona (Professional
+// Consultant only). Called on load and after every persona change.
+function _syncConsultUiForPersona() {
+  const btn = document.getElementById('consultTemplateBtn');
+  if (!btn) return;
+  const isConsultant =
+    typeof _currentPersonaKey === 'function' && _currentPersonaKey() === 'professional';
+  btn.hidden = !isConsultant;
+  if (!isConsultant) clearConsultTemplate();
+}
+
 // --- Consolidated settings ------------------------------------------------------
 // The 11 persona keys (must match config.js `systemPrompts` minus
 // `englishEditorExplained` and the spec's contract).
@@ -80,6 +100,7 @@ function _defaultVpalSettings() {
     };
   });
   personas.englishEditor.editor_mode = 'clean';
+  personas.professional.default_analysis_view = 'structured';
 
   const global = {
     chat_model: MODEL_NAME,
@@ -100,7 +121,10 @@ function _defaultVpalSettings() {
     personas: personas,
     defaults: {
       global: Object.assign({}, global),
-      persona: { thinking_enabled: null, thinking_depth: null, tts_engine: null, editor_mode: 'clean' }
+      persona: {
+        thinking_enabled: null, thinking_depth: null, tts_engine: null,
+        editor_mode: 'clean', default_analysis_view: 'structured'
+      }
     }
   };
 }
@@ -497,6 +521,72 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
   }
 
+  // Professional Consultant "Templates" menu — a composer control shown only for
+  // that persona (see _syncConsultUiForPersona). Opens upward like the attach
+  // menu. Picking a template prefills the composer + arms pendingConsultTemplate.
+  const consultTemplateBtn = document.getElementById('consultTemplateBtn');
+  const consultTemplateMenu = document.getElementById('consultTemplateMenu');
+  const consultTemplateChip = document.getElementById('consultTemplateChip');
+
+  function closeConsultMenu() {
+    if (!consultTemplateMenu) return;
+    consultTemplateMenu.classList.remove('open');
+    if (consultTemplateBtn) consultTemplateBtn.setAttribute('aria-expanded', 'false');
+  }
+  function openConsultMenu() {
+    if (!consultTemplateMenu || !consultTemplateBtn) return;
+    const rect = consultTemplateBtn.getBoundingClientRect();
+    consultTemplateMenu.style.bottom = (window.innerHeight - rect.top + 8) + 'px';
+    consultTemplateMenu.style.left = rect.left + 'px';
+    consultTemplateMenu.classList.add('open');
+    consultTemplateBtn.setAttribute('aria-expanded', 'true');
+  }
+  function _applyConsultTemplate(key) {
+    const tpl = typeof _CONSULT_TEMPLATES !== 'undefined' && _CONSULT_TEMPLATES[key];
+    if (!tpl) return;
+    pendingConsultTemplate = key;
+    const input = document.getElementById('userInput');
+    if (input) {
+      input.value = tpl.scaffold;
+      input.dispatchEvent(new Event('input'));
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+    if (consultTemplateChip) {
+      const nameEl = consultTemplateChip.querySelector('.consult-chip-name');
+      if (nameEl) nameEl.textContent = tpl.label;
+      consultTemplateChip.style.display = 'flex';
+    }
+    closeConsultMenu();
+  }
+
+  if (consultTemplateBtn && consultTemplateMenu && typeof _CONSULT_TEMPLATES !== 'undefined') {
+    Object.keys(_CONSULT_TEMPLATES).forEach(function (key) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.setAttribute('role', 'menuitem');
+      item.dataset.template = key;
+      item.textContent = _CONSULT_TEMPLATES[key].label;
+      item.addEventListener('click', function () { _applyConsultTemplate(key); });
+      consultTemplateMenu.appendChild(item);
+    });
+    consultTemplateBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      consultTemplateMenu.classList.contains('open') ? closeConsultMenu() : openConsultMenu();
+    });
+    document.addEventListener('click', function (e) {
+      if (!consultTemplateMenu.contains(e.target) && e.target !== consultTemplateBtn &&
+          !consultTemplateBtn.contains(e.target)) {
+        closeConsultMenu();
+      }
+    });
+  }
+  if (consultTemplateChip) {
+    const rm = consultTemplateChip.querySelector('.consult-chip-remove');
+    if (rm) rm.addEventListener('click', clearConsultTemplate);
+  }
+  _syncConsultUiForPersona();
+
   const modelBadge = document.getElementById('modelBadge');
   if (modelBadge) {
     modelBadge.addEventListener('click', function () { openSettings('models'); });
@@ -566,10 +656,12 @@ document.addEventListener('DOMContentLoaded', async function () {
       if (accountMenu.classList.contains('open') ||
           chatOverflowMenu.classList.contains('open') ||
           (personaMenu && personaMenu.classList.contains('open')) ||
+          (consultTemplateMenu && consultTemplateMenu.classList.contains('open')) ||
           attachMenuDropdown.classList.contains('open')) {
         closeAccountMenu();
         closeOverflowMenu();
         closePersonaMenu();
+        closeConsultMenu();
         closeAttachMenu();
         return;
       }
@@ -584,6 +676,9 @@ document.addEventListener('DOMContentLoaded', async function () {
       if (accountMenu.classList.contains('open')) _trapFocus(accountMenu, e);
       if (chatOverflowMenu.classList.contains('open')) _trapFocus(chatOverflowMenu, e);
       if (personaMenu && personaMenu.classList.contains('open')) _trapFocus(personaMenu, e);
+      if (consultTemplateMenu && consultTemplateMenu.classList.contains('open')) {
+        _trapFocus(consultTemplateMenu, e);
+      }
       if (attachMenuDropdown.classList.contains('open')) _trapFocus(attachMenuDropdown, e);
     }
   });
@@ -594,6 +689,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (accountMenu.classList.contains('open')) closeAccountMenu();
     if (chatOverflowMenu.classList.contains('open')) closeOverflowMenu();
     if (personaMenu && personaMenu.classList.contains('open')) closePersonaMenu();
+    if (consultTemplateMenu && consultTemplateMenu.classList.contains('open')) closeConsultMenu();
     if (attachMenuDropdown.classList.contains('open')) closeAttachMenu();
   });
 

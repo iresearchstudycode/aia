@@ -1,4 +1,4 @@
-# Session Status — 2026-09-01 (rev 15)
+# Session Status — 2026-09-01 (rev 16)
 
 Handoff note for resuming work. Overwrite freely.
 
@@ -6,10 +6,18 @@ Handoff note for resuming work. Overwrite freely.
 
 | | |
 |---|---|
-| `master` / `dev` | **v1.31.2** at `163a319`, zero drift, CI green |
-| `feat/num-ctx-full-window` | **v1.31.3** — `resolveNumCtx` sends the model's full context window; PR into `dev` |
-| Working tree | this doc + the v1.31.3 diff |
-| Docker stack | 7 services healthy. Still owed: a full `docker compose up -d --build` for the Inter woff2, `VPAL_DEFAULT_THEME` default, and the `auth` `<meta color-scheme>` tag. v1.30–1.31.x are all frontend-only — no service / image / env changes. |
+| `master` / `dev` | **v1.31.3** — `resolveNumCtx` sends the model's full context window (PRs #70/#71 merged, zero drift, CI green) |
+| `feat/consultant-templates` | **v1.32.0** — Professional Consultant SWOT / Pros & cons templates; PR into `dev` |
+| Working tree | the v1.32.0 diff + this doc |
+| Docker stack | 7 services healthy. **v1.32.0 adds a settings-service key (`default_analysis_view`)** → needs `docker compose build settings-service && docker compose up -d settings-service` before the live check. Still owed separately: a full `docker compose up -d --build` for the Inter woff2, `VPAL_DEFAULT_THEME`, `auth` `<meta color-scheme>`. |
+
+## ▶ v1.32.0 — Professional Consultant analysis templates (first per-persona affordance)
+
+Built on the English Editor pattern. With the **Professional Consultant** active, a "Templates" button in the composer (`#consultTemplateBtn`, hidden for other personas) offers **SWOT** / **Pros & cons**. Picking one prefills the prompt + folds in a format instruction; the reply renders as a colour-coded 2×2 SWOT quadrant grid (or two-column pros/cons) with a **Structured / Text** view switch; `consultArtifact`/`consultView` round-trip through reload / JSON save-open / the conversations-service. `default_analysis_view` (structured｜text) is a professional-only Settings → Personas key.
+
+Pieces: `_CONSULT_TEMPLATES` (config.js) · `parseSwotSections`/`parseProsConsSections`/`parseConsultReply` (utils.js, pure) · `renderConsultReply`/`_buildConsultViewSwitch`/`_composeConsultMessage`/`_resolveOutgoing` (chat.js) · `streamOllamaResponse(..., consultTemplate)` tagging (api.js) · `#consultTemplateMenu` wiring + `_syncConsultUiForPersona`/`clearConsultTemplate` (main.js) · `default_analysis_view` (settings-service `_validate_persona`/`_resolved_persona`/`_persona_defaults`; settings.js gained a generalised `def.fallback`). Tests: JS **309** (`consult.test.js` +18), settings-service **75** (+6). Harness-verified light + dark.
+
+**Follow-up:** decision matrix (3rd template, interactive weights) is queued as v1.33.0.
 
 ## ▶ Mermaid repair — running tally
 

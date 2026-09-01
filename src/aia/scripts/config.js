@@ -60,7 +60,7 @@ const systemPrompts = {
   technical: "You are a technical expert. Provide detailed, accurate technical information with examples and best practices. When a diagram would help, express it as Mermaid syntax inside a fenced code block tagged exactly ```mermaid (never a bare fence or a different label) so it renders as a diagram. Diagram rules: start flowcharts with `flowchart TD`; ALWAYS wrap every node label in double quotes — e.g. A[\"Web Application Firewall (WAF)\"] or B{\"NACL / subnet guardrail\"} — so parentheses, slashes and other punctuation never break parsing; do not use `subgraph`, `style`, `classDef` or `linkStyle`." + _AU_EN,
   teacher: "You are a patient teacher. Explain concepts clearly, use analogies, and break down complex topics into simple steps." + _AU_EN,
   casual: "You are a casual, friendly companion. Use a relaxed tone, humor when appropriate, and be conversational." + _AU_EN,
-  professional: "You are a professional consultant. Provide well-structured, formal advice with strategic insights." + _AU_EN,
+  professional: "You are a professional consultant. Provide well-structured, formal advice with strategic insights. When asked for a SWOT analysis, a pros-and-cons weighing, or a decision matrix, follow the exact structured format the request specifies." + _AU_EN,
   legal: "You are a legal-domain AI assistant. Provide information based on current laws and regulations in Australia, and avoid giving personal opinions. Follow these behaviour rules: creativity low; citation strictness strict; risk tolerance very low; hallucination tolerance zero; explanation depth step-by-step. Adhere to the following hard rules: do not fabricate cases, citations, legislation, or facts; if unsure, respond \"Insufficient data\"; maintain confidentiality at all times; keep reasoning logically consistent and legally grounded; use Australian English; do not provide justification for the response; do not provide follow-up questions.",
   medical: "You are a medical expert. Provide accurate health information based on established medical knowledge, and always recommend consulting a healthcare professional for personal advice." + _AU_EN
 };
@@ -83,6 +83,29 @@ const personaIcons = {
   transcriptai: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>'
 };
 
+// Professional Consultant structured-analysis templates. Picking one from the
+// composer menu (only shown when that persona is active) prefills the textarea
+// with `scaffold` and folds `format` into the outgoing message so the reply
+// comes back in a shape `parseConsultReply()` (utils.js) can render as a
+// colour-coded grid. Frontend-only, same as `systemPrompts`.
+const _CONSULT_TEMPLATES = {
+  swot: {
+    label: 'SWOT analysis',
+    scaffold: 'SWOT analysis of: ',
+    format:
+      'Respond with exactly four markdown sections in this order — ' +
+      '"## Strengths", "## Weaknesses", "## Opportunities", "## Threats" — ' +
+      'each a short bullet list. No preamble or closing summary.'
+  },
+  proscons: {
+    label: 'Pros & cons',
+    scaffold: 'Weigh the pros and cons of: ',
+    format:
+      'Respond with exactly two markdown sections — "## Pros" then "## Cons" — ' +
+      'each a bullet list. No preamble.'
+  }
+};
+
 // Current system prompt
 let currentSystemPrompt = systemPrompts.englishEditor;
 let conversationHistory = [];
@@ -93,6 +116,8 @@ let currentVisionModel = VISION_MODEL_NAME; // model sent to Ollama for image tu
 let currentThinkingMode = 'off'; // 'off' | 'low' | 'medium' | 'high'
 let currentTTSEngine = 'piper'; // 'piper' | 'voicebox'
 let currentEditorMode = 'clean'; // 'clean' | 'changes' | 'explain' — English Editor output mode
+let currentConsultView = 'structured'; // 'structured' | 'text' — default view for a new Professional Consultant analysis artifact; from vpalSettings.personas.professional.default_analysis_view
+let pendingConsultTemplate = null; // 'swot' | 'proscons' — a Consultant template picked from the composer menu, consumed on the next send
 let currentNavRailEnabled = true; // conversation navigator rail visible; toolbar toggle, persisted to localStorage[NAV_RAIL_KEY]
 window.currentNavRailEnabled = currentNavRailEnabled; // nav-rail.js reads the flag off window to avoid script load-order issues
 let currentTheme = 'system'; // 'system' | 'light' | 'dark' — resolved from vpalSettings.global.theme by applyResolvedSettings(); _applyTheme() (settings.js) sets <html data-theme> + the localStorage[THEME_KEY] mirror
