@@ -565,7 +565,11 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   if (consultTemplateBtn && consultTemplateMenu && typeof _CONSULT_TEMPLATES !== 'undefined') {
+    // Composer "Templates" menu = only the templates that are picked from the
+    // composer (Consultant's, which have a `scaffold`). Teacher's quiz /
+    // flashcards are triggered by buttons on a reply, not this menu.
     Object.keys(_CONSULT_TEMPLATES).forEach(function (key) {
+      if (!_CONSULT_TEMPLATES[key].scaffold) return;
       const item = document.createElement('button');
       item.type = 'button';
       item.setAttribute('role', 'menuitem');

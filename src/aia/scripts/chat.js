@@ -520,12 +520,159 @@ function renderConsultReply(container, rawText, template, view, entry) {
       container.appendChild(_renderDecisionMatrix(parsed, entry));
       return;
     }
+    if (template === 'quiz') {
+      container.appendChild(_renderQuiz(parsed));
+      return;
+    }
+    if (template === 'flashcards') {
+      container.appendChild(_renderFlashcards(parsed));
+      return;
+    }
   }
 
   // 'text' — or a structured view whose parse failed: render like a normal reply.
   container.innerHTML = renderMarkdownToHtml(rawText);
   enrichRenderedContent(container);
   _addMarkdownCopyBtn(container, rawText);
+}
+
+// Interactive multiple-choice quiz (Patient Teacher). `parsed` = [{ question,
+// options: [{label, text, correct}], answer, explanation }] from parseQuiz().
+// Clicking an option — or "Show answer" — reveals the correct choice + the
+// explanation for that question; state is per-render (not persisted — a quiz is
+// meant to be retaken). Question / explanation go through renderMarkdownToHtml
+// (the sanitised boundary); option text is plain .textContent.
+function _renderQuiz(parsed) {
+  const wrap = document.createElement('div');
+  wrap.className = 'consult-quiz';
+  parsed.forEach((q, qi) => {
+    const card = document.createElement('div');
+    card.className = 'consult-quiz__q';
+
+    const qEl = document.createElement('div');
+    qEl.className = 'consult-quiz__question';
+    qEl.innerHTML = renderMarkdownToHtml((qi + 1) + '. ' + q.question);
+    enrichRenderedContent(qEl);
+    card.appendChild(qEl);
+
+    const opts = document.createElement('div');
+    opts.className = 'consult-quiz__options';
+    let revealed = false;
+    const reveal = (chosen) => {
+      if (revealed) return;
+      revealed = true;
+      card.classList.add('is-revealed');
+      [...opts.children].forEach((b) => {
+        b.disabled = true;
+        const isCorrect = b.dataset.label === q.answer;
+        if (isCorrect) b.classList.add('is-correct');
+        if (b === chosen && !isCorrect) b.classList.add('is-wrong');
+      });
+      if (q.explanation) {
+        const ex = document.createElement('div');
+        ex.className = 'consult-quiz__explanation';
+        ex.innerHTML = renderMarkdownToHtml(q.explanation);
+        enrichRenderedContent(ex);
+        card.appendChild(ex);
+      }
+      if (showBtn) showBtn.remove();
+    };
+
+    q.options.forEach((o) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'consult-quiz__option';
+      b.dataset.label = o.label;
+      const lab = document.createElement('span');
+      lab.className = 'consult-quiz__option-label';
+      lab.textContent = o.label;
+      const txt = document.createElement('span');
+      txt.textContent = o.text;
+      b.appendChild(lab);
+      b.appendChild(txt);
+      b.addEventListener('click', () => reveal(b));
+      opts.appendChild(b);
+    });
+    card.appendChild(opts);
+
+    const showBtn = document.createElement('button');
+    showBtn.type = 'button';
+    showBtn.className = 'consult-quiz__show';
+    showBtn.textContent = 'Show answer';
+    showBtn.addEventListener('click', () => reveal(null));
+    if (q.answer) card.appendChild(showBtn);
+
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+// Flippable flashcards (Patient Teacher). `parsed` = [{ front, back }] from
+// parseFlashcards(). Click a card to flip; flip state is per-render. `back` goes
+// through renderMarkdownToHtml; `front` is plain .textContent.
+function _renderFlashcards(parsed) {
+  const wrap = document.createElement('div');
+  wrap.className = 'consult-flashcards';
+  parsed.forEach((c) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'consult-flashcard';
+    card.setAttribute('aria-label', 'Flashcard — click to flip');
+
+    const inner = document.createElement('div');
+    inner.className = 'consult-flashcard__inner';
+
+    const front = document.createElement('div');
+    front.className = 'consult-flashcard__face consult-flashcard__front';
+    front.textContent = c.front;
+
+    const back = document.createElement('div');
+    back.className = 'consult-flashcard__face consult-flashcard__back';
+    back.innerHTML = renderMarkdownToHtml(c.back);
+    enrichRenderedContent(back);
+
+    inner.appendChild(front);
+    inner.appendChild(back);
+    card.appendChild(inner);
+    card.addEventListener('click', () => card.classList.toggle('is-flipped'));
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+// Post-reply "Quiz me" / "Flashcards" buttons for a completed Patient Teacher
+// answer. Each sends `_CONSULT_TEMPLATES[kind].prompt` + `.format` as a
+// follow-up turn (tagged so the reply renders as the interactive artifact).
+function _appendLearnActions(actionsDiv) {
+  if (typeof _CONSULT_TEMPLATES === 'undefined') return;
+  ['quiz', 'flashcards'].forEach((kind) => {
+    const tpl = _CONSULT_TEMPLATES[kind];
+    if (!tpl) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'learn-action-btn';
+    btn.textContent = tpl.label;
+    btn.addEventListener('click', () => _requestLearnArtifact(kind));
+    actionsDiv.appendChild(btn);
+  });
+}
+
+function _requestLearnArtifact(kind) {
+  if (typeof _streamInProgress === 'function' && _streamInProgress()) return;
+  const tpl = typeof _CONSULT_TEMPLATES !== 'undefined' && _CONSULT_TEMPLATES[kind];
+  if (!tpl) return;
+  _dispatchSend((tpl.prompt || '') + '\n\n' + tpl.format, null, null, kind);
+}
+
+// True when the active persona has a "reply button" affordance (Teacher) and
+// `msg` is a plain reply (not itself an artifact / error) to attach it to.
+function _teacherLearnEligible(msg) {
+  return (
+    _currentPersonaKey() === 'teacher' &&
+    !msg.consultArtifact &&
+    typeof msg.content === 'string' &&
+    msg.content.trim().length > 0
+  );
 }
 
 // Build the Structured/Text selector shown alongside a Consultant analysis
@@ -1344,6 +1491,8 @@ function renderConversationHistory() {
         actionsDiv.appendChild(
           _buildEditorViewSwitch(msg, contentEl, editorOriginal, msg.content)
         );
+      } else if (_teacherLearnEligible(msg)) {
+        _appendLearnActions(actionsDiv);
       }
       messageDiv.appendChild(actionsDiv);
     }
@@ -1539,6 +1688,9 @@ if (typeof module !== 'undefined') {
     renderConsultReply,
     _buildConsultViewSwitch,
     _composeConsultMessage,
+    _renderQuiz,
+    _renderFlashcards,
+    _appendLearnActions,
     _lastExchangeIndices,
     _editableTextFor,
     regenerateLastResponse,
