@@ -67,13 +67,17 @@ function clearConsultTemplate() {
 }
 
 // Show/hide the composer "Templates" button for the active persona (Professional
-// Consultant only). Called on load and after every persona change.
+// Consultant only). Called on load and after every persona change. The `.voice-btn`
+// rule sets `display: flex`, which beats the `[hidden]` attribute's UA
+// `display: none` — so toggle inline `style.display` too (CSS also has an
+// `#consultTemplateBtn[hidden]` rule as a belt-and-braces).
 function _syncConsultUiForPersona() {
   const btn = document.getElementById('consultTemplateBtn');
   if (!btn) return;
   const isConsultant =
     typeof _currentPersonaKey === 'function' && _currentPersonaKey() === 'professional';
   btn.hidden = !isConsultant;
+  btn.style.display = isConsultant ? '' : 'none';
   if (!isConsultant) clearConsultTemplate();
 }
 
