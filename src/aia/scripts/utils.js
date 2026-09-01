@@ -240,22 +240,25 @@ function parseModelContextLengths(json) {
   return out;
 }
 
-// Resolve the num_ctx to send for `modelName`: the configured `ceiling`
-// (OLLAMA_NUM_CTX), reduced to the model's advertised context window when that
-// is *smaller* — sending num_ctx larger than a model can hold makes Ollama
-// silently clamp the request. It never raises above the ceiling: a larger KV
-// cache is a deliberate memory-budget decision, not something to enable
-// automatically from a model's architectural maximum (which can be 128K+).
-// Falls back to the ceiling whenever the model's window is unknown.
-function resolveNumCtx(modelName, ceiling, contextMap) {
-  const cap = typeof ceiling === 'number' && isFinite(ceiling) && ceiling > 0
-    ? Math.floor(ceiling)
+// Resolve the num_ctx to send for `modelName`: the model's *full* advertised
+// context window (from GET /api/tags `details.context_length`) when known, so a
+// long conversation or a large attached document can use everything the model
+// was trained for. Falls back to `fallback` (OLLAMA_NUM_CTX) when the model's
+// window is unknown (e.g. the gemma line, which reports no context_length).
+//
+// This can send num_ctx well above OLLAMA_NUM_CTX (qwen3:4b advertises 262144).
+// The Ollama server's own OLLAMA_CONTEXT_LENGTH still clamps the request, so the
+// KV-cache memory cost is a server-side budget decision — set the server's
+// context length to what the host can afford.
+function resolveNumCtx(modelName, fallback, contextMap) {
+  const fb = typeof fallback === 'number' && isFinite(fallback) && fallback > 0
+    ? Math.floor(fallback)
     : 16384;
   const known = contextMap && typeof contextMap === 'object' ? contextMap[modelName] : undefined;
   if (typeof known === 'number' && isFinite(known) && known > 0) {
-    return Math.min(cap, Math.floor(known));
+    return Math.floor(known);
   }
-  return cap;
+  return fb;
 }
 
 // Node.js compat — lets Jest import these functions for unit tests; no-op in browser.
