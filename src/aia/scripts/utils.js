@@ -261,6 +261,75 @@ function resolveNumCtx(modelName, fallback, contextMap) {
   return fb;
 }
 
+// Split a Professional Consultant reply into its named markdown sections. A
+// section starts at a heading line for one of `names` — tolerant of an optional
+// `#`..`####` prefix or `**bold**` wrapping, an optional trailing `:` — and runs
+// to the next recognised heading or EOF. Returns a { <lowercased name>: body }
+// map (body = the raw markdown between headings, trimmed); each requested name is
+// always a key (`''` when that section is absent). Pure; never throws.
+function _parseNamedSections(text, names) {
+  const out = {};
+  names.forEach((n) => {
+    out[n.toLowerCase()] = '';
+  });
+  if (typeof text !== 'string' || !text) return out;
+  const alt = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  // Optional leading #### or **, the name, then any mix of trailing ** / : / ws.
+  const headingRe = new RegExp(
+    '^[ \\t]*(?:#{1,4}[ \\t]*)?(?:\\*\\*[ \\t]*)?(' + alt + ')(?:[ \\t]*(?::|\\*\\*))*[ \\t]*$',
+    'i'
+  );
+  const lines = text.split(/\r?\n/);
+  let current = null;
+  let buf = [];
+  const flush = () => {
+    if (current) out[current] = buf.join('\n').trim();
+  };
+  for (const line of lines) {
+    const m = line.match(headingRe);
+    if (m) {
+      flush();
+      current = m[1].toLowerCase();
+      buf = [];
+    } else if (current) {
+      buf.push(line);
+    }
+  }
+  flush();
+  return out;
+}
+
+// SWOT reply → { strengths, weaknesses, opportunities, threats } (raw markdown
+// bodies). Returns null when fewer than 2 of the 4 sections were found, so the
+// caller can fall back to a plain markdown render.
+function parseSwotSections(text) {
+  const s = _parseNamedSections(text, [
+    'Strengths',
+    'Weaknesses',
+    'Opportunities',
+    'Threats'
+  ]);
+  const found = ['strengths', 'weaknesses', 'opportunities', 'threats'].filter(
+    (k) => s[k]
+  ).length;
+  return found >= 2 ? s : null;
+}
+
+// Pros & cons reply → { pros, cons } (raw markdown bodies). Null when neither
+// section was found.
+function parseProsConsSections(text) {
+  const s = _parseNamedSections(text, ['Pros', 'Cons']);
+  return s.pros || s.cons ? s : null;
+}
+
+// Dispatch a Consultant reply to the parser for its template. Returns the
+// section map or null (unknown template, or the parser rejected the text).
+function parseConsultReply(text, template) {
+  if (template === 'swot') return parseSwotSections(text);
+  if (template === 'proscons') return parseProsConsSections(text);
+  return null;
+}
+
 // Node.js compat — lets Jest import these functions for unit tests; no-op in browser.
 if (typeof module !== 'undefined') {
   module.exports = {
@@ -276,7 +345,10 @@ if (typeof module !== 'undefined') {
     diffWords,
     parseOllamaModels,
     parseModelContextLengths,
-    resolveNumCtx
+    resolveNumCtx,
+    parseSwotSections,
+    parseProsConsSections,
+    parseConsultReply
   };
 }
 

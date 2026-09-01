@@ -73,8 +73,9 @@ function chatTitleFrom(history) {
  * Build the record PUT to the conversations-service for a conversation id. The
  * `body` mapper matches `chat.js` `saveChat()` exactly: keep
  * `role` / `content` / `timestamp` always, keep `hasImage` / `editorExchange` /
- * `editorView` when truthy, and drop the in-memory `imageBase64` / `imageDataUrl`
- * blobs. (Logic is copied here on purpose — history.js never imports chat.js.)
+ * `editorView` / `consultArtifact` / `consultView` when truthy, and drop the
+ * in-memory `imageBase64` / `imageDataUrl` blobs. (Logic is copied here on
+ * purpose — history.js never imports chat.js.)
  *
  * The id is intentionally NOT part of the returned object: it travels in the
  * PUT URL path, and the service rejects any body key outside
@@ -94,6 +95,8 @@ function conversationRecordFrom(id, history, personaKey) {
     if (m.hasImage) entry.hasImage = true;
     if (m.editorExchange) entry.editorExchange = true;
     if (m.editorView) entry.editorView = m.editorView;
+    if (m.consultArtifact) entry.consultArtifact = m.consultArtifact;
+    if (m.consultView) entry.consultView = m.consultView;
     return entry;
   });
   return {

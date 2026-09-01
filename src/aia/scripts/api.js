@@ -127,7 +127,9 @@ function setStreamingUI(isStreaming) {
   document.getElementById('stopBtn').style.display = isStreaming ? 'flex' : 'none';
 }
 
-async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null, imageDataUrl = null) {
+async function streamOllamaResponse(
+  userMessage, messageDiv, imageBase64 = null, imageDataUrl = null, consultTemplate = null
+) {
   const contentDiv = messageDiv.querySelector('.message-content');
 
   // fullResponse  — accumulates message.content tokens (streaming text path only)
@@ -194,6 +196,20 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
   // (an editor reply is meant to be just the polished text) — gate on
   // !thinkingActive so a <details> block and the diff view never mix.
   const isEditorExchange = !isVision && !thinkingActive && _isEditorExchangeTurn(userMessage);
+
+  // A Consultant analysis turn (template picked from the composer menu) — the
+  // completed reply is rendered as a SWOT / pros-cons grid when it parses.
+  // Mutually exclusive with the thinking-block UI and the editor path, same as
+  // isEditorExchange. `consultSections` non-null (parsed after streaming) gates
+  // the tag + custom render.
+  const consultTurn =
+    !isVision &&
+    !thinkingActive &&
+    !isEditorExchange &&
+    !!consultTemplate &&
+    typeof _currentPersonaKey === 'function' &&
+    _currentPersonaKey() === 'professional';
+  let consultSections = null;
 
   streamAbortController = new AbortController();
   setStreamingUI(true);
@@ -334,11 +350,17 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
           + '</p>'
         : '';
 
+      if (consultTurn) consultSections = parseConsultReply(savedContent, consultTemplate);
+
       if (isEditorExchange) {
         // Polished text + Original/Changes/Clean switch, diffed against the
         // user's just-sent text. The raw model output is still stored verbatim
         // in conversationHistory below; the diff is always derived, never stored.
         renderEditorReply(contentDiv, userMessage, savedContent, currentEditorMode);
+      } else if (consultSections) {
+        // SWOT / pros-cons grid + Structured/Text switch. Raw model output is
+        // stored verbatim below; the section split is always re-derived.
+        renderConsultReply(contentDiv, savedContent, consultTemplate, currentConsultView);
       } else if (finalThinking) {
         contentDiv.innerHTML =
           '<details class="thinking-block">' +
@@ -370,6 +392,10 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
       assistantEntry.editorExchange = true;
       assistantEntry.editorView = currentEditorMode; // 'clean' | 'changes'
     }
+    if (consultSections) {
+      assistantEntry.consultArtifact = consultTemplate; // 'swot' | 'proscons'
+      assistantEntry.consultView = currentConsultView; // 'structured' | 'text'
+    }
     conversationHistory.push(assistantEntry);
 
     const tsElem = messageDiv.querySelector('.message-timestamp');
@@ -388,6 +414,11 @@ async function streamOllamaResponse(userMessage, messageDiv, imageBase64 = null,
     if (isEditorExchange && actionsDiv) {
       actionsDiv.appendChild(
         _buildEditorViewSwitch(assistantEntry, contentDiv, userMessage, savedContent)
+      );
+    }
+    if (consultSections && actionsDiv) {
+      actionsDiv.appendChild(
+        _buildConsultViewSwitch(assistantEntry, contentDiv, savedContent)
       );
     }
 
