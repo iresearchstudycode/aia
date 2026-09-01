@@ -1077,15 +1077,26 @@ function _settingsRenderPersonaOverrideFields(snapshot) {
       key: 'editor_mode',
       label: 'Editor output',
       options: [['clean', 'Clean'], ['changes', 'Changes'], ['explain', 'Explain']],
-      noInherit: true
+      noInherit: true,
+      fallback: 'clean'
+    });
+  }
+  if (key === 'professional') {
+    defs.push({
+      key: 'default_analysis_view',
+      label: 'Default analysis view',
+      options: [['structured', 'Structured'], ['text', 'Text']],
+      noInherit: true,
+      fallback: 'structured'
     });
   }
 
   defs.forEach(function (def) {
+    var fb = def.fallback || 'clean';
     var value = _settingsPersonaOverrideValue(def.key, snapshot);
-    var token = def.noInherit ? String(value || 'clean') : _settingsOverrideToken(def.key, value);
+    var token = def.noInherit ? String(value || fb) : _settingsOverrideToken(def.key, value);
     var defaultValue = def.noInherit
-      ? 'clean'
+      ? fb
       : _settingsPersonaOverrideDefault(def.key, snapshot);
 
     var row = _settingsEl('div', { class: 'settings-field', dataset: { field: def.key } });
@@ -1130,7 +1141,7 @@ function _settingsRenderPersonaOverrideFields(snapshot) {
 }
 
 function _settingsOverrideEqualsDefault(def, value, defaultValue) {
-  if (def.noInherit) return String(value || 'clean') === String(defaultValue);
+  if (def.noInherit) return String(value || (def.fallback || 'clean')) === String(defaultValue);
   return value === defaultValue;
 }
 
@@ -1140,18 +1151,19 @@ function _settingsOnPersonaOverrideEdit(def, next, snapshot, row) {
     edits.personaKey = _settingsEditPersona;
     edits.values = {};
   }
+  var fb = def.fallback || 'clean';
   var stored = (snapshot.personas && snapshot.personas[_settingsEditPersona]) || {};
   var storedValue = Object.prototype.hasOwnProperty.call(stored, def.key)
     ? stored[def.key]
     : def.noInherit
-      ? 'clean'
+      ? fb
       : null;
 
   if (next === storedValue) delete edits.values[def.key];
   else edits.values[def.key] = next;
 
   var defaultValue = def.noInherit
-    ? 'clean'
+    ? fb
     : _settingsPersonaOverrideDefault(def.key, snapshot);
   var resetBtn = row.querySelector('.settings-field-reset');
   if (resetBtn) resetBtn.hidden = _settingsOverrideEqualsDefault(def, next, defaultValue);
@@ -1608,12 +1620,21 @@ function applyResolvedSettings() {
   if (s.personas && s.personas.englishEditor && s.personas.englishEditor.editor_mode) {
     editorMode = s.personas.englishEditor.editor_mode;
   }
+  var consultView = 'structured';
+  if (
+    s.personas &&
+    s.personas.professional &&
+    s.personas.professional.default_analysis_view
+  ) {
+    consultView = s.personas.professional.default_analysis_view;
+  }
 
   if (typeof currentModel !== 'undefined' && chatModel) currentModel = chatModel;
   if (typeof currentVisionModel !== 'undefined' && visionModel) currentVisionModel = visionModel;
   if (typeof currentTTSEngine !== 'undefined') currentTTSEngine = ttsEngine;
   if (typeof currentThinkingMode !== 'undefined') currentThinkingMode = thinkingMode;
   if (typeof currentEditorMode !== 'undefined') currentEditorMode = editorMode;
+  if (typeof currentConsultView !== 'undefined') currentConsultView = consultView;
   if (typeof currentNavRailEnabled !== 'undefined') currentNavRailEnabled = navRail;
   if (typeof window !== 'undefined') window.currentNavRailEnabled = navRail;
   if (typeof setNavRailEnabled === 'function') setNavRailEnabled(navRail);

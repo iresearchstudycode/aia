@@ -92,6 +92,17 @@
   --mermaid-note-border: #c9b458;
   --mermaid-cluster-bg: #efebda;
   --mermaid-cluster-border: #b7ae90;
+
+  /* Professional Consultant analysis artifacts (SWOT / pros-cons grid) — pale
+     quadrant tints. Theme-aware: overridden in the dark blocks below. */
+  --consult-strengths-bg: #e6f4ea;
+  --consult-weaknesses-bg: #fdeceb;
+  --consult-opportunities-bg: #e8eef9;
+  --consult-threats-bg: #fdf3e2;
+  --consult-pros-bg: #e6f4ea;
+  --consult-cons-bg: #fdeceb;
+  --consult-cell-border: var(--color-border);
+
   --color-panel-dark: #303030;
   --color-panel-dark-text: #ffffff;
   --color-panel-dark-text-soft: #c5c5c5;
@@ -212,6 +223,13 @@
     --color-panel-dark-text: #ececec;
     --color-panel-dark-text-soft: #a5a5a5;
     --color-toast-bg: #2f2f2f;
+    --consult-strengths-bg: rgba(74, 222, 128, 0.12);
+    --consult-weaknesses-bg: rgba(248, 113, 113, 0.12);
+    --consult-opportunities-bg: rgba(122, 183, 255, 0.12);
+    --consult-threats-bg: rgba(251, 191, 36, 0.12);
+    --consult-pros-bg: rgba(74, 222, 128, 0.12);
+    --consult-cons-bg: rgba(248, 113, 113, 0.12);
+    --consult-cell-border: #3a3a3a;
     --color-danger: #f87171;
     --color-danger-strong: #ef4444;
     --color-danger-bg: rgba(248, 113, 113, 0.12);
@@ -282,6 +300,13 @@
   --color-panel-dark-text: #ececec;
   --color-panel-dark-text-soft: #a5a5a5;
   --color-toast-bg: #2f2f2f;
+  --consult-strengths-bg: rgba(74, 222, 128, 0.12);
+  --consult-weaknesses-bg: rgba(248, 113, 113, 0.12);
+  --consult-opportunities-bg: rgba(122, 183, 255, 0.12);
+  --consult-threats-bg: rgba(251, 191, 36, 0.12);
+  --consult-pros-bg: rgba(74, 222, 128, 0.12);
+  --consult-cons-bg: rgba(248, 113, 113, 0.12);
+  --consult-cell-border: #3a3a3a;
   --color-danger: #f87171;
   --color-danger-strong: #ef4444;
   --color-danger-bg: rgba(248, 113, 113, 0.12);
@@ -1751,6 +1776,66 @@ body {
 .editor-view-switch:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
+}
+
+/* Professional Consultant analysis artifacts — SWOT quadrant grid / pros-cons
+   two-column layout. Each cell's body is rendered markdown (renderConsultReply
+   in chat.js), so normal .message-content list/heading styles apply inside. */
+.consult-grid {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.consult-grid--swot {
+  grid-template-columns: 1fr 1fr;
+}
+
+.consult-grid--proscons {
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 600px) {
+  .consult-grid--swot,
+  .consult-grid--proscons {
+    grid-template-columns: 1fr;
+  }
+}
+
+.consult-cell {
+  border: 1px solid var(--consult-cell-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+
+.consult-cell--strengths { background: var(--consult-strengths-bg); }
+.consult-cell--weaknesses { background: var(--consult-weaknesses-bg); }
+.consult-cell--opportunities { background: var(--consult-opportunities-bg); }
+.consult-cell--threats { background: var(--consult-threats-bg); }
+.consult-cell--pros { background: var(--consult-pros-bg); }
+.consult-cell--cons { background: var(--consult-cons-bg); }
+
+.consult-cell__heading {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-strong);
+}
+
+.consult-cell__body > :first-child { margin-top: 0; }
+.consult-cell__body > :last-child { margin-bottom: 0; }
+.consult-cell__body ul,
+.consult-cell__body ol {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.consult-cell__empty {
+  margin: 0;
+  color: var(--color-text-faint);
 }
 
 /* Send button — solid accent circle */
