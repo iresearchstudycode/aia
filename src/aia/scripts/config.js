@@ -83,14 +83,19 @@ const personaIcons = {
   transcriptai: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>'
 };
 
-// Professional Consultant structured-analysis templates. Picking one from the
-// composer menu (only shown when that persona is active) prefills the textarea
-// with `scaffold` and folds `format` into the outgoing message so the reply
-// comes back in a shape `parseConsultReply()` (utils.js) can render as a
-// colour-coded grid. Frontend-only, same as `systemPrompts`.
+// Persona affordance templates — a structured reply the app renders specially.
+// Each is gated to one `persona`. The Professional Consultant's three
+// (`scaffold` present) are picked from the composer "Templates" menu, which
+// prefills the textarea and folds `format` into the outgoing message. The
+// Patient Teacher's two (`prompt` present, no `scaffold`) are triggered by
+// "Quiz me" / "Flashcards" buttons on a completed Teacher reply, which send
+// `prompt` + `format` as a follow-up turn. Either way, api.js tags the reply
+// `consultArtifact` and renderConsultReply() (chat.js) renders the structure
+// parseConsultReply() (utils.js) extracts. Frontend-only, like `systemPrompts`.
 const _CONSULT_TEMPLATES = {
   swot: {
     label: 'SWOT analysis',
+    persona: 'professional',
     scaffold: 'SWOT analysis of: ',
     format:
       'Respond with exactly four markdown sections in this order — ' +
@@ -99,6 +104,7 @@ const _CONSULT_TEMPLATES = {
   },
   proscons: {
     label: 'Pros & cons',
+    persona: 'professional',
     scaffold: 'Weigh the pros and cons of: ',
     format:
       'Respond with exactly two markdown sections — "## Pros" then "## Cons" — ' +
@@ -106,12 +112,34 @@ const _CONSULT_TEMPLATES = {
   },
   matrix: {
     label: 'Decision matrix',
+    persona: 'professional',
     scaffold: 'Build a decision matrix to choose between: ',
     format:
       'Respond with a single markdown table and nothing else. The first column ' +
       'header is "Option"; add one column per decision criterion. Each row is one ' +
       'option, scored against every criterion from 1 (poor) to 5 (excellent) as a ' +
       'bare number. Do not add a Totals column, a weights row, or any prose.'
+  },
+  quiz: {
+    label: 'Quiz me',
+    persona: 'teacher',
+    prompt:
+      'Turn what you just explained into a short multiple-choice quiz so I can ' +
+      'test myself on it.',
+    format:
+      'Give exactly 5 questions. Format each as: a line "### Q1." then the ' +
+      'question; then four options on their own lines "A) …", "B) …", "C) …", ' +
+      '"D) …"; then a line "**Answer:** B — <one-sentence explanation>". ' +
+      'Number them Q1–Q5. No preamble or closing text.'
+  },
+  flashcards: {
+    label: 'Flashcards',
+    persona: 'teacher',
+    prompt: 'Turn the key points of what you just explained into flashcards.',
+    format:
+      'Respond with a single two-column markdown table and nothing else: header ' +
+      '"| Term | Definition |", then 8–12 rows, one card per row. Keep each cell ' +
+      'to a single line. No preamble.'
   }
 };
 
@@ -126,7 +154,7 @@ let currentThinkingMode = 'off'; // 'off' | 'low' | 'medium' | 'high'
 let currentTTSEngine = 'piper'; // 'piper' | 'voicebox'
 let currentEditorMode = 'clean'; // 'clean' | 'changes' | 'explain' — English Editor output mode
 let currentConsultView = 'structured'; // 'structured' | 'text' — default view for a new Professional Consultant analysis artifact; from vpalSettings.personas.professional.default_analysis_view
-let pendingConsultTemplate = null; // 'swot' | 'proscons' | 'matrix' — a Consultant template picked from the composer menu, consumed on the next send
+let pendingConsultTemplate = null; // 'swot' | 'proscons' | 'matrix' | 'quiz' | 'flashcards' — a persona-affordance template armed for the next send (Consultant composer pick or Teacher reply button), consumed on the next send
 let currentNavRailEnabled = true; // conversation navigator rail visible; toolbar toggle, persisted to localStorage[NAV_RAIL_KEY]
 window.currentNavRailEnabled = currentNavRailEnabled; // nav-rail.js reads the flag off window to avoid script load-order issues
 let currentTheme = 'system'; // 'system' | 'light' | 'dark' — resolved from vpalSettings.global.theme by applyResolvedSettings(); _applyTheme() (settings.js) sets <html data-theme> + the localStorage[THEME_KEY] mirror

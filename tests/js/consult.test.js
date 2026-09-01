@@ -10,6 +10,8 @@ const {
   parseSwotSections,
   parseProsConsSections,
   parseDecisionMatrix,
+  parseQuiz,
+  parseFlashcards,
   parseConsultReply
 } = _utils;
 
@@ -21,15 +23,20 @@ global.protectLatexDelimiters = _utils.protectLatexDelimiters;
 global.restoreLatexBackslashes = _utils.restoreLatexBackslashes;
 global.parseConsultReply = _utils.parseConsultReply;
 global._CONSULT_TEMPLATES = {
-  swot: { label: 'SWOT analysis', scaffold: 'SWOT analysis of: ', format: 'FMT-SWOT' },
-  proscons: { label: 'Pros & cons', scaffold: 'Weigh the pros and cons of: ', format: 'FMT-PC' },
-  matrix: { label: 'Decision matrix', scaffold: 'Build a decision matrix to choose between: ', format: 'FMT-MX' }
+  swot: { label: 'SWOT analysis', persona: 'professional', scaffold: 'SWOT analysis of: ', format: 'FMT-SWOT' },
+  proscons: { label: 'Pros & cons', persona: 'professional', scaffold: 'Weigh the pros and cons of: ', format: 'FMT-PC' },
+  matrix: { label: 'Decision matrix', persona: 'professional', scaffold: 'Build a decision matrix to choose between: ', format: 'FMT-MX' },
+  quiz: { label: 'Quiz me', persona: 'teacher', prompt: 'Quiz me.', format: 'FMT-Q' },
+  flashcards: { label: 'Flashcards', persona: 'teacher', prompt: 'Cards.', format: 'FMT-FC' }
 };
 
 const {
   renderConsultReply,
   _buildConsultViewSwitch,
-  _composeConsultMessage
+  _composeConsultMessage,
+  _renderQuiz,
+  _renderFlashcards,
+  _appendLearnActions
 } = require('../../src/aia/scripts/chat.js');
 
 // ---------------------------------------------------------------------------
@@ -102,6 +109,70 @@ describe('parseProsConsSections', () => {
 
   test('null when neither section is present', () => {
     expect(parseProsConsSections('no headings here')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseQuiz
+// ---------------------------------------------------------------------------
+describe('parseQuiz', () => {
+  const quiz = [
+    '### Q1. What colour is the sky on a clear day?',
+    'A) Green',
+    'B) Blue',
+    'C) Red',
+    'D) Black',
+    '**Answer:** B — Rayleigh scattering makes short (blue) wavelengths dominate.',
+    '',
+    '### Q2. 2 + 2 = ?',
+    'A) 3',
+    'B) 5',
+    'C) 4',
+    'D) 22',
+    '**Answer:** C'
+  ].join('\n');
+
+  test('parses questions, options, and marks the correct one', () => {
+    const q = parseQuiz(quiz);
+    expect(q).toHaveLength(2);
+    expect(q[0].question).toBe('What colour is the sky on a clear day?');
+    expect(q[0].options.map((o) => o.label)).toEqual(['A', 'B', 'C', 'D']);
+    expect(q[0].options.find((o) => o.correct).label).toBe('B');
+    expect(q[0].answer).toBe('B');
+    expect(q[0].explanation).toMatch(/Rayleigh/);
+    expect(q[1].explanation).toBe('');
+  });
+
+  test('tolerates "1." headers and "Correct answer: A" phrasing', () => {
+    const q = parseQuiz('1) Pick one\nA) x\nB) y\nCorrect answer: A');
+    expect(q).toHaveLength(1);
+    expect(q[0].options.find((o) => o.correct).label).toBe('A');
+  });
+
+  test('null when no question has ≥2 options', () => {
+    expect(parseQuiz('### Q1. Lonely question\nA) only one')).toBeNull();
+    expect(parseQuiz('just prose, no quiz')).toBeNull();
+    expect(parseQuiz(undefined)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseFlashcards
+// ---------------------------------------------------------------------------
+describe('parseFlashcards', () => {
+  test('parses a two-column table, dropping the header row', () => {
+    const cards = parseFlashcards(
+      '| Term | Definition |\n| - | - |\n| Photosynthesis | Plants making food from light |\n| Mitochondria | The powerhouse of the cell |'
+    );
+    expect(cards).toEqual([
+      { front: 'Photosynthesis', back: 'Plants making food from light' },
+      { front: 'Mitochondria', back: 'The powerhouse of the cell' }
+    ]);
+  });
+
+  test('null when fewer than 2 cards or no table', () => {
+    expect(parseFlashcards('| Term | Def |\n| - | - |\n| A | b |')).toBeNull();
+    expect(parseFlashcards('no pipes')).toBeNull();
   });
 });
 
@@ -285,6 +356,83 @@ describe('renderConsultReply — decision matrix', () => {
     const entry = { consultArtifact: 'matrix', consultView: 'structured', consultWeights: [3] };
     renderConsultReply(el, matrixText, 'matrix', 'structured', entry);
     expect(entry.consultWeights).toEqual([1, 1]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renderConsultReply — quiz + flashcards (Teacher)
+// ---------------------------------------------------------------------------
+describe('renderConsultReply — quiz', () => {
+  const quizText = [
+    '### Q1. Capital of France?',
+    'A) Berlin', 'B) Paris', 'C) Madrid', 'D) Rome',
+    '**Answer:** B — It has been the capital since the 10th century.'
+  ].join('\n');
+
+  test('renders a question card with option buttons and a Show answer button', () => {
+    const el = document.createElement('div');
+    renderConsultReply(el, quizText, 'quiz', 'structured');
+    expect(el.querySelectorAll('.consult-quiz__q')).toHaveLength(1);
+    expect(el.querySelectorAll('.consult-quiz__option')).toHaveLength(4);
+    expect(el.querySelector('.consult-quiz__show')).not.toBeNull();
+    expect(el.querySelector('.consult-quiz__explanation')).toBeNull(); // not revealed yet
+  });
+
+  test('clicking a wrong option reveals the correct one + the explanation', () => {
+    const el = document.createElement('div');
+    renderConsultReply(el, quizText, 'quiz', 'structured');
+    const opts = el.querySelectorAll('.consult-quiz__option');
+    opts[0].click(); // "Berlin" — wrong
+    expect(opts[0].classList.contains('is-wrong')).toBe(true);
+    expect(opts[1].classList.contains('is-correct')).toBe(true); // "Paris"
+    expect([...opts].every((o) => o.disabled)).toBe(true);
+    expect(el.querySelector('.consult-quiz__explanation').textContent).toMatch(/10th century/);
+    expect(el.querySelector('.consult-quiz__show')).toBeNull(); // removed after reveal
+  });
+
+  test('Show answer reveals without marking anything wrong', () => {
+    const el = document.createElement('div');
+    renderConsultReply(el, quizText, 'quiz', 'structured');
+    el.querySelector('.consult-quiz__show').click();
+    expect(el.querySelector('.consult-quiz__option.is-correct')).not.toBeNull();
+    expect(el.querySelector('.consult-quiz__option.is-wrong')).toBeNull();
+  });
+
+  test('text view renders plain markdown, no quiz cards', () => {
+    const el = document.createElement('div');
+    renderConsultReply(el, quizText, 'quiz', 'text');
+    expect(el.querySelector('.consult-quiz')).toBeNull();
+    expect(el.querySelector('.md-copy-btn')).not.toBeNull();
+  });
+});
+
+describe('renderConsultReply — flashcards', () => {
+  const fcText =
+    '| Term | Definition |\n| - | - |\n| Osmosis | Water moving across a membrane |\n| Diffusion | Particles spreading out |';
+
+  test('renders one flip card per row; clicking toggles is-flipped', () => {
+    const el = document.createElement('div');
+    renderConsultReply(el, fcText, 'flashcards', 'structured');
+    const cards = el.querySelectorAll('.consult-flashcard');
+    expect(cards).toHaveLength(2);
+    expect(cards[0].querySelector('.consult-flashcard__front').textContent).toBe('Osmosis');
+    expect(cards[0].querySelector('.consult-flashcard__back').textContent).toContain('membrane');
+    cards[0].click();
+    expect(cards[0].classList.contains('is-flipped')).toBe(true);
+    cards[0].click();
+    expect(cards[0].classList.contains('is-flipped')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// _appendLearnActions
+// ---------------------------------------------------------------------------
+describe('_appendLearnActions', () => {
+  test('adds a "Quiz me" and a "Flashcards" button', () => {
+    const actions = document.createElement('div');
+    _appendLearnActions(actions);
+    const btns = [...actions.querySelectorAll('.learn-action-btn')].map((b) => b.textContent);
+    expect(btns).toEqual(['Quiz me', 'Flashcards']);
   });
 });
 

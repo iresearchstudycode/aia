@@ -1,4 +1,4 @@
-# Session Status — 2026-09-01 (rev 17)
+# Session Status — 2026-09-01 (rev 18)
 
 Handoff note for resuming work. Overwrite freely.
 
@@ -6,24 +6,23 @@ Handoff note for resuming work. Overwrite freely.
 
 | | |
 |---|---|
-| `master` / `dev` | **v1.32.1** at `ad871c9` — Consultant SWOT/pros-cons templates + the "Templates" button hide fix (PRs #72–#75, zero drift, CI green) |
-| `feat/consult-decision-matrix` | **v1.33.0** — the 3rd Consultant template (decision matrix, interactive weights); PR into `dev` |
-| Working tree | the v1.33.0 diff + this doc |
-| Docker stack | 7 services healthy. `vpal-settings` was rebuilt for the v1.32.0 `default_analysis_view` key. **v1.33.0 is frontend-only** — no service change. Still owed separately: a full `docker compose up -d --build` for the Inter woff2, `VPAL_DEFAULT_THEME`, `auth` `<meta color-scheme>`. |
+| `master` / `dev` | **v1.33.0** at `b18dacb` — Consultant SWOT/pros-cons/decision-matrix templates (PRs #72–#81, zero drift, CI green) |
+| `feat/teacher-quiz-flashcards` | **v1.34.0** — Patient Teacher quiz + flashcards affordance; PR into `dev` |
+| Working tree | the v1.34.0 diff + this doc |
+| Docker stack | 7 services healthy. `vpal-settings` was rebuilt for the v1.32.0 `default_analysis_view` key. **v1.33.0 + v1.34.0 are frontend-only.** Still owed separately: a full `docker compose up -d --build` for the Inter woff2, `VPAL_DEFAULT_THEME`, `auth` `<meta color-scheme>`. |
 
-## ▶ Consultant analysis templates — running tally
+## ▶ Persona affordance templates — running tally
 
-Per-persona affordance for the Professional Consultant, built on the English Editor pattern (per-persona setting + custom render path + per-message view `<select>` + tag round-tripped through save/load). The "Templates" button (`#consultTemplateBtn`, `.toolbar-left`) is shown only for that persona and offers:
+Built on the English Editor pattern (custom render path + per-message view `<select>` + tag round-tripped through save/load). Mechanism lives in `_CONSULT_TEMPLATES` (config.js, each gated to a `persona`), `parseConsultReply` (utils.js, dispatches to per-template pure parsers), `renderConsultReply(container, raw, template, view, entry)` (chat.js), and the `consultTurn` tag in api.js.
 
-| template | render (Structured view) | state persisted |
-|---|---|---|
-| **SWOT** (v1.32.0) | colour-coded 2×2 quadrant grid | — |
-| **Pros & cons** (v1.32.0) | two-column green/red grid | — |
-| **Decision matrix** (v1.33.0) | scored `<table>` with a 0–5 **weight slider per criterion** — recomputes weighted totals + winning row live | `consultWeights` (int array) |
+| persona | templates | trigger | render |
+|---|---|---|---|
+| **Professional Consultant** | `swot`, `proscons` (v1.32.0), `matrix` (v1.33.0) | composer "Templates" menu (`#consultTemplateBtn`, professional only) | colour-coded grid / weighted `<table>` with 0–5 sliders (persists `consultWeights`) |
+| **Patient Teacher** | `quiz`, `flashcards` (v1.34.0) | "Quiz me" / "Flashcards" buttons on a plain Teacher reply (`_appendLearnActions`) | clickable MCQ (reveal correct/wrong + explanation) / CSS-flip cards |
 
-Shared: `_CONSULT_TEMPLATES` (config.js) · `parse{Swot,ProsCons,DecisionMatrix}` + `parseConsultReply` (utils.js, pure) · `renderConsultReply(container, raw, template, view, entry)` / `_renderDecisionMatrix` / `_buildConsultViewSwitch` / `_composeConsultMessage` / `_resolveOutgoing` (chat.js) · `streamOllamaResponse(..., consultTemplate)` tagging + matrix re-render after `assistantEntry` exists (api.js) · `#consultTemplateMenu` wiring + `_syncConsultUiForPersona` (main.js — toggles `[hidden]` **and** `style.display`, `.voice-btn{display:flex}` beats `[hidden]`) · `consultArtifact`/`consultView`/`consultWeights` through the 3 mappers · `default_analysis_view` professional-only settings-service key (v1.32.0). JS suite **318**; settings-service **75**. Harness-verified light + dark.
+v1.34.0 generalised the mechanism: `_CONSULT_TEMPLATES` entries have a `persona`; api.js gates `consultTurn` on `_currentPersonaKey() === tplDef.persona`; `consultView` is `currentConsultView` for Consultant, always `'structured'` for Teacher; new `_splitMarkdownTable` helper shared by `parseDecisionMatrix` + `parseFlashcards`. JS suite **329**. `default_analysis_view` is the only settings-service key (professional; v1.32.0). Harness-verified light + dark.
 
-**Follow-up affordances** (plan `~/.claude/plans/fuzzy-mixing-cascade.md`): Teacher quiz/flashcards, Transcript source pane + citations, Legal jurisdiction selector + disclaimer.
+**Remaining affordances** (plan `~/.claude/plans/fuzzy-mixing-cascade.md`): Transcript source pane + citations, Legal jurisdiction selector + disclaimer.
 
 ## ▶ Mermaid repair — running tally
 

@@ -322,6 +322,18 @@ function parseProsConsSections(text) {
   return s.pros || s.cons ? s : null;
 }
 
+// A markdown pipe table → array of trimmed-cell rows, with the separator row
+// (--- | :--: | - | …) dropped. [] when there is no table. Pure.
+function _splitMarkdownTable(text) {
+  if (typeof text !== 'string' || text.indexOf('|') === -1) return [];
+  return text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('|') || l.indexOf('|') > 0)
+    .map((l) => l.replace(/^\||\|$/g, '').split('|').map((c) => c.trim()))
+    .filter((cells) => !cells.every((c) => /^:?-+:?$/.test(c) || c === ''));
+}
+
 // Decision-matrix reply → { criteria: [name…], rows: [{ option, scores: [n…] }] }
 // from the first markdown pipe table. First header cell (the "Option" label) is
 // dropped; the rest are criteria. Row cells after the option name are coerced to
@@ -330,14 +342,7 @@ function parseProsConsSections(text) {
 // (models add them despite the instruction). Returns null when there is no
 // usable table (no pipe rows, <1 criterion, or <2 option rows). Pure.
 function parseDecisionMatrix(text) {
-  if (typeof text !== 'string' || text.indexOf('|') === -1) return null;
-  const rowsRaw = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.startsWith('|') || l.indexOf('|') > 0)
-    .map((l) => l.replace(/^\||\|$/g, '').split('|').map((c) => c.trim()));
-  // Drop the markdown separator row (--- | :--: | - | …).
-  const table = rowsRaw.filter((cells) => !cells.every((c) => /^:?-+:?$/.test(c) || c === ''));
+  const table = _splitMarkdownTable(text);
   if (table.length < 2) return null;
 
   let criteria = table[0].slice(1);
@@ -364,12 +369,70 @@ function parseDecisionMatrix(text) {
   return rows.length >= 2 ? { criteria, rows } : null;
 }
 
-// Dispatch a Consultant reply to the parser for its template. Returns the
-// parsed structure or null (unknown template, or the parser rejected the text).
+// Quiz reply → [{ question, options: [{ label, text, correct }], answer, explanation }].
+// Splits on a "### Q1." / "1." / "**Question 2**" style header; each block wants a
+// question line, ≥2 "A) …" options, and a "**Answer:** B — …" line. Returns null
+// when no question parsed. Pure.
+function parseQuiz(text) {
+  if (typeof text !== 'string') return null;
+  const qHead = /(?:^|\n)\s*(?:#{1,4}\s*)?\**\s*(?:Q(?:uestion)?[\s.]*)?\d+[.):]/i;
+  const blocks = text
+    .split(qHead)
+    .map((b) => b.trim())
+    .filter(Boolean);
+  const questions = [];
+  for (const block of blocks) {
+    const lines = block.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) continue;
+    let question = lines[0].replace(/^\**\s*/, '').replace(/\**\s*$/, '').trim();
+    const options = [];
+    let answer = null;
+    let explanation = '';
+    for (let i = 1; i < lines.length; i++) {
+      const om = lines[i].match(/^(?:[-*]\s*)?\(?([A-H])[).]\s*(.+)$/);
+      if (om) {
+        options.push({ label: om[1].toUpperCase(), text: om[2].replace(/\**\s*$/, '').trim(), correct: false });
+        continue;
+      }
+      const am = lines[i].match(/^\**\s*(?:Correct\s*)?Answer\**\s*:?\s*\**\s*\(?([A-H])\)?\b\s*[—–:-]?\s*(.*)$/i);
+      if (am) {
+        answer = am[1].toUpperCase();
+        explanation = (am[2] || '').replace(/\**\s*$/, '').trim();
+        continue;
+      }
+      if (!options.length) question += ' ' + lines[i];
+    }
+    if (!question || options.length < 2) continue;
+    if (answer) {
+      const hit = options.find((o) => o.label === answer);
+      if (hit) hit.correct = true;
+    }
+    questions.push({ question, options, answer, explanation });
+  }
+  return questions.length ? questions : null;
+}
+
+// Flashcards reply → [{ front, back }] from a two-column markdown table. A
+// "Term | Definition" header row is dropped. Null when <2 cards. Pure.
+function parseFlashcards(text) {
+  const rows = _splitMarkdownTable(text);
+  if (rows.length < 2) return null;
+  let body = rows;
+  if (/^(term|front|question|word|concept|card)$/i.test(rows[0][0] || '')) body = rows.slice(1);
+  const cards = body
+    .filter((cells) => cells[0] && cells[1])
+    .map((cells) => ({ front: cells[0], back: cells.slice(1).join(' — ') }));
+  return cards.length >= 2 ? cards : null;
+}
+
+// Dispatch a persona-affordance reply to its parser. Returns the parsed
+// structure or null (unknown template, or the parser rejected the text).
 function parseConsultReply(text, template) {
   if (template === 'swot') return parseSwotSections(text);
   if (template === 'proscons') return parseProsConsSections(text);
   if (template === 'matrix') return parseDecisionMatrix(text);
+  if (template === 'quiz') return parseQuiz(text);
+  if (template === 'flashcards') return parseFlashcards(text);
   return null;
 }
 
@@ -392,6 +455,8 @@ if (typeof module !== 'undefined') {
     parseSwotSections,
     parseProsConsSections,
     parseDecisionMatrix,
+    parseQuiz,
+    parseFlashcards,
     parseConsultReply
   };
 }

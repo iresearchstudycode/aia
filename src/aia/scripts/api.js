@@ -197,19 +197,30 @@ async function streamOllamaResponse(
   // !thinkingActive so a <details> block and the diff view never mix.
   const isEditorExchange = !isVision && !thinkingActive && _isEditorExchangeTurn(userMessage);
 
-  // A Consultant analysis turn (template picked from the composer menu) — the
-  // completed reply is rendered as a SWOT / pros-cons grid when it parses.
-  // Mutually exclusive with the thinking-block UI and the editor path, same as
-  // isEditorExchange. `consultSections` non-null (parsed after streaming) gates
-  // the tag + custom render.
+  // A persona-affordance turn — Consultant SWOT/pros-cons/matrix (composer
+  // "Templates" pick) or Teacher quiz/flashcards ("Quiz me"/"Flashcards" button).
+  // The completed reply is rendered as the matching interactive artifact when it
+  // parses. Mutually exclusive with the thinking-block UI and the editor path.
+  // Each template is gated to its persona. `consultSections` non-null (parsed
+  // after streaming) gates the tag + custom render.
+  const _consultTplDef =
+    consultTemplate &&
+    typeof _CONSULT_TEMPLATES !== 'undefined' &&
+    _CONSULT_TEMPLATES[consultTemplate];
   const consultTurn =
     !isVision &&
     !thinkingActive &&
     !isEditorExchange &&
-    !!consultTemplate &&
+    !!_consultTplDef &&
     typeof _currentPersonaKey === 'function' &&
-    _currentPersonaKey() === 'professional';
+    _currentPersonaKey() === _consultTplDef.persona;
   let consultSections = null;
+  // The Consultant's templates honour the per-persona default view; Teacher
+  // quiz/flashcards are always structured (Text is only a parse-fail fallback).
+  const consultView =
+    _consultTplDef && _consultTplDef.persona === 'professional'
+      ? (typeof currentConsultView !== 'undefined' ? currentConsultView : 'structured')
+      : 'structured';
 
   streamAbortController = new AbortController();
   setStreamingUI(true);
@@ -358,10 +369,11 @@ async function streamOllamaResponse(
         // in conversationHistory below; the diff is always derived, never stored.
         renderEditorReply(contentDiv, userMessage, savedContent, currentEditorMode);
       } else if (consultSections) {
-        // SWOT / pros-cons grid / decision matrix + Structured/Text switch. Raw
-        // model output is stored verbatim below; the parse is always re-derived.
-        // A matrix is re-rendered once assistantEntry exists (weights binding).
-        renderConsultReply(contentDiv, savedContent, consultTemplate, currentConsultView);
+        // SWOT grid / pros-cons / decision matrix / quiz / flashcards + a
+        // Structured/Text switch. Raw model output is stored verbatim below; the
+        // parse is always re-derived. A matrix is re-rendered once assistantEntry
+        // exists (weights binding).
+        renderConsultReply(contentDiv, savedContent, consultTemplate, consultView);
       } else if (finalThinking) {
         contentDiv.innerHTML =
           '<details class="thinking-block">' +
@@ -394,13 +406,16 @@ async function streamOllamaResponse(
       assistantEntry.editorView = currentEditorMode; // 'clean' | 'changes'
     }
     if (consultSections) {
-      assistantEntry.consultArtifact = consultTemplate; // 'swot' | 'proscons' | 'matrix'
-      assistantEntry.consultView = currentConsultView; // 'structured' | 'text'
+      assistantEntry.consultArtifact = consultTemplate; // swot|proscons|matrix|quiz|flashcards
+      // The Consultant's three honour the per-persona default view; a Teacher
+      // quiz / flashcard set is always structured (Text is only a parse-fail
+      // fallback there).
+      assistantEntry.consultView = consultView;
       if (consultTemplate === 'matrix') {
         // Re-render now that the entry exists so the weight sliders read/write
         // assistantEntry.consultWeights (the render above had no entry).
         renderConsultReply(
-          contentDiv, savedContent, consultTemplate, currentConsultView, assistantEntry
+          contentDiv, savedContent, consultTemplate, assistantEntry.consultView, assistantEntry
         );
       }
     }
@@ -428,6 +443,16 @@ async function streamOllamaResponse(
       actionsDiv.appendChild(
         _buildConsultViewSwitch(assistantEntry, contentDiv, savedContent)
       );
+    }
+    // Patient Teacher — a plain answer gets "Quiz me" / "Flashcards" follow-up
+    // buttons (a quiz/flashcard reply itself does not).
+    if (
+      !isEditorExchange && !consultSections && savedContent && actionsDiv &&
+      typeof _teacherLearnEligible === 'function' &&
+      _teacherLearnEligible(assistantEntry) &&
+      typeof _appendLearnActions === 'function'
+    ) {
+      _appendLearnActions(actionsDiv);
     }
 
     // Auto-speak the reply when enabled in Settings (global `auto_speak`).
