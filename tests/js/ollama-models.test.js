@@ -129,35 +129,36 @@ describe('parseModelContextLengths', () => {
 });
 
 describe('resolveNumCtx', () => {
-  const CEILING = 16384;
+  const FALLBACK = 16384;
   const MAP = { 'qwen3:4b': 262144, 'small:1b': 8192, 'exact:1b': 16384 };
 
-  test('unknown model → the ceiling (pre-existing behaviour)', () => {
-    expect(resolveNumCtx('gemma4:e4b', CEILING, MAP)).toBe(16384);
+  test('unknown model → the fallback', () => {
+    expect(resolveNumCtx('gemma4:e4b', FALLBACK, MAP)).toBe(16384);
   });
 
-  test('model window larger than the ceiling → capped at the ceiling (never raised)', () => {
-    expect(resolveNumCtx('qwen3:4b', CEILING, MAP)).toBe(16384);
+  test('known model → its full advertised window, even above the fallback', () => {
+    expect(resolveNumCtx('qwen3:4b', FALLBACK, MAP)).toBe(262144);
   });
 
-  test('model window smaller than the ceiling → reduced to the model window', () => {
-    expect(resolveNumCtx('small:1b', CEILING, MAP)).toBe(8192);
+  test('known model with a small window → that window (below the fallback)', () => {
+    expect(resolveNumCtx('small:1b', FALLBACK, MAP)).toBe(8192);
   });
 
-  test('model window equal to the ceiling → the ceiling', () => {
-    expect(resolveNumCtx('exact:1b', CEILING, MAP)).toBe(16384);
+  test('known model window equal to the fallback → that value', () => {
+    expect(resolveNumCtx('exact:1b', FALLBACK, MAP)).toBe(16384);
   });
 
-  test('empty / missing map → the ceiling', () => {
-    expect(resolveNumCtx('qwen3:4b', CEILING, {})).toBe(16384);
-    expect(resolveNumCtx('qwen3:4b', CEILING, null)).toBe(16384);
-    expect(resolveNumCtx('qwen3:4b', CEILING, undefined)).toBe(16384);
+  test('empty / missing map → the fallback', () => {
+    expect(resolveNumCtx('qwen3:4b', FALLBACK, {})).toBe(16384);
+    expect(resolveNumCtx('qwen3:4b', FALLBACK, null)).toBe(16384);
+    expect(resolveNumCtx('qwen3:4b', FALLBACK, undefined)).toBe(16384);
   });
 
-  test('invalid ceiling → falls back to 16384', () => {
+  test('invalid fallback → 16384 (but a known window still wins)', () => {
     expect(resolveNumCtx('gemma4:e4b', 0, MAP)).toBe(16384);
     expect(resolveNumCtx('gemma4:e4b', -5, MAP)).toBe(16384);
     expect(resolveNumCtx('gemma4:e4b', 'big', MAP)).toBe(16384);
     expect(resolveNumCtx('small:1b', NaN, MAP)).toBe(8192);
+    expect(resolveNumCtx('qwen3:4b', NaN, MAP)).toBe(262144);
   });
 });

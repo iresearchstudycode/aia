@@ -1,4 +1,4 @@
-# Session Status — 2026-08-31 (rev 14)
+# Session Status — 2026-09-01 (rev 15)
 
 Handoff note for resuming work. Overwrite freely.
 
@@ -6,9 +6,9 @@ Handoff note for resuming work. Overwrite freely.
 
 | | |
 |---|---|
-| `master` / `dev` | **v1.31.1** at `a11cb4d`, zero drift |
-| `fix/mermaid-repair-subgraph` | **v1.31.2** — `_repairMermaid` balances `subgraph`/`end`; PR into `dev` |
-| Working tree | clean |
+| `master` / `dev` | **v1.31.2** at `163a319`, zero drift, CI green |
+| `feat/num-ctx-full-window` | **v1.31.3** — `resolveNumCtx` sends the model's full context window; PR into `dev` |
+| Working tree | this doc + the v1.31.3 diff |
 | Docker stack | 7 services healthy. Still owed: a full `docker compose up -d --build` for the Inter woff2, `VPAL_DEFAULT_THEME` default, and the `auth` `<meta color-scheme>` tag. v1.30–1.31.x are all frontend-only — no service / image / env changes. |
 
 ## ▶ Mermaid repair — running tally
@@ -71,5 +71,16 @@ Everything since v1.27.0 was agent-verified only in isolated harnesses (authed a
 
 Frontend static files (`src/aia/`) are **bind-mounted** → live on browser reload. The **Python services run from built images** — a `settings-service/main.py` change needs `docker compose build settings-service && docker compose up -d settings-service`. **v1.30.0 and v1.31.0 touch no Python service**, so a browser hard-reload is enough.
 
-## Next up (feature backlog)
-Per-persona affordances (Teacher quiz/flashcards, Consultant SWOT/decision-matrix templates, Transcript source pane + citations); document RAG instead of 28K truncation; OCR / encrypted-PDF in doc-extract; cloud-hardening findings past Finding E.
+## Next up
+
+**Owed verification (needs TOTP login):**
+1. Eyeball v1.28–v1.31.2 in the authed app — done for the Mermaid + CSP gate (user confirmed 2026-09-01); still open: themes / persona grouping full pass.
+2. Full `docker compose up -d --build` for the Inter woff2 + `VPAL_DEFAULT_THEME` + `auth` `<meta color-scheme>`.
+3. **v1.31.3 needs an Ollama-side check** — `num_ctx` is now the model's full window (qwen3:4b → 262144). If the host's Ollama `OLLAMA_CONTEXT_LENGTH` isn't set high, a large `num_ctx` gets clamped (fine) or, if honoured, triggers a huge slow KV-cache allocation. Confirm `OLLAMA_CONTEXT_LENGTH` on the Ollama host matches what the box can afford, and that a long chat with qwen3:4b performs OK.
+
+**Small polish:**
+- Consider a much more prescriptive `systemPrompts.technical` Mermaid template — qwen3.5:9b needed 4 rounds of `_repairMermaid` growth. (User has since defaulted Technical Expert to `qwen3:4b`, which follows instructions better.)
+
+**Feature backlog:** per-persona affordances (Teacher quiz/flashcards, Consultant SWOT/decision-matrix templates, Transcript source pane + citations, Legal jurisdiction selector + disclaimer banner); document RAG instead of 28K truncation; OCR / encrypted-PDF in doc-extract.
+
+**Cloud hardening** ([`hardening-status.md`](hardening-status.md), paused after Finding E): next is **Finding D** (nginx `real_ip` / `X-Forwarded-Proto` redirect), then C/F (parallel), then B (Redis auth state), N.

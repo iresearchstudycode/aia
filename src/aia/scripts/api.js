@@ -6,11 +6,13 @@ let streamAbortController = null;
 // Extracted so it can be unit-tested in Node.js without a DOM or global state.
 // Returns { requestBody, isVision, hasCurrentImage } — the flags are needed by
 // the caller to choose stream vs non-stream paths and the abort handler.
-// numCtx defaults to 16384, mirroring OLLAMA_NUM_CTX in config.js — callers should
-// always pass a value explicitly; the default only exists so tests that don't
-// care about num_ctx can omit it. The real call site passes `currentNumCtx`
-// (config.js), which is OLLAMA_NUM_CTX capped down to the active model's
-// advertised context window — see recomputeNumCtx() / resolveNumCtx().
+// numCtx defaults to 16384, mirroring the OLLAMA_NUM_CTX fallback in config.js —
+// callers should always pass a value explicitly; the default only exists so
+// tests that don't care about num_ctx can omit it. The real call site passes
+// `currentNumCtx` (config.js) = the active model's full advertised context
+// window when known, else the OLLAMA_NUM_CTX fallback — see recomputeNumCtx() /
+// resolveNumCtx(). This can be well above 16384; the Ollama server's own
+// OLLAMA_CONTEXT_LENGTH is the effective cap.
 function _buildRequestBody(imageBase64, history, systemPrompt, modelName, visionModelName, thinkingMode = 'off', numCtx = 16384) {
   // isVision: true when this message or any history entry contains an image.
   // hasCurrentImage: true only when a new image is attached to this specific message.
