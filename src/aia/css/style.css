@@ -1697,6 +1697,13 @@ body {
   justify-content: center;
 }
 
+/* `.toolbar-icon-btn` / `.voice-btn` set `display: flex`, which overrides the
+   `[hidden]` UA rule — an id + attr selector wins it back for the one
+   persona-gated toolbar button. */
+#consultTemplateBtn[hidden] {
+  display: none;
+}
+
 .toolbar-icon-btn svg {
   width: 17px;
   height: 17px;
