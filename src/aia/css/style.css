@@ -2625,14 +2625,18 @@ table.consult-matrix {
   display: none;
 }
 
-/* Small caret on the card's right edge, pointing toward the rail. */
+/* Small caret on the card's right edge, pointing toward the rail. JS sets
+   `--nav-rail-caret-top` to the marker's centre (card-local px) so the point
+   lines up with the hovered tick even when the card body is clamped to the
+   rail; `translateY(-50%)` makes that value the caret's own centre. */
 .nav-rail__card::after {
   content: "";
   position: absolute;
-  top: 12px;
+  top: var(--nav-rail-caret-top, 18px);
   right: -6px;
   width: 0;
   height: 0;
+  transform: translateY(-50%);
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
   border-left: 6px solid var(--color-panel-dark);

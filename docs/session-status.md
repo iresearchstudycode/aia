@@ -80,9 +80,11 @@ Everything since v1.27.0 was agent-verified only in isolated harnesses (authed a
 
 **v1.27.0/1** (low-risk, never checked): console `console.log(currentNumCtx, modelContextLengths)` → `16384` + populated map; thin scrollbars; Settings Export/Import as pills.
 
-## Deploy note that bit us twice this session
+## Deploy note that bit us (three times now)
 
 Frontend static files (`src/aia/`) are **bind-mounted** → live on browser reload. The **Python services run from built images** — a `settings-service/main.py` change needs `docker compose build settings-service && docker compose up -d settings-service`. **v1.30.0 and v1.31.0 touch no Python service**, so a browser hard-reload is enough.
+
+**2026-09-08 — new-machine bring-up:** user could log in + chat but Settings 401'd "from the settings Docker". Root cause: the new machine's `vpal-auth` image was stale (predated `settings-service`), so `/auth/verify` returned `200` **without** the `X-Auth-User` header → nginx forwarded an empty value → `settings-service` 401 ("missing or malformed X-Auth-User header"). `conversations-service` has the identical trust boundary and 401s too (history sidebar stays empty). Fix: `docker compose build --no-cache auth && docker compose up -d --force-recreate auth web-server`, then re-login. Documented in README Troubleshooting + CLAUDE.md "Stale service images"; memory `vpal-deploy-stale-images`. **Takeaway: first run on a machine / after any backend `git pull` → `docker compose build --no-cache` before `up`, never a bare `up -d`.** (nginx service key is `web-server`, not `nginx`.)
 
 ## Next up
 

@@ -217,8 +217,10 @@ Unlike the VoiceBox path, this one is entirely self-contained — no local deskt
 
 4. Build and start the stack:
    ```powershell
-   docker-compose up --build
+   docker-compose build --no-cache
+   docker-compose up -d
    ```
+   Use `build --no-cache` on the **first run on any machine** and after a `git pull` that touched a backend service. The Python services (`auth`, `settings-service`, …) run from **built images**, not live-mounted source — a bare `docker-compose up` will start whatever cached/old image exists and silently run old code (see [Troubleshooting](#troubleshooting): *opening Settings returns a 401*).
 
 5. Open the QR-code setup page and scan with Google Authenticator:
    ```
@@ -544,6 +546,10 @@ What "picking up a change" requires depends on what changed — there is no sing
 | "Invalid username, code, or too many attempts" | Verify username matches exactly what is in `.env`; check phone clock is synced; wait 5 minutes if locked out |
 | Setup page returns 404 | `SETUP_TOKEN` is not set in `.env`, or the token in the URL does not match |
 | Auth container won't start | `SECRET_KEY` is missing or under 32 characters, or no `USER_N` / `TOTP_SECRET_N` pairs are set |
+| Login and chat work, but opening **Settings** returns a 401 from `vpal-settings` (and the history sidebar stays empty — `vpal-conversations` 401s too) | The running `auth` image is **stale** — its `/auth/verify` doesn't send the `X-Auth-User` header the settings/conversations services need. Rebuild it: `docker-compose build --no-cache auth && docker-compose up -d --force-recreate auth web-server`, then sign out and back in. Confirm the image was stale with `docker exec vpal-auth python -c "import inspect, main; print(inspect.getsource(main.verify))"` — a current `verify` includes `headers={"X-Auth-User": username}`. |
+| Same 401, but `auth` is freshly built | Check `USER_1` in `.env` — it must match `^[A-Za-z0-9_-]{1,64}$` (letters, digits, `_`, `-` only; no spaces, dots, or `@`). The auth service accepts any username; the settings/conversations services reject an out-of-charset one. Fix `.env`, `docker-compose up -d --force-recreate auth`, then sign out and back in. |
+| `docker compose ... nginx` says "no such service: nginx" | The nginx service key is **`web-server`** (the *container* is named `vpal-nginx`). Use `docker-compose up -d --force-recreate web-server`. |
+| `docker exec vpal-nginx /usr/sbin/nginx ...` says `exec: ".../nginx": no such file` | Git Bash / MSYS is rewriting the path. Prefix `MSYS_NO_PATHCONV=1`, use `//usr/sbin/nginx`, or run it from PowerShell. |
 | Voice not working | Check browser microphone permissions |
 | Ollama connection failed | Ensure Ollama is running: `ollama serve` |
 | Text model not found | Run `ollama pull gemma4:e4b` |
