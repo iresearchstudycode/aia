@@ -34,13 +34,14 @@ _DEFAULT_MAX_PER_USER = 100
 _MAX_BODY_BYTES = 1048576  # 1 MiB
 _MAX_TITLE_CHARS = 200
 
-# The 11 persona keys — must match ``src/aia/scripts/config.js`` ``systemPrompts``
+# The persona keys — must match ``src/aia/scripts/config.js`` ``systemPrompts``
 # minus ``englishEditorExplained``.
 _PERSONA_KEYS: tuple[str, ...] = (
     "assistant",
     "casual",
     "claudePromptCompressor",
     "creative",
+    "cybersecurity",
     "englishEditor",
     "legal",
     "medical",
@@ -52,6 +53,7 @@ _PERSONA_KEYS: tuple[str, ...] = (
 
 _USER_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 class ValidationError(Exception):
@@ -87,7 +89,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     message_count INTEGER NOT NULL DEFAULT 0,
-    body TEXT NOT NULL DEFAULT '[]'
+    body TEXT NOT NULL DEFAULT '[]',
+    title_custom INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_conv_user_updated ON conversations(username, updated_at);
 """
@@ -113,13 +116,23 @@ def _db() -> Iterator[sqlite3.Connection]:
 
 
 def _init_db() -> None:
-    """Create the parent directory and the ``conversations`` table (idempotent)."""
+    """Create the parent directory and the ``conversations`` table (idempotent).
+
+    Also migrates a database created before ``title_custom`` existed: the column
+    is added with ``DEFAULT 0`` so every pre-existing title stays auto-derived.
+    """
     parent = os.path.dirname(_db_path())
     if parent:
         os.makedirs(parent, exist_ok=True)
     with _db() as conn:
         with conn:
             conn.executescript(_SCHEMA)
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(conversations)")}
+            if "title_custom" not in columns:
+                conn.execute(
+                    "ALTER TABLE conversations "
+                    "ADD COLUMN title_custom INTEGER NOT NULL DEFAULT 0"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -143,11 +156,28 @@ def _validate_title(raw: Any) -> str:
     return raw
 
 
+def _validate_rename_title(raw: Any) -> str:
+    """Validate a user-chosen title; return it trimmed or raise ValidationError.
+
+    ASCII control characters are stripped and runs of whitespace collapsed, so a
+    pasted multi-line string becomes a single line. The result must be non-empty
+    and within ``_MAX_TITLE_CHARS``.
+    """
+    if not isinstance(raw, str):
+        raise ValidationError("title must be a string")
+    cleaned = " ".join(_CONTROL_CHARS_RE.sub(" ", raw).split())
+    if not cleaned:
+        raise ValidationError("title must not be empty")
+    if len(cleaned) > _MAX_TITLE_CHARS:
+        raise ValidationError(f"title must be at most {_MAX_TITLE_CHARS} characters")
+    return cleaned
+
+
 def _validate_persona_key(raw: Any) -> str:
     """Validate and return a persona key or raise ValidationError."""
     if not isinstance(raw, str):
         raise ValidationError("persona_key must be a string")
-    # Allow empty string or one of the 11 persona keys
+    # Allow empty string or one of the persona keys (incl. since-removed ones)
     if raw and raw not in _PERSONA_KEYS:
         raise ValidationError(f"persona_key must be empty or one of: {', '.join(_PERSONA_KEYS)}")
     return raw
@@ -396,7 +426,8 @@ async def put_conversation(
         with conn:
             # Check if row exists and belongs to this user
             existing = conn.execute(
-                "SELECT created_at, username FROM conversations WHERE id = ?", (conv_id,)
+                "SELECT created_at, username, title_custom FROM conversations WHERE id = ?",
+                (conv_id,),
             ).fetchone()
 
             if existing and existing["username"] != username:
@@ -409,9 +440,13 @@ async def put_conversation(
             if existing:
                 # Update: keep created_at, update updated_at
                 created_at = existing["created_at"]
+                # A user-chosen title (see PUT .../title) survives the per-turn
+                # auto-save, which would otherwise re-derive it from the first
+                # message; ``CASE`` keeps the stored value in that case.
                 conn.execute(
                     """UPDATE conversations
-                       SET title = ?, persona_key = ?, message_count = ?,
+                       SET title = CASE WHEN title_custom = 1 THEN title ELSE ? END,
+                           persona_key = ?, message_count = ?,
                            body = ?, updated_at = ?
                        WHERE id = ? AND username = ?""",
                     (title, persona_key, message_count, body_json, now, conv_id, username),
@@ -458,6 +493,42 @@ async def put_conversation(
                         break
 
     return JSONResponse({"ok": True, "id": conv_id, "created_at": created_at, "updated_at": now})
+
+
+@app.put("/conversations/{conv_id}/title")
+async def rename_conversation(
+    conv_id: str,
+    request: Request,
+    username: str = Depends(require_user),
+) -> JSONResponse:
+    """Set a user-chosen title; later auto-saves no longer overwrite it.
+
+    Only ``title`` changes — ``updated_at`` is left alone so a rename does not
+    reorder the list, and ``persona_key`` is untouched so the persona grouping
+    is unaffected. 404 (never 403) for an unknown or another user's id.
+    """
+    try:
+        _validate_id(conv_id)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    body = await _json_object(request)
+    for key in body.keys():
+        if key != "title":
+            raise ValidationError(f"unknown key: {key}")
+    title = _validate_rename_title(body.get("title"))
+
+    with _db() as conn:
+        with conn:
+            cursor = conn.execute(
+                """UPDATE conversations SET title = ?, title_custom = 1
+                   WHERE id = ? AND username = ?""",
+                (title, conv_id, username),
+            )
+
+    if cursor.rowcount == 0:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return JSONResponse({"ok": True, "id": conv_id, "title": title})
 
 
 @app.delete("/conversations/{conv_id}")

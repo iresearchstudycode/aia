@@ -32,8 +32,13 @@ function _buildRequestBody(imageBase64, history, systemPrompt, modelName, vision
   // nudge from before Ollama supported this; on qwen3 it *breaks* the native
   // split (the assistant turn is "continued", so nothing separates) and the
   // whole reply lands in the thinking box. See splitThinkingContent (utils.js).
+  // An empty system prompt means "send no system message": Ollama replaces a
+  // Modelfile SYSTEM when the request carries one, so a persona that runs on a
+  // purpose-built model (cybersecurity → `cyber-consultant`) must leave it out
+  // for the model's own built-in prompt to apply. Every other persona has a
+  // non-empty prompt, so its request is unchanged.
   const messages = [
-    { role: 'system', content: systemPrompt },
+    ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
     ...history.map(m => {
       const msg = { role: m.role, content: m.content };
       if (m.imageBase64) msg.images = [m.imageBase64];

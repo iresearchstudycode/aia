@@ -362,10 +362,19 @@ class TestPersonaKey:
         )
         assert response.status_code == 422
 
-    def test_all_11_personas_accepted(self, client: TestClient) -> None:
+    def test_all_personas_accepted(self, client: TestClient) -> None:
         for persona in main._PERSONA_KEYS:
             response = _put_conversation(client, f"c-{persona}", persona_key=persona)
             assert response["ok"] is True
+
+    def test_cybersecurity_persona_accepted_and_listed(self, client: TestClient) -> None:
+        # Without this key in the allowlist every auto-save for the persona would 422.
+        assert "cybersecurity" in main._PERSONA_KEYS
+        _put_conversation(
+            client, "c-cyber", title="Essential Eight gap", persona_key="cybersecurity"
+        )
+        listed = _get_conversations(client)["conversations"]
+        assert [c["persona_key"] for c in listed] == ["cybersecurity"]
 
 
 # ---------------------------------------------------------------------------
@@ -697,3 +706,177 @@ class TestIdempotency:
         response2 = client.delete("/conversations/c-1", headers=_HEADERS)
         assert response1.status_code == 200
         assert response2.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Rename — PUT /conversations/{id}/title
+# ---------------------------------------------------------------------------
+
+
+def _rename(client: TestClient, conv_id: str, payload: dict, user: str = _USER):
+    """Helper to PUT /conversations/{id}/title."""
+    return client.put(
+        f"/conversations/{conv_id}/title", headers={"X-Auth-User": user}, json=payload
+    )
+
+
+def _stored_title(client: TestClient, conv_id: str, user: str = _USER) -> str:
+    return client.get(f"/conversations/{conv_id}", headers={"X-Auth-User": user}).json()["title"]
+
+
+class TestRename:
+    def test_rename_updates_title(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1", title="Auto title")
+        response = _rename(client, "c-1", {"title": "My chosen name"})
+        assert response.status_code == 200
+        assert response.json() == {"ok": True, "id": "c-1", "title": "My chosen name"}
+        assert _stored_title(client, "c-1") == "My chosen name"
+
+    def test_rename_survives_later_autosave(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1", title="Auto title", message_count=2)
+        _rename(client, "c-1", {"title": "Pinned name"})
+        # The per-turn auto-save re-derives the title from the first message.
+        _put_conversation(client, "c-1", title="Auto title v2", message_count=4, body=[{}])
+        stored = client.get("/conversations/c-1", headers=_HEADERS).json()
+        assert stored["title"] == "Pinned name"
+        assert stored["message_count"] == 4
+        assert stored["body"] == [{}]
+
+    def test_autosave_still_updates_title_when_never_renamed(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1", title="First")
+        _put_conversation(client, "c-1", title="Second")
+        assert _stored_title(client, "c-1") == "Second"
+
+    def test_rename_does_not_touch_persona_or_order(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1", title="A", persona_key="legal")
+        _put_conversation(client, "c-2", title="B", persona_key="medical")
+        before = {c["id"]: c for c in _get_conversations(client)["conversations"]}
+        _rename(client, "c-1", {"title": "Renamed"})
+        listing = _get_conversations(client)["conversations"]
+        assert [c["id"] for c in listing] == ["c-2", "c-1"]
+        renamed = next(c for c in listing if c["id"] == "c-1")
+        assert renamed["persona_key"] == "legal"
+        assert renamed["updated_at"] == before["c-1"]["updated_at"]
+
+    def test_rename_is_reflected_in_title_filter_and_search(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1", title="Auto")
+        _rename(client, "c-1", {"title": "Quarterly budget"})
+        assert len(_get_conversations(client, q="budget")["conversations"]) == 1
+        found = client.get("/conversations/search", params={"q": "budget"}, headers=_HEADERS)
+        assert [c["id"] for c in found.json()["conversations"]] == ["c-1"]
+
+    def test_title_is_trimmed_and_whitespace_collapsed(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1")
+        response = _rename(client, "c-1", {"title": "  hello \n\t  world  "})
+        assert response.json()["title"] == "hello world"
+
+    def test_control_characters_are_stripped(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1")
+        response = _rename(client, "c-1", {"title": "a\x00b\x07c"})
+        assert response.json()["title"] == "a b c"
+
+    def test_max_length_accepted_and_over_rejected(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1")
+        assert _rename(client, "c-1", {"title": "x" * 200}).status_code == 200
+        assert _rename(client, "c-1", {"title": "x" * 201}).status_code == 422
+
+    @pytest.mark.parametrize("bad", ["", "   ", "\n\t", "\x00\x01"])
+    def test_empty_title_rejected(self, client: TestClient, bad: str) -> None:
+        _put_conversation(client, "c-1", title="Keep me")
+        assert _rename(client, "c-1", {"title": bad}).status_code == 422
+        assert _stored_title(client, "c-1") == "Keep me"
+
+    @pytest.mark.parametrize("bad", [None, 123, ["x"], {"a": 1}, True])
+    def test_non_string_title_rejected(self, client: TestClient, bad: object) -> None:
+        _put_conversation(client, "c-1")
+        assert _rename(client, "c-1", {"title": bad}).status_code == 422
+
+    def test_missing_title_rejected(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1")
+        assert _rename(client, "c-1", {}).status_code == 422
+
+    def test_unknown_key_rejected(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1", persona_key="legal")
+        response = _rename(client, "c-1", {"title": "ok", "persona_key": "medical"})
+        assert response.status_code == 422
+        listing = _get_conversations(client)["conversations"]
+        assert listing[0]["persona_key"] == "legal"
+
+    def test_unknown_id_404(self, client: TestClient) -> None:
+        assert _rename(client, "c-missing", {"title": "x"}).status_code == 404
+
+    def test_rename_does_not_create_a_row(self, client: TestClient) -> None:
+        _rename(client, "c-missing", {"title": "x"})
+        assert _get_conversations(client)["total"] == 0
+
+    def test_other_users_conversation_404_and_untouched(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1", title="Alice's", user="alice")
+        response = _rename(client, "c-1", {"title": "Hijacked"}, user="bob")
+        assert response.status_code == 404
+        assert _stored_title(client, "c-1", user="alice") == "Alice's"
+
+    def test_invalid_id_422(self, client: TestClient) -> None:
+        response = _rename(client, "bad.id", {"title": "x"})
+        assert response.status_code == 422
+
+    def test_missing_auth_header_401(self, client: TestClient) -> None:
+        response = client.put("/conversations/c-1/title", json={"title": "x"})
+        assert response.status_code == 401
+
+    def test_malformed_auth_header_401(self, client: TestClient) -> None:
+        response = _rename(client, "c-1", {"title": "x"}, user="bad user!")
+        assert response.status_code == 401
+
+    def test_non_json_body_422(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1")
+        response = client.put("/conversations/c-1/title", headers=_HEADERS, content=b"nope")
+        assert response.status_code == 422
+
+    def test_sql_metacharacters_stored_verbatim(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1")
+        nasty = "x'); DROP TABLE conversations;--"
+        assert _rename(client, "c-1", {"title": nasty}).status_code == 200
+        assert _stored_title(client, "c-1") == nasty
+        assert _get_conversations(client)["total"] == 1
+
+    def test_rename_can_be_repeated(self, client: TestClient) -> None:
+        _put_conversation(client, "c-1")
+        _rename(client, "c-1", {"title": "one"})
+        _rename(client, "c-1", {"title": "two"})
+        assert _stored_title(client, "c-1") == "two"
+
+
+class TestTitleCustomMigration:
+    def test_legacy_database_gains_column_and_keeps_rows(self, tmp_path, monkeypatch) -> None:
+        """A DB created before ``title_custom`` existed is upgraded in place."""
+        db_file = tmp_path / "legacy.db"
+        conn = sqlite3.connect(db_file)
+        conn.execute("""CREATE TABLE conversations (
+                id TEXT PRIMARY KEY, username TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '', persona_key TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                message_count INTEGER NOT NULL DEFAULT 0,
+                body TEXT NOT NULL DEFAULT '[]')""")
+        conn.execute(
+            "INSERT INTO conversations VALUES ('c-old','alice','Old title','legal',"
+            "'2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z',1,'[]')"
+        )
+        conn.commit()
+        conn.close()
+        monkeypatch.setenv("CONVERSATIONS_DB_PATH", str(db_file))
+
+        with TestClient(app) as test_client:
+            # Pre-existing rows are untouched and still auto-titled.
+            assert _stored_title(test_client, "c-old") == "Old title"
+            _put_conversation(test_client, "c-old", title="Re-derived")
+            assert _stored_title(test_client, "c-old") == "Re-derived"
+            assert _rename(test_client, "c-old", {"title": "Mine"}).status_code == 200
+            _put_conversation(test_client, "c-old", title="Re-derived again")
+            assert _stored_title(test_client, "c-old") == "Mine"
+
+    def test_init_db_is_idempotent(self, client: TestClient) -> None:
+        main._init_db()
+        main._init_db()
+        with main._db() as conn:
+            columns = [r["name"] for r in conn.execute("PRAGMA table_info(conversations)")]
+        assert columns.count("title_custom") == 1

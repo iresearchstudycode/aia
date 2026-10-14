@@ -345,11 +345,24 @@ function _navRailShowCard(markerEl, entry) {
   _navRailCard.hidden = false;
 
   const rail = document.getElementById('navRail');
-  if (rail && typeof rail.getBoundingClientRect === 'function') {
-    const railRect = rail.getBoundingClientRect();
-    const markerRect = markerEl.getBoundingClientRect();
-    _navRailCard.style.top = markerRect.top - railRect.top + 'px';
-  }
+  if (!rail || typeof rail.getBoundingClientRect !== 'function') return;
+
+  const railRect = rail.getBoundingClientRect();
+  const markerRect = markerEl.getBoundingClientRect();
+
+  // Vertical centre of the hovered marker's tick, in rail-local coordinates.
+  const markerCenter = markerRect.top - railRect.top + markerRect.height / 2;
+
+  // Sit the card's own centre on the marker, then clamp it inside the rail so a
+  // marker near the top/bottom edge still shows the whole card. `offsetHeight`
+  // is valid now — the card was just un-hidden with its content set.
+  const cardHeight = _navRailCard.offsetHeight || 0;
+  const maxTop = Math.max(0, railRect.height - cardHeight);
+  const cardTop = Math.max(0, Math.min(markerCenter - cardHeight / 2, maxTop));
+  _navRailCard.style.top = cardTop + 'px';
+
+  // Keep the caret pointing exactly at the marker regardless of the clamp.
+  _navRailCard.style.setProperty('--nav-rail-caret-top', markerCenter - cardTop + 'px');
 }
 
 /**
