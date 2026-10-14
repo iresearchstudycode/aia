@@ -52,6 +52,17 @@ def _load_users() -> dict[str, str]:
     return users
 
 
+def _canonical_username(users: dict[str, str], submitted: str) -> str | None:
+    """Return the *configured* spelling of ``submitted``, or ``None`` if not a user.
+
+    The session and ``vpal_user`` cookies are built from the name held in the user
+    store (``USER_N``), never from the string the client posted: after login has
+    matched the two they are equal, but the value written to a cookie then comes
+    from trusted configuration rather than echoing request input.
+    """
+    return next((name for name in users if name == submitted), None)
+
+
 # ---------------------------------------------------------------------------
 # Brute-force protection — in-process, per-username sliding window
 # ---------------------------------------------------------------------------
@@ -363,10 +374,16 @@ async def login(
             _record_failure(username)
         return HTMLResponse(_login_html(_ERROR_MSG), status_code=401)
 
+    # ``secret`` was found, so the submitted name matches a configured user; cookies
+    # are issued for the configured spelling, not the posted string.
+    canonical = _canonical_username(users, username)
+    if canonical is None:  # unreachable (secret implies a match) — fail closed
+        return HTMLResponse(_login_html(_ERROR_MSG), status_code=401)
+
     _clear_failures(username)
     _mark_code_used(username, code)
     resp: Response = RedirectResponse(url="/", status_code=302)
-    _set_session_cookie(resp, username)
+    _set_session_cookie(resp, canonical)
     return resp
 
 

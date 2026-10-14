@@ -671,3 +671,37 @@ class TestUserCookieEncoding:
             follow_redirects=False,
         )
         assert resp.cookies["vpal_user"] == _TEST_USER
+
+
+class TestCanonicalUsername:
+    def test_returns_the_configured_name(self) -> None:
+        assert main._canonical_username({"Alice": "S", "bob": "T"}, "Alice") == "Alice"
+
+    def test_is_case_sensitive_like_the_user_lookup(self) -> None:
+        assert main._canonical_username({"Alice": "S"}, "alice") is None
+
+    def test_unknown_or_empty_name_is_none(self) -> None:
+        assert main._canonical_username({"Alice": "S"}, "mallory") is None
+        assert main._canonical_username({}, "Alice") is None
+        assert main._canonical_username({"Alice": "S"}, "") is None
+
+    def test_returned_object_comes_from_the_store_not_the_argument(self) -> None:
+        stored = "".join(["Al", "ice"])  # distinct object from the posted string
+        posted = "".join(["Al", "ice"])
+        assert stored is not posted
+        result = main._canonical_username({stored: "S"}, posted)
+        assert result is stored
+
+    def test_login_cookies_carry_the_configured_name(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Surrounding whitespace in the posted name is stripped before matching, and the
+        # cookies/session still resolve to the configured spelling.
+        resp = client.post(
+            "/auth/login",
+            data={"username": f"  {_TEST_USER}  ", "code": _valid_code()},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 302
+        assert resp.cookies["vpal_user"] == _TEST_USER
+        assert client.get("/auth/me").json() == {"username": _TEST_USER}
