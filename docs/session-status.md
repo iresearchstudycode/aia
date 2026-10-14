@@ -1,4 +1,4 @@
-# Session Status — 2026-09-01 (rev 18)
+# Session Status — 2026-10-14 (rev 19)
 
 Handoff note for resuming work. Overwrite freely.
 
@@ -6,96 +6,53 @@ Handoff note for resuming work. Overwrite freely.
 
 | | |
 |---|---|
-| `master` / `dev` | **v1.33.0** at `b18dacb` — Consultant SWOT/pros-cons/decision-matrix templates (PRs #72–#81, zero drift, CI green) |
-| `feat/teacher-quiz-flashcards` | **v1.34.0** — Patient Teacher quiz + flashcards affordance; PR into `dev` |
-| Working tree | the v1.34.0 diff + this doc |
-| Docker stack | 7 services healthy. `vpal-settings` was rebuilt for the v1.32.0 `default_analysis_view` key. **v1.33.0 + v1.34.0 are frontend-only.** Still owed separately: a full `docker compose up -d --build` for the Inter woff2, `VPAL_DEFAULT_THEME`, `auth` `<meta color-scheme>`. |
+| `master` / `dev` | **v1.36.4** at `d82684c` (PR #98), identical, zero drift. Open PRs: **0** (before the docs/feature PR below). |
+| GitHub alerts | Dependabot **0**, code scanning (CodeQL) **0**, secret scanning **0** — all closed over releases 1.36.2 → 1.36.4. |
+| In flight | `docs/rebuild-note-clear-errors-refresh` → **v1.37.0**: "rebuild the service" error toasts for stale backends + README rebuild note + a full documentation/diagram refresh. PR into `dev`. |
+| Docker stack | 7 containers healthy on the dev machine, images rebuilt from v1.36.4. **Any other machine must `docker-compose build --no-cache` before `up`** (see below). |
 
-## ▶ Persona affordance templates — running tally
+## What shipped since rev 18 (v1.34.0 → v1.37.0)
 
-Built on the English Editor pattern (custom render path + per-message view `<select>` + tag round-tripped through save/load). Mechanism lives in `_CONSULT_TEMPLATES` (config.js, each gated to a `persona`), `parseConsultReply` (utils.js, dispatches to per-template pure parsers), `renderConsultReply(container, raw, template, view, entry)` (chat.js), and the `consultTurn` tag in api.js.
+| Version | What |
+|---|---|
+| 1.34.1 | Nav-rail hover-card caret alignment; stale-image deploy docs |
+| 1.35.0 | **Rename chats** from the sidebar (pencil / `F2`, inline editor). `conversations-service` gained `title_custom` (migrated in place) + `PUT /conversations/{id}/title`; auto-save no longer overwrites a custom title |
+| 1.36.0 | **Cybersecurity Consultant persona** on the custom `cyber-consultant` Ollama model. VPAL sends **no system prompt** for it (Ollama replaces a Modelfile `SYSTEM` when one is sent — verified against the live model). New per-persona **`chat_model` override** (settings-service; house default via `VPAL_DEFAULT_CYBER_CHAT_MODEL`) |
+| 1.36.1 | History groups **A→Z and stable**; chats newest-modified-first inside each group; persona-group icon 13 → 20 px |
+| 1.36.2 | All **14 Dependabot alerts** closed (`pypdf` → 6.20.1, plus `browserslist` / `brace-expansion` / `baseline-browser-mapping`). Dev-tooling bumps merged (Jest 30.5.2, ESLint 10.12, globals 17.12) |
+| 1.36.3 | **13 CodeQL alerts** closed: least-privilege workflow tokens, no exception text in error responses, percent-encoded cookies. `sprintf-js` (no patched release) removed from the tree via a scoped npm override → `npm audit` 0 |
+| 1.36.4 | Last CodeQL alert (`py/cookie-injection`): cookies are issued for the **configured** username (`_canonical_username`), not the posted string |
+| 1.37.0 | **Stale-backend errors** (the app says "rebuild the service" instead of a bare 422; one-time warning if history stops saving), README rebuild note, documentation + diagram review |
 
-| persona | templates | trigger | render |
-|---|---|---|---|
-| **Professional Consultant** | `swot`, `proscons` (v1.32.0), `matrix` (v1.33.0) | composer "Templates" menu (`#consultTemplateBtn`, professional only) | colour-coded grid / weighted `<table>` with 0–5 sliders (persists `consultWeights`) |
-| **Patient Teacher** | `quiz`, `flashcards` (v1.34.0) | "Quiz me" / "Flashcards" buttons on a plain Teacher reply (`_appendLearnActions`) | clickable MCQ (reveal correct/wrong + explanation) / CSS-flip cards |
+## ▶ Deploy gotchas (each bit us for real)
 
-v1.34.0 generalised the mechanism: `_CONSULT_TEMPLATES` entries have a `persona`; api.js gates `consultTurn` on `_currentPersonaKey() === tplDef.persona`; `consultView` is `currentConsultView` for Consultant, always `'structured'` for Teacher; new `_splitMarkdownTable` helper shared by `parseDecisionMatrix` + `parseFlashcards`. JS suite **329**. `default_analysis_view` is the only settings-service key (professional; v1.32.0). Harness-verified light + dark.
+1. **`--force-recreate` does not rebuild.** A second machine pulled `master`, ran `docker-compose up -d --force-recreate`, and switching to the new persona failed with `PUT /settings/global 422` — its `settings-service` image still predated the persona. Fix: `docker-compose build --no-cache` then `up -d --force-recreate` (all services). v1.37.0 makes the UI say so.
+2. **nginx caches backend addresses.** Recreating `auth`/`doc-extract`/`piper-tts`/`conversations` without recreating or reloading `web-server` left nginx calling the old IPs → every page **500** (`connect() failed (111) … upstream` in `docker logs vpal-nginx`; the containers themselves were healthy). Fix: recreate `web-server` with the backends, or `docker exec vpal-nginx /usr/sbin/nginx -s reload`. A permanent fix (a `resolver` + variable `proxy_pass`) is an nginx-template change, not done.
+3. **Stale `auth` image** → Settings 401 (old `/auth/verify` lacked `X-Auth-User`). Documented since 2026-09-08.
 
-**Remaining affordances** (plan `~/.claude/plans/fuzzy-mixing-cascade.md`): Transcript source pane + citations, Legal jurisdiction selector + disclaimer.
+Frontend (`src/aia/`) is bind-mounted: a page reload is enough. Backend changes always need build → recreate (+ `web-server`).
 
-## ▶ Mermaid repair — running tally
+## ▶ Findings worth knowing
 
-`_repairMermaid` runs **only** as the retry after a raw `mermaid.render()` failure, so it's free to be aggressive. It now handles, for `graph`/`flowchart`:
-- unquoted punctuation in **node** labels (v1.30.0) and **edge** labels (v1.31.1)
-- literal `\n` / `& \n`, `<br/>` (v1.31.x)
-- `classDef` / `style` / `linkStyle` lines + `:::class` (v1.31.1 — we colour-code by shape instead)
-- **unclosed `subgraph`** — appends missing `end`s (v1.31.2)
+- **Every container gets the whole `.env`** (`env_file: .env` on all six Python services). Verified: `SECRET_KEY` is present in `vpal-settings`, `vpal-conversations`, `vpal-doc-extract`, `vpal-piper-tts` and `vpal-voicebox-proxy`, though only `auth` reads it. This is hardening **Finding C**, still open; earlier docs claimed the secret was "not shared" — corrected in `CLAUDE.md` and the README.
+- **The "no server-side data at rest" property no longer holds.** `conversations-service` stores full conversation text (and `settings-service` preferences) in SQLite on named volumes. The cloud-hardening plan was written before that — see its addendum.
+- **CodeQL's PR check only reports *new* alerts.** A clean PR check did not mean an existing alert was fixed (it wasn't, for the cookie one); only a re-scan of `master` shows that. CI itself runs on PRs to `dev` too.
+- `cyber-consultant` is listed by Ollama as `cyber-consultant:latest`; the Settings dropdown treats the two names as one, but `resolveNumCtx`'s context map is keyed by the full name, so the persona uses the `OLLAMA_NUM_CTX` fallback (16384) — which happens to match the Modelfile's own `num_ctx`.
 
-Plus `flowchart.useMaxWidth: false` (v1.31.1) so wide flowcharts scroll at natural size instead of shrinking to unreadable. Each fix came from a real failing AI response the user pasted; verify new ones in the faithful harness (real script order + CSP `<meta>` + `css/style.css` — NOT root `style.css`).
+## ▶ Owed verification (needs a TOTP login — agents can't do this)
 
-## ▶ v1.31.1 — what shipped
+Verified so far only by unit tests, jsdom, an isolated harness and API calls. Sign in at `https://localhost/` (hard-reload) and check:
 
-A qwen3.5:9b Technical-Expert flowchart still errored. Its source had unquoted `{}`/`"`/`/` **inside edge labels** (`-->|... {"model":"x"}|`), a literal `& \n`, `<br/>`, `classDef` + `:::class` — none of which v1.30.0's node-label-only `_repairMermaid` touched.
-
-- **`_repairMermaid` rewrite** (still runs only as the post-failure retry → free to be aggressive): drop `classDef`/`style`/`linkStyle` + `:::class`; collapse `\n` junk; strip `<br/>`; quote **node AND edge** label text with punctuation past `\w \s / . -`. Verified e2e against real `mermaid.min.js` + the user's exact diagram → parse error to full render, 40 legible labels.
-- **Wide flowcharts no longer shrink to unreadable** — `flowchart.useMaxWidth: false` + `.mermaid-diagram svg { display:block; margin:0 auto }`: natural size + horizontal scroll inside the card. (This was likely most of "not rendering correctly" — a 2100px-wide diagram was being scaled into ~390px, ~2px text.)
-
-Tests: `code-render.test.js` +5 → JS suite 289. CSP unchanged.
-
-## ▶ v1.31.0 — what shipped
-
-**Mermaid diagrams: Rational Rose styling + fixing silently-missing node text.**
-
-- **The real bug:** Mermaid v10 renders node labels inside `<foreignObject>` XHTML *even under `securityLevel: 'strict'`*, and DOMPurify's SVG profile strips `<foreignObject>` — so every diagram was rendering with **its node text gone**. `htmlLabels: false` (top-level + per diagram type) forces plain SVG `<text>`/`<tspan>`, which survive the sanitiser. This is what the user was seeing when they asked for "clearly display both the diagram elements and their associated text".
-- **Rose look:** `mermaid.initialize` `theme: 'dark'` → `theme: 'base'` + full `themeVariables` (paper canvas `#fbfaf3`, cornsilk boxes `#fff8dc`, dark-navy borders `#33334d`, near-black text, sticky-note-yellow notes). New `--mermaid-*` tokens in `style.css` on bare `:root` (light in both themes, like `--code-bg` stays dark), mirrored by a `ROSE` object in `chat.js`. `.mermaid-diagram` gets the paper bg + border + a `!important` text-fill safety net.
-- **Colour coding:** `_colourCodeMermaidNodes(wrapper)` — post-sanitisation DOM pass (`.style.fill`, no `innerHTML`) recolouring flowchart nodes by shape: `polygon` → decision → amber, `circle`/stadium → terminator → sage, else cornsilk.
-
-Tests: `code-render.test.js` +5 → JS suite **284**. Harness-verified against real `mermaid.min.js` + `style.css`: flowchart / sequence / class all render with **visible** legible text, decisions amber, terminators sage, paper canvas holds in dark mode, zero body-orphan leak. CSP unchanged.
-
-## ▶ v1.30.0 — what shipped
-
-**Mermaid "Syntax Error in text" on the Technical Expert persona** + a **copy-markdown button**.
-
-- `_repairMermaid(src)` — double-quotes unquoted `()`/`[]`/`{}`/`#` in `graph`/`flowchart` node labels; `renderMermaidIn()` retries a failed parse once with the repaired source.
-- `_cleanupMermaidOrphan(id)` — removes the `#d<id>` `<body>` orphan the vendored v10 `mermaid.render()` leaves on throw (this *was* the visible error graphic), guarded to a direct `<body>` child.
-- `systemPrompts.technical` — `flowchart TD` + quoted labels + no `subgraph`/`style`/`classDef`.
-- `_addMarkdownCopyBtn(contentDiv, rawText)` — a `.md-copy-btn` top-right of every rendered AI message that copies the raw markdown source.
-
-## ▶ Owed: eyeball the recent releases in the authed app
-
-Everything since v1.27.0 was agent-verified only in isolated harnesses (authed app needs a TOTP login the agent can't do). Sign in at `https://localhost/` (hard-reload) and check:
-
-**v1.31.0:**
-1. Technical Expert persona → ask for a flow diagram → it renders with **visible node text** (this was missing before), cornsilk boxes, amber decision diamonds, sage start/end, dark text, on a light "paper" card — same in light *and* dark app theme.
-2. A sequence / class diagram → same paper-card treatment, all labels legible.
-
-**v1.30.0:**
-1. Technical Expert flow diagram with lots of parens/slashes → renders, **no red "Syntax Error in text"** graphic, nothing stuck at the bottom of the page.
-2. Hover any AI message → a small copy icon appears top-right → click → the clipboard has the raw markdown (`#`, `|` tables, ` ``` ` fences), not the rendered text.
-
-**v1.28.0/1 — themes:** monochrome UI, Settings → Interface → Theme = System/Light/Dark instant apply (watch the send button flip), no white flash on reload with Dark active, `/auth/login` monochrome in OS light + dark.
-
-**v1.29.0 — personas:** history grouped into collapsible per-persona sections (icon + name + count), most-recently-used first, "Unassigned" last, collapse persists; header ▾ picker shows `icon · name · ✓`, "Claude Prompt Compressor" gone; replies in Australian English.
-
-**v1.27.0/1** (low-risk, never checked): console `console.log(currentNumCtx, modelContextLengths)` → `16384` + populated map; thin scrollbars; Settings Export/Import as pills.
-
-## Deploy note that bit us (three times now)
-
-Frontend static files (`src/aia/`) are **bind-mounted** → live on browser reload. The **Python services run from built images** — a `settings-service/main.py` change needs `docker compose build settings-service && docker compose up -d settings-service`. **v1.30.0 and v1.31.0 touch no Python service**, so a browser hard-reload is enough.
-
-**2026-09-08 — new-machine bring-up:** user could log in + chat but Settings 401'd "from the settings Docker". Root cause: the new machine's `vpal-auth` image was stale (predated `settings-service`), so `/auth/verify` returned `200` **without** the `X-Auth-User` header → nginx forwarded an empty value → `settings-service` 401 ("missing or malformed X-Auth-User header"). `conversations-service` has the identical trust boundary and 401s too (history sidebar stays empty). Fix: `docker compose build --no-cache auth && docker compose up -d --force-recreate auth web-server`, then re-login. Documented in README Troubleshooting + CLAUDE.md "Stale service images"; memory `vpal-deploy-stale-images`. **Takeaway: first run on a machine / after any backend `git pull` → `docker compose build --no-cache` before `up`, never a bare `up -d`.** (nginx service key is `web-server`, not `nginx`.)
+1. **Rename:** hover a chat → pencil → type → Enter; title changes, chat stays in its group and position; send another message in it → title is *not* reset. `F2` works; Escape cancels.
+2. **History order:** persona groups A→Z and static while you chat; the active chat jumps to the top of *its own* group only. Persona-group icons are readable (20 px).
+3. **Cybersecurity Consultant:** switch persona (header ▾), send "What does Essential Eight ML2 require for patching?" → an Australian-framework answer from `cyber-consultant`; the toolbar model badge shows the model; Settings → Personas → *Chat model* shows it selected (no "(not installed)").
+4. **Stale-backend toast** (only reproducible on an old image): switching persona against an old `settings-service` shows the rebuild message, not just a console error.
+5. Older, still open: themes full pass (Settings → Interface), and confirm the Ollama host's `OLLAMA_CONTEXT_LENGTH` suits large-window models (qwen3:4b → 262144).
 
 ## Next up
 
-**Owed verification (needs TOTP login):**
-1. Eyeball v1.28–v1.31.2 in the authed app — done for the Mermaid + CSP gate (user confirmed 2026-09-01); still open: themes / persona grouping full pass.
-2. Full `docker compose up -d --build` for the Inter woff2 + `VPAL_DEFAULT_THEME` + `auth` `<meta color-scheme>`.
-3. **v1.31.3 needs an Ollama-side check** — `num_ctx` is now the model's full window (qwen3:4b → 262144). If the host's Ollama `OLLAMA_CONTEXT_LENGTH` isn't set high, a large `num_ctx` gets clamped (fine) or, if honoured, triggers a huge slow KV-cache allocation. Confirm `OLLAMA_CONTEXT_LENGTH` on the Ollama host matches what the box can afford, and that a long chat with qwen3:4b performs OK.
+**Hardening** ([`hardening-status.md`](hardening-status.md), paused after Finding E): the plan predates `settings-service`/`conversations-service`; Finding **C** (per-service secrets) is now the most relevant, alongside a new data-at-rest item. Order otherwise: **D** (nginx `real_ip` / `X-Forwarded-Proto`), F, B (Redis auth state), N.
 
-**Small polish:**
-- Consider a much more prescriptive `systemPrompts.technical` Mermaid template — qwen3.5:9b needed 4 rounds of `_repairMermaid` growth. (User has since defaulted Technical Expert to `qwen3:4b`, which follows instructions better.)
+**Small follow-ups:** resolve nginx upstreams at request time; alias-aware context-length lookup (`name` ↔ `name:latest`); a no-VPAL-prompt persona's image turns currently get no persona prompt.
 
-**Feature backlog:** per-persona affordances (Teacher quiz/flashcards, Consultant SWOT/decision-matrix templates, Transcript source pane + citations, Legal jurisdiction selector + disclaimer banner); document RAG instead of 28K truncation; OCR / encrypted-PDF in doc-extract.
-
-**Cloud hardening** ([`hardening-status.md`](hardening-status.md), paused after Finding E): next is **Finding D** (nginx `real_ip` / `X-Forwarded-Proto` redirect), then C/F (parallel), then B (Redis auth state), N.
+**Feature backlog:** remaining per-persona affordances (Transcript source pane + citations, Legal jurisdiction selector + disclaimer); document RAG instead of 28K truncation; OCR / encrypted-PDF in doc-extract.
