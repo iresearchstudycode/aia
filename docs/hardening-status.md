@@ -1,9 +1,31 @@
 # VPAL Security Hardening — Status & Handoff
 
-**Last updated:** 2026-08-28
-**State:** ⏸ **PAUSED** after Finding E. No hardening work in progress, no open PRs, no running sub-agents. `dev` is at **v1.16.0** (`c255a32`), 4 commits ahead of `master`, no divergence. Local Docker stack rebuilt and healthy on `dev`.
+**Last updated:** 2026-10-14 — the findings and progress tables below are unchanged since 2026-08-28; **read §0 first** for what has moved in the repo while this was paused.
+**State:** ⏸ **PAUSED** after Finding E — no hardening finding has been worked since. *(As of 2026-08-28: `dev` at v1.16.0 `c255a32`, 4 containers. Today: `master` = `dev` = **v1.36.4**, **7** containers, no open PRs, no open security alerts.)*
 
 Detailed spec for every finding: [`docs/cloud-hardening-plan.md`](cloud-hardening-plan.md). This file tracks progress against it.
+
+---
+
+## 0. Update — 2026-10-14 (what changed while this was paused)
+
+No finding below (D, C, F, B, N, …) has been implemented. But the codebase moved from v1.16.0 to v1.36.4, and some statements in this file and in [`cloud-hardening-plan.md`](cloud-hardening-plan.md) are now out of date or have gained new weight.
+
+**Done since (outside the finding list)**
+
+- **Security alerts cleared:** Dependabot 14 → 0 (`pypdf` 6.20.1, three npm packages; `sprintf-js` removed from the tree via a scoped npm override), CodeQL code-scanning 13 → 0, secret scanning 0. CodeQL (default setup: Python, JavaScript/TypeScript, Actions) and Dependabot (pip + npm → `dev`) are now active.
+- **CI hygiene (partial Finding M):** workflows run with a least-privilege token (`permissions: contents: read`); the `cgr.dev/chainguard/nginx` image is now **digest-pinned** in `docker-compose.yml` (the plan's "currently unpinned" no longer holds). Still open from M: hash-locked Python deps, SBOM / signing / Trivy gate, **GitHub Actions pinned to commit SHAs** (they are `@v7`/`@v6` tags today).
+- **Response/cookie hygiene:** backend error responses never echo an exception's text (fixed messages chosen by exception type); the `vpal_session`/`vpal_user` cookies are built from the *configured* username and percent-encoded (relevant to Finding G).
+- Finding E's template now has **10** placeholders (`PIPER`, `SETTINGS`, `CONVERSATIONS` upstreams were added).
+
+**New or sharper risks — fold these into the open findings**
+
+- **Finding C is now wider.** All **six** Python services (`auth`, `voicebox-proxy`, `doc-extract`, `piper-tts`, `settings-service`, `conversations-service`) start with `env_file: .env`. Verified in the running containers: `SECRET_KEY` is in each one's environment although only `auth` reads it. Earlier project docs wrongly called it "not shared"; they are corrected.
+- **The "no server-side data at rest" property is gone** (Finding P's premise). `conversations-service` persists **full conversation text** and `settings-service` per-user preferences in SQLite on named volumes (`vpal-conversations-data`, `vpal-settings-data`). Cloud deployment now needs volume encryption, backup/retention, a per-user deletion story and a note that logs must not capture bodies — see the addendum in the plan.
+- **A new trust boundary:** the two data services trust the `X-Auth-User` header, which nginx sets from `/auth/verify` and **overwrites on every request**. Any LB/CDN/proxy added in front (Finding D) must not be able to inject that header past nginx, and nginx must stay the only setter.
+- **Findings H and K now cover six services, not three** (see the updated rows in §3). `auth/main.py` still imports no `logging`.
+- **nginx resolves its upstream hostnames once at startup.** Locally this made every page 500 after backend containers were recreated without recreating/reloading nginx. In an orchestrated cloud (rescheduled pods, rolling deploys) it is a real outage mode — fold a `resolver` directive + variable-based `proxy_pass` into Finding **E-followup / N**.
+- Operational: the Python services run from built images, so *rebuild, then recreate* is mandatory after any pull (`--force-recreate` alone keeps old code). The N runbook must say so.
 
 ---
 
@@ -63,8 +85,8 @@ Order follows [`cloud-hardening-plan.md` §8](cloud-hardening-plan.md) (dependen
 
 | ID | Task | Model |
 |---|---|---|
-| **K** | Structured (JSON) logging in all 3 services — **`auth/main.py` currently imports no `logging` at all**; auth-event stream (login success/failure/lockout/replay/`setup` access/`store_unavailable`); `/readyz` distinct from `/healthz`; an unauth `location = /healthz { return 200; }` in nginx for LB probes; alerting hooks for failed-auth spikes | Haiku / Sonnet |
-| **H** | `TrustedHostMiddleware` (allowed-hosts from env) on all 3 FastAPI apps; nginx `server { server_name _; return 444; }` default block; `Origin`/`Referer` check on state-changing routes as a second CSRF layer | Sonnet |
+| **K** | Structured (JSON) logging in all 6 Python services — **`auth/main.py` currently imports no `logging` at all**; auth-event stream (login success/failure/lockout/replay/`setup` access/`store_unavailable`); `/readyz` distinct from `/healthz`; an unauth `location = /healthz { return 200; }` in nginx for LB probes; alerting hooks for failed-auth spikes | Haiku / Sonnet |
+| **H** | `TrustedHostMiddleware` (allowed-hosts from env) on all 6 FastAPI apps; nginx `server { server_name _; return 444; }` default block; `Origin`/`Referer` check on state-changing routes as a second CSRF layer | Sonnet |
 | **I** | CSP: add `frame-ancestors 'none'`, `base-uri 'none'`, `object-src 'none'`, `upgrade-insecure-requests`; add `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy: same-origin`. KaTeX `style-src 'unsafe-inline'` stays (documented, bounded). | Haiku |
 | **G** | `__Host-` cookie name prefix; explicit `Path=/`, no `Domain`; idle + absolute session expiry (`last_seen`/`iat` in the signed payload); document the deliberately non-HttpOnly cookies; optional Redis-backed revocation (piggybacks on B) | Sonnet |
 | **J** | `doc-extract` per-request extraction timeout (subprocess + kill for CPU-bound cancel) + default-deny egress; re-verify no auth bypass on the public routes; **VoiceBox mandatory network-isolation controls** (private bind, firewall inbound only from `voicebox-proxy`, restricted egress) + `README.md` "no auth — fence or disable" note | Sonnet |
@@ -73,7 +95,7 @@ Order follows [`cloud-hardening-plan.md` §8](cloud-hardening-plan.md) (dependen
 
 | ID | Task | Model |
 |---|---|---|
-| **M** | Pin `cgr.dev/chainguard/nginx` by tag + digest (**currently unpinned** — the one non-reproducible container); hash-lock Python deps (`pip-compile --generate-hashes` + `--require-hashes`); SBOM (`syft`) + `cosign` signing + Trivy/grype gate in CI; pin GitHub Actions to commit SHAs; a **prod deployment descriptor** separate from the dev `docker-compose.yml` | Sonnet |
+| **M** | ~~Pin `cgr.dev/chainguard/nginx` by tag + digest~~ (**done** — digest-pinned in `docker-compose.yml`); hash-lock Python deps (`pip-compile --generate-hashes` + `--require-hashes`); SBOM (`syft`) + `cosign` signing + Trivy/grype gate in CI; pin GitHub Actions to commit SHAs; a **prod deployment descriptor** separate from the dev `docker-compose.yml` | Sonnet |
 | **L** | Replace the hard per-username lockout with **progressive backoff** (mitigates lockout-as-DoS against a named victim); per-user rate-limit key once D lands | Sonnet |
 | **P** | Document the "no server-side data at rest" property + the conditions that would void it; Redis hardening rider (auth required, TLS, private-only, short TTLs, **no** RDB/AOF disk persistence) | Haiku |
 

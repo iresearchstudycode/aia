@@ -2246,6 +2246,9 @@ table.consult-matrix {
   background: var(--color-toast-bg);
   color: var(--color-panel-dark-text);
   padding: 10px 14px;
+  max-width: min(460px, calc(100vw - 40px));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-toast);
   font-size: 14px;

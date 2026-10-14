@@ -8,7 +8,7 @@
 - **Ollama and VoiceBox stay external host services**, reached over the network, parametrized by env var (replacing `host.docker.internal` / `extra_hosts`).
 - **No authentication will be added in front of VoiceBox.** The residual risk is called out prominently (Finding J) and the plan mandates compensating network controls instead.
 
-> There is currently **no "Branching & Release Workflow" section in `CLAUDE.md`** despite it being referenced as context. CI (`.github/workflows/ci.yml`) triggers only on `master` (`push`/`pull_request` → `branches: [master]`), so a PR into `dev` runs **no CI at all**. Both are noted in Finding M / the sequence section.
+> **Addendum — 2026-10-14.** This plan is a point-in-time analysis (2026-08-28, v1.15.x). The repo is now at v1.36.4. Its `file:line` references, the "three services" / "four containers" counts and several statements below predate three added services (`piper-tts`, `settings-service`, `conversations-service`) and are **stale**. The two process gaps it originally noted are **fixed**: `CLAUDE.md` now has a *Branching & Release Workflow* section, and CI runs on PRs into `dev` as well as `master`. What changed that affects the findings is summarised in **[Addendum: changes since this plan](#addendum-changes-since-this-plan)** at the end of this file, and tracked in [`hardening-status.md`](hardening-status.md) §0.
 
 ---
 
@@ -649,3 +649,22 @@ Store all in the platform secret manager. Never commit, never bake into an image
 14. **P (data-at-rest confirmation + Redis hardening rider)** — documentation + the Redis-persistence decision from B.
 
 **Dependency summary:** E → {D, F}. C → B (secret plumbing). {B, C, D, E, F} → N. D → K. B → {G-revocation, L}. Everything in Phase 1 → Phase 2/3.
+
+---
+
+## Addendum: changes since this plan
+
+*Added 2026-10-14. The findings above are unchanged; this lists what the repository has gained since they were written and how each item changes them.*
+
+| Change since 2026-08-28 | Effect on the plan |
+|---|---|
+| **Three services added:** `piper-tts` (default TTS), `settings-service` (per-user preferences), `conversations-service` (chat history). The stack is now **7 containers** (nginx + 6 Python services). | Every "all three services" statement (Findings C, H, K and the executive summary) now means **all six Python services**. |
+| **Server-side persistence now exists.** `conversations-service` stores each user's full conversation text; `settings-service` stores preferences — both in SQLite (WAL) on named volumes. | The executive summary's "no server-side persistence of chat history" and **Finding P's** premise are **void**. A cloud deployment needs: volume encryption at rest, backup and retention policy, a per-user export/delete path, and logging that never captures request/response bodies. |
+| **`env_file: .env` on all six Python services** (verified in the running containers). | **Finding C** is wider: the full secret set (`SECRET_KEY`, TOTP seeds, `SETUP_TOKEN`) reaches every container, including the two that persist user data and `doc-extract`, which parses untrusted PDFs. |
+| **A second trust boundary:** the data services trust `X-Auth-User`, set by nginx from the auth sub-request and overwritten on every request. | **Finding D / H:** any load balancer, CDN or extra proxy must not be able to deliver that header past nginx; nginx must remain the only place it is set. The services also validate it (`^[A-Za-z0-9_-]{1,64}$`) as defence in depth. |
+| **nginx resolves upstream hostnames only at startup.** | **Finding E-followup / N:** in an orchestrator (rescheduled containers, rolling deploys) a stale address is an outage. Use a `resolver` directive with variable-based `proxy_pass`, or guarantee nginx restarts with its backends. |
+| **Operational rule:** the Python services run from built images. | **Finding N runbook:** "rebuild, then recreate (with nginx)" must be explicit — a recreate alone keeps running old code. |
+| **Supply chain / CI progress:** nginx image digest-pinned; workflows use a least-privilege token; CodeQL + Dependabot active; all alerts closed. | **Finding M** is partly done; still open: hash-locked Python deps, SBOM/signing/vulnerability gate, GitHub Actions pinned to commit SHAs. |
+| **Error and cookie hygiene:** error responses use fixed messages (no exception text); cookies are built from the configured username and percent-encoded. | Small positive effect on **Findings G and K**; no new work required. |
+| **New feature surface:** per-persona model override (any persona can select any Ollama model); a persona whose model carries its own prompt. | Reinforces the existing "Ollama is an unauthenticated external host service" accepted risk. The settings API accepts any model-name string (≤ 200 chars), but it is only ever sent as the `model` field of `/ollama/api/chat`; nginx still denies every Ollama management path (`pull`, `delete`, `create`, `copy`, `push`, `generate`). |
+
