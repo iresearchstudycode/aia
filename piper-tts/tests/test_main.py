@@ -144,6 +144,19 @@ class TestSpeakRoute:
         assert response.status_code == 500
         assert response.json() == {"ok": False, "error": "Speech synthesis failed."}
 
+    def test_synthesis_error_text_is_never_echoed(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            main,
+            "_synthesize",
+            MagicMock(side_effect=SynthesisError("onnx crashed at /app/voices/x.onnx")),
+        )
+        response = client.post("/piper/speak", json={"text": "Hello world."})
+        assert response.status_code == 500
+        assert "onnx" not in response.text and "/app" not in response.text
+        assert response.json() == {"ok": False, "error": main._MSG_SYNTHESIS_FAILED}
+
     def test_speak_route_is_sync_so_it_runs_off_the_event_loop(self) -> None:
         # A blocking sync route must NOT be registered as a coroutine, or one
         # slow synthesis would stall /health and every other request.

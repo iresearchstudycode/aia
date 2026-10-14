@@ -27,8 +27,18 @@ _MAX_UPLOAD_BYTES: int = int(os.environ.get("MAX_UPLOAD_BYTES", str(15 * 1024 * 
 _MAX_TEXT_CHARS: int = int(os.environ.get("MAX_TEXT_CHARS", "200000"))
 
 
+# Fixed, client-facing messages. The route chooses one by exception *type* and never
+# echoes an exception's own text, so a library error can't leak into a response.
+_MSG_ENCRYPTED = "Encrypted PDFs are not supported."
+_MSG_UNREADABLE = "Could not read this PDF — it may be corrupted or scanned/image-only."
+
+
 class ExtractionError(Exception):
     """Raised when a PDF can't be read at all (corrupt, encrypted, scanned-image-only)."""
+
+
+class EncryptedPdfError(ExtractionError):
+    """Raised for a password-protected PDF."""
 
 
 def _extract_text(data: bytes) -> tuple[str, int]:
@@ -36,15 +46,13 @@ def _extract_text(data: bytes) -> tuple[str, int]:
     try:
         reader = pypdf.PdfReader(io.BytesIO(data))
         if reader.is_encrypted:
-            raise ExtractionError("Encrypted PDFs are not supported.")
+            raise EncryptedPdfError(_MSG_ENCRYPTED)
         page_texts = [page.extract_text() or "" for page in reader.pages]
     except ExtractionError:
         raise
     except Exception as exc:
         logger.warning("PDF extraction failed: %s", exc)
-        raise ExtractionError(
-            "Could not read this PDF — it may be corrupted or scanned/image-only."
-        ) from exc
+        raise ExtractionError(_MSG_UNREADABLE) from exc
 
     text = "\n\n".join(page.strip() for page in page_texts if page.strip())
     return text, len(page_texts)
@@ -89,8 +97,10 @@ async def extract(file: UploadFile = File(...)) -> JSONResponse:
 
     try:
         text, page_count = _extract_text(data)
-    except ExtractionError as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=422)
+    except EncryptedPdfError:
+        return JSONResponse({"ok": False, "error": _MSG_ENCRYPTED}, status_code=422)
+    except ExtractionError:
+        return JSONResponse({"ok": False, "error": _MSG_UNREADABLE}, status_code=422)
 
     truncated = len(text) > _MAX_TEXT_CHARS
     if truncated:
