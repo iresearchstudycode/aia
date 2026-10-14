@@ -159,6 +159,31 @@ function resolveActiveCardId(list, currentId) {
 }
 
 /**
+ * Longest title the conversations-service accepts (`_MAX_TITLE_CHARS` there).
+ * @type {number}
+ */
+var HISTORY_TITLE_MAX = 200;
+
+/**
+ * Normalise a user-typed conversation title: strip ASCII control characters,
+ * collapse whitespace runs to single spaces and trim. Returns `''` for anything
+ * that is not a string or has no visible text left (the caller treats that as
+ * "cancel the rename"); a result longer than `HISTORY_TITLE_MAX` is cut to that
+ * length so a long paste is never rejected by the server. Never throws.
+ *
+ * @param {*} raw
+ * @returns {string}
+ */
+function normalizeConversationTitle(raw) {
+  if (typeof raw !== 'string') return '';
+  var cleaned = raw.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (cleaned.length > HISTORY_TITLE_MAX) {
+    cleaned = cleaned.slice(0, HISTORY_TITLE_MAX).trim();
+  }
+  return cleaned;
+}
+
+/**
  * Display name for a persona key: the live label maps first, then the
  * removed-persona map, then the raw key. `labels` overrides the browser globals
  * for tests.
@@ -178,13 +203,31 @@ function _hcPersonaLabel(key, labels) {
 }
 
 /**
- * Bucket a newest-first conversation list into persona groups. Group order =
- * first-seen order, so the persona with the most recent activity comes first.
- * Conversations with no `persona_key` fall into a trailing "Unassigned" group;
- * a since-removed persona (e.g. `claudePromptCompressor`) keeps its own group
- * so those threads stay identifiable.
+ * Last-modified time of a conversation metadata entry as epoch milliseconds
+ * (`updated_at`, falling back to `created_at`); `0` when absent or unparseable so
+ * such an entry sinks to the bottom of its group. Never throws.
  *
- * @param {?Array<object>} list - GET /conversations metadata entries (newest-first)
+ * @param {?object} item
+ * @returns {number}
+ */
+function _hcModifiedMs(item) {
+  if (!item) return 0;
+  var ms = Date.parse(item.updated_at || item.created_at || '');
+  return isNaN(ms) ? 0 : ms;
+}
+
+/**
+ * Bucket a conversation list into persona groups with a **stable, activity-
+ * independent order**: groups are sorted A→Z by display name (case-insensitive),
+ * so the persona list never reshuffles when a chat is used. Within a group,
+ * conversations are sorted by last-modified time, newest first — a chat that is
+ * modified moves to the top of its own group and nowhere else. Conversations with
+ * no `persona_key` fall into a trailing "Unassigned" group (kept last rather than
+ * sorted in); a since-removed persona (e.g. `claudePromptCompressor`) keeps its
+ * own group so those threads stay identifiable. The input order is irrelevant
+ * (equal timestamps keep it).
+ *
+ * @param {?Array<object>} list - GET /conversations metadata entries (any order)
  * @param {?Object<string,string>} [labels] - persona key -> name override (tests)
  * @returns {Array<{key:string,label:string,items:Array<object>}>}
  */
@@ -202,15 +245,34 @@ function groupConversationsByPersona(list, labels) {
     }
     groups[key].push(item);
   });
+  var newestFirst = function (items) {
+    // Decorate with the input index so equal timestamps keep their given order.
+    return items
+      .map(function (item, i) {
+        return { item: item, i: i, ms: _hcModifiedMs(item) };
+      })
+      .sort(function (a, b) {
+        return b.ms - a.ms || a.i - b.i;
+      })
+      .map(function (d) {
+        return d.item;
+      });
+  };
   var out = order
     .filter(function (k) {
       return k !== '';
     })
     .map(function (k) {
-      return { key: k, label: _hcPersonaLabel(k, labels), items: groups[k] };
+      return { key: k, label: _hcPersonaLabel(k, labels), items: newestFirst(groups[k]) };
+    })
+    .sort(function (a, b) {
+      return (
+        a.label.localeCompare(b.label, 'en', { sensitivity: 'base' }) ||
+        (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
+      );
     });
   if (groups['']) {
-    out.push({ key: '', label: 'Unassigned', items: groups[''] });
+    out.push({ key: '', label: 'Unassigned', items: newestFirst(groups['']) });
   }
   return out;
 }
@@ -232,6 +294,10 @@ var _hcCap = 100;
 var _hcSearchTimer = null;
 var _hcRefreshTimer = null;
 
+// True while a card's title is being edited inline — the out-of-band sidebar
+// refresh stands down so a turn finishing mid-edit can't wipe the input.
+var _hcRenaming = false;
+
 // hcTouchCurrent coalescing.
 var _hcTouchTimer = null;
 var _hcTouchInFlight = false;
@@ -241,6 +307,7 @@ var HISTORY_PERSONA_LABELS = {
   assistant: 'Assistant',
   casual: 'Casual Friend',
   creative: 'Creative Writer',
+  cybersecurity: 'Cybersecurity Consultant',
   englishEditor: 'English Editor',
   legal: 'Legal Assistant',
   medical: 'Medical Expert',
@@ -550,6 +617,7 @@ function hcRefreshSidebar() {
 
 /** The worker behind `hcRefreshSidebar`. Async; never throws. */
 async function _hcDoRefreshSidebar() {
+  if (_hcRenaming) return;
   try {
     var search = document.getElementById('historySearch');
     if (search && search.value.trim()) {
@@ -833,6 +901,21 @@ function _hcBuildCard(item, activeId) {
   main.appendChild(meta);
   card.appendChild(main);
 
+  var actions = document.createElement('div');
+  actions.className = 'history-card-actions';
+
+  var rename = document.createElement('button');
+  rename.type = 'button';
+  rename.className = 'history-card-rename';
+  rename.setAttribute('aria-label', 'Rename conversation');
+  rename.title = 'Rename';
+  rename.appendChild(_hcPencilIcon());
+  rename.addEventListener('click', function (e) {
+    e.stopPropagation();
+    _hcBeginRename(card, id);
+  });
+  actions.appendChild(rename);
+
   var del = document.createElement('button');
   del.type = 'button';
   del.className = 'history-card-delete';
@@ -842,19 +925,175 @@ function _hcBuildCard(item, activeId) {
     e.stopPropagation();
     _hcDeleteCard(id, card);
   });
-  card.appendChild(del);
+  actions.appendChild(del);
+  card.appendChild(actions);
 
   card.addEventListener('click', function () {
     hcLoadConversation(id);
   });
   card.addEventListener('keydown', function (e) {
+    // Only the card itself — Enter/Space on the rename / delete buttons must
+    // activate those buttons, not bubble up and open the conversation.
+    if (e.target !== card) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       hcLoadConversation(id);
+    } else if (e.key === 'F2') {
+      e.preventDefault();
+      _hcBeginRename(card, id);
     }
   });
 
   return card;
+}
+
+/**
+ * Build the small pencil glyph for the rename button. Constructed with
+ * `createElementNS` (no `innerHTML`), stroked in `currentColor` so it follows the
+ * sidebar text colour in every theme.
+ *
+ * @returns {SVGElement}
+ */
+function _hcPencilIcon() {
+  var ns = 'http://www.w3.org/2000/svg';
+  var svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  var path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z');
+  svg.appendChild(path);
+  return svg;
+}
+
+/**
+ * PUT a user-chosen title for `id`. Resolves to the title the server stored
+ * (it trims / strips control characters), rejects on any non-2xx.
+ *
+ * @param {string} id
+ * @param {string} title - already normalised and non-empty
+ * @returns {Promise<string>}
+ */
+async function _hcRenameRequest(id, title) {
+  if (typeof fetch === 'undefined') throw new Error('no fetch');
+  var res = await fetch(_hcApi('/' + id + '/title'), {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: title })
+  });
+  if (!res.ok) throw new Error('PUT title ' + res.status);
+  var data = await res.json();
+  return data && typeof data.title === 'string' ? data.title : title;
+}
+
+/**
+ * Set `title` on the cached metadata entry for `id` (no-op when absent, e.g. a
+ * card that came from a message-text search rather than the cached list).
+ *
+ * @param {string} id
+ * @param {string} title
+ * @returns {void}
+ */
+function _hcSetCachedTitle(id, title) {
+  for (var i = 0; i < _hcConversations.length; i++) {
+    if (_hcConversations[i] && String(_hcConversations[i].id) === String(id)) {
+      _hcConversations[i].title = title;
+    }
+  }
+}
+
+/**
+ * Swap a card's title for a text input. Enter or blur saves, Escape cancels; an
+ * empty / unchanged value is a silent cancel. The new title shows immediately
+ * and is PUT to the service; on failure it reverts and a toast explains. Only
+ * the title changes — the card stays in its persona group. Re-entrant calls
+ * (another rename already open) are ignored.
+ *
+ * @param {HTMLElement} card
+ * @param {string} id
+ * @returns {void}
+ */
+function _hcBeginRename(card, id) {
+  if (_hcRenaming || !card || !id) return;
+  var main = card.querySelector('.history-card-main');
+  var titleEl = card.querySelector('.history-card-title');
+  if (!main || !titleEl) return;
+
+  var original = titleEl.textContent;
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'history-card-rename-input';
+  input.maxLength = HISTORY_TITLE_MAX;
+  input.value = original;
+  input.setAttribute('aria-label', 'Conversation title');
+  input.autocomplete = 'off';
+
+  _hcRenaming = true;
+  card.classList.add('is-renaming');
+  main.classList.add('history-card-main-editing');
+  main.replaceChild(input, titleEl);
+
+  var finished = false;
+  function finish(commit, refocus) {
+    if (finished) return; // removing the focused input fires blur — ignore the echo
+    finished = true;
+    var next = normalizeConversationTitle(input.value);
+    main.replaceChild(titleEl, input);
+    card.classList.remove('is-renaming');
+    main.classList.remove('history-card-main-editing');
+    _hcRenaming = false;
+
+    // Only a keyboard finish returns focus to the card; on blur the user has
+    // already clicked elsewhere and must not have focus pulled back.
+    if (refocus && typeof card.focus === 'function') card.focus();
+
+    if (!commit || !next || next === original) {
+      hcRefreshSidebar(); // catch up on anything skipped while editing
+      return;
+    }
+
+    titleEl.textContent = next;
+    _hcSetCachedTitle(id, next);
+    _hcRenameRequest(id, next)
+      .then(function (saved) {
+        titleEl.textContent = saved;
+        _hcSetCachedTitle(id, saved);
+      })
+      .catch(function (err) {
+        if (typeof console !== 'undefined') console.error('history: rename failed', err);
+        titleEl.textContent = original;
+        _hcSetCachedTitle(id, original);
+        if (typeof showToast === 'function') showToast('Could not rename that conversation');
+      })
+      .then(function () {
+        hcRefreshSidebar();
+      });
+  }
+
+  input.addEventListener('keydown', function (e) {
+    e.stopPropagation(); // keep Enter/Space/Escape away from the card + global shortcuts
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finish(true, true);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      finish(false, true);
+    }
+  });
+  input.addEventListener('click', function (e) {
+    e.stopPropagation(); // clicking inside the field must not open the conversation
+  });
+  input.addEventListener('blur', function () {
+    finish(true, false);
+  });
+
+  input.focus();
+  if (typeof input.select === 'function') input.select();
 }
 
 /**
@@ -971,6 +1210,12 @@ if (typeof module !== 'undefined') {
     filterConversations: filterConversations,
     resolveActiveCardId: resolveActiveCardId,
     groupConversationsByPersona: groupConversationsByPersona,
-    _hcPersonaLabel: _hcPersonaLabel
+    _hcModifiedMs: _hcModifiedMs,
+    normalizeConversationTitle: normalizeConversationTitle,
+    _hcPersonaLabel: _hcPersonaLabel,
+    HISTORY_PERSONA_LABELS: HISTORY_PERSONA_LABELS,
+    _hcBuildCard: _hcBuildCard,
+    _hcRenderList: _hcRenderList,
+    _hcBeginRename: _hcBeginRename
   };
 }

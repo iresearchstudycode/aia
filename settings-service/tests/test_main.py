@@ -92,7 +92,7 @@ class TestGetSettingsFresh:
     def test_claude_prompt_compressor_persona_is_gone(self, client: TestClient) -> None:
         assert "claudePromptCompressor" not in main._PERSONA_KEYS
         assert "claudePromptCompressor" not in _get(client)["personas"]
-        assert len(main._PERSONA_KEYS) == 10
+        assert len(main._PERSONA_KEYS) == 11
 
     def test_every_persona_carries_a_read_only_svg_icon(self, client: TestClient) -> None:
         personas = _get(client)["personas"]
@@ -250,6 +250,7 @@ class TestPutPersona:
             "thinking_enabled": True,
             "thinking_depth": None,
             "tts_engine": None,
+            "chat_model": None,
             "editor_mode": "changes",
             "icon": main._PERSONA_ICONS["englishEditor"],
         }
@@ -330,7 +331,7 @@ class TestPutPersona:
         response = client.put(
             "/settings/persona/assistant",
             headers=_HEADERS,
-            json={"chat_model": "x"},
+            json={"vision_model": "x"},  # a global-only key
         )
         assert response.status_code == 422
 
@@ -458,6 +459,7 @@ class TestReset:
             "thinking_enabled": None,
             "thinking_depth": None,
             "tts_engine": None,
+            "chat_model": None,
             "editor_mode": "clean",
             "icon": main._PERSONA_ICONS["englishEditor"],
         }
@@ -610,3 +612,141 @@ class TestStorageRoundTrip:
         body = _get(client)
         assert body["global"]["auto_speak"] is True
         assert body["global"]["thinking_enabled"] is False
+
+
+# ---------------------------------------------------------------------------
+# Cybersecurity persona + per-persona chat_model override
+# ---------------------------------------------------------------------------
+
+
+def _put_persona(client: TestClient, persona: str, payload: dict, user: str = _USER):
+    return client.put(f"/settings/persona/{persona}", headers={"X-Auth-User": user}, json=payload)
+
+
+class TestCybersecurityPersona:
+    def test_persona_is_registered(self, client: TestClient) -> None:
+        assert "cybersecurity" in main._PERSONA_KEYS
+        assert "cybersecurity" in _get(client)["personas"]
+
+    def test_persona_has_its_own_icon(self, client: TestClient) -> None:
+        icon = _get(client)["personas"]["cybersecurity"]["icon"]
+        assert icon.startswith("<svg") and icon.endswith("</svg>")
+        assert icon != _get(client)["personas"]["assistant"]["icon"]
+
+    def test_can_be_the_active_persona(self, client: TestClient) -> None:
+        response = client.put(
+            "/settings/global", headers=_HEADERS, json={"active_persona": "cybersecurity"}
+        )
+        assert response.status_code == 200
+        assert _get(client)["global"]["active_persona"] == "cybersecurity"
+
+    def test_defaults_to_the_cyber_consultant_model(self, client: TestClient) -> None:
+        body = _get(client)
+        assert body["personas"]["cybersecurity"]["chat_model"] == "cyber-consultant"
+        assert body["defaults"]["persona_chat_model"] == {"cybersecurity": "cyber-consultant"}
+
+    def test_global_chat_model_is_unaffected(self, client: TestClient) -> None:
+        assert _get(client)["global"]["chat_model"] == "gemma4:e4b"
+
+    def test_other_personas_inherit_the_global_model(self, client: TestClient) -> None:
+        for key, entry in _get(client)["personas"].items():
+            if key != "cybersecurity":
+                assert entry["chat_model"] is None
+
+    def test_has_no_persona_specific_extras(self, client: TestClient) -> None:
+        entry = _get(client)["personas"]["cybersecurity"]
+        assert "editor_mode" not in entry
+        assert "default_analysis_view" not in entry
+
+
+class TestPersonaChatModel:
+    def test_override_is_stored_and_returned(self, client: TestClient) -> None:
+        response = _put_persona(client, "cybersecurity", {"chat_model": "qwen3:8b-q4_K_M"})
+        assert response.status_code == 200
+        assert response.json()["persona"]["chat_model"] == "qwen3:8b-q4_K_M"
+        assert _get(client)["personas"]["cybersecurity"]["chat_model"] == "qwen3:8b-q4_K_M"
+
+    def test_any_persona_can_override_the_model(self, client: TestClient) -> None:
+        _put_persona(client, "legal", {"chat_model": "qwen3:4b"})
+        assert _get(client)["personas"]["legal"]["chat_model"] == "qwen3:4b"
+
+    def test_override_does_not_change_the_global_model(self, client: TestClient) -> None:
+        _put_persona(client, "legal", {"chat_model": "qwen3:4b"})
+        assert _get(client)["global"]["chat_model"] == "gemma4:e4b"
+
+    def test_null_clears_an_override_on_an_inheriting_persona(self, client: TestClient) -> None:
+        _put_persona(client, "legal", {"chat_model": "qwen3:4b"})
+        response = _put_persona(client, "legal", {"chat_model": None})
+        assert response.status_code == 200
+        assert response.json()["persona"]["chat_model"] is None
+
+    def test_null_restores_the_house_default_on_cybersecurity(self, client: TestClient) -> None:
+        _put_persona(client, "cybersecurity", {"chat_model": "qwen3:4b"})
+        response = _put_persona(client, "cybersecurity", {"chat_model": None})
+        assert response.json()["persona"]["chat_model"] == "cyber-consultant"
+
+    def test_reset_key_restores_the_house_default(self, client: TestClient) -> None:
+        _put_persona(client, "cybersecurity", {"chat_model": "qwen3:4b"})
+        client.post(
+            "/settings/reset",
+            headers=_HEADERS,
+            json={"scope": "persona:cybersecurity", "keys": ["chat_model"]},
+        )
+        assert _get(client)["personas"]["cybersecurity"]["chat_model"] == "cyber-consultant"
+
+    def test_reset_all_restores_defaults(self, client: TestClient) -> None:
+        _put_persona(client, "cybersecurity", {"chat_model": "qwen3:4b"})
+        _put_persona(client, "legal", {"chat_model": "qwen3:4b"})
+        client.post("/settings/reset", headers=_HEADERS, json={"scope": "all"})
+        personas = _get(client)["personas"]
+        assert personas["cybersecurity"]["chat_model"] == "cyber-consultant"
+        assert personas["legal"]["chat_model"] is None
+
+    def test_stored_in_the_persona_scope(self, client: TestClient) -> None:
+        _put_persona(client, "cybersecurity", {"chat_model": "m"})
+        with main._db() as conn:
+            stored = main._stored(conn, _USER, "persona:cybersecurity")
+        assert stored == {"chat_model": "m"}
+
+    def test_scoped_per_user(self, client: TestClient) -> None:
+        _put_persona(client, "cybersecurity", {"chat_model": "alice-model"}, user="alice")
+        assert _get(client, "bob")["personas"]["cybersecurity"]["chat_model"] == "cyber-consultant"
+
+    def test_max_length_accepted_and_over_rejected(self, client: TestClient) -> None:
+        assert _put_persona(client, "legal", {"chat_model": "x" * 200}).status_code == 200
+        assert _put_persona(client, "legal", {"chat_model": "x" * 201}).status_code == 422
+
+    @pytest.mark.parametrize("bad", ["", "   ", 123, True, ["m"], {"a": 1}])
+    def test_invalid_values_rejected(self, client: TestClient, bad: object) -> None:
+        response = _put_persona(client, "cybersecurity", {"chat_model": bad})
+        assert response.status_code == 422
+        assert _get(client)["personas"]["cybersecurity"]["chat_model"] == "cyber-consultant"
+
+    def test_unknown_persona_404(self, client: TestClient) -> None:
+        assert _put_persona(client, "nope", {"chat_model": "m"}).status_code == 404
+
+
+class TestCyberModelEnv:
+    def test_env_overrides_the_house_default(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("VPAL_DEFAULT_CYBER_CHAT_MODEL", "cyber-consultant:v2")
+        body = _get(client)
+        assert body["personas"]["cybersecurity"]["chat_model"] == "cyber-consultant:v2"
+        assert body["defaults"]["persona_chat_model"] == {"cybersecurity": "cyber-consultant:v2"}
+
+    @pytest.mark.parametrize("empty", ["", "   "])
+    def test_empty_env_unpins_the_persona(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, empty: str
+    ) -> None:
+        monkeypatch.setenv("VPAL_DEFAULT_CYBER_CHAT_MODEL", empty)
+        body = _get(client)
+        assert body["personas"]["cybersecurity"]["chat_model"] is None
+        assert body["defaults"]["persona_chat_model"] == {}
+
+    def test_stored_override_wins_over_env(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _put_persona(client, "cybersecurity", {"chat_model": "stored"})
+        monkeypatch.setenv("VPAL_DEFAULT_CYBER_CHAT_MODEL", "from-env")
+        assert _get(client)["personas"]["cybersecurity"]["chat_model"] == "stored"

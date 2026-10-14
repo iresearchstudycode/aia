@@ -85,9 +85,14 @@ function _syncConsultUiForPersona() {
 // The 11 persona keys (must match config.js `systemPrompts` minus
 // `englishEditorExplained` and the spec's contract).
 const _PERSONA_KEYS = [
-  'assistant', 'casual', 'creative', 'englishEditor',
+  'assistant', 'casual', 'creative', 'cybersecurity', 'englishEditor',
   'legal', 'medical', 'professional', 'teacher', 'technical', 'transcriptai'
 ];
+
+// Offline fallback for the settings-service's house-default model for personas
+// that pin one (`persona_chat_model` in GET /settings `defaults`). Keep in sync
+// with `_persona_chat_model_defaults()` in settings-service/main.py.
+const _PERSONA_CHAT_MODEL_DEFAULTS = { cybersecurity: 'cyber-consultant' };
 
 // A defaults-shaped `window.vpalSettings` built entirely from config.js
 // constants — used when the settings-service can't be reached on load so the
@@ -100,6 +105,7 @@ function _defaultVpalSettings() {
       thinking_enabled: null,
       thinking_depth: null,
       tts_engine: null,
+      chat_model: _PERSONA_CHAT_MODEL_DEFAULTS[k] || null,
       icon: (typeof personaIcons !== 'undefined' && personaIcons[k]) || ''
     };
   });
@@ -128,7 +134,8 @@ function _defaultVpalSettings() {
       persona: {
         thinking_enabled: null, thinking_depth: null, tts_engine: null,
         editor_mode: 'clean', default_analysis_view: 'structured'
-      }
+      },
+      persona_chat_model: Object.assign({}, _PERSONA_CHAT_MODEL_DEFAULTS)
     }
   };
 }

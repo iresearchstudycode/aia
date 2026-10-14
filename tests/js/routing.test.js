@@ -236,6 +236,33 @@ describe('_buildRequestBody — messages array', () => {
     expect(requestBody.messages[0]).toEqual({ role: 'system', content: SYSTEM });
   });
 
+  test('an empty system prompt sends NO system message (model keeps its own)', () => {
+    const history = [{ role: 'user', content: 'Map our controls to Essential Eight ML2' }];
+    const { requestBody } = _buildRequestBody(null, history, '', 'cyber-consultant', VISION, 'off');
+    expect(requestBody.model).toBe('cyber-consultant');
+    expect(requestBody.messages).toEqual([
+      { role: 'user', content: 'Map our controls to Essential Eight ML2' },
+    ]);
+    expect(requestBody.messages.some((m) => m.role === 'system')).toBe(false);
+  });
+
+  test('an empty system prompt also applies on a vision turn', () => {
+    const { requestBody } = _buildRequestBody('img64', [], '', 'cyber-consultant', VISION, 'off');
+    expect(requestBody.messages.some((m) => m.role === 'system')).toBe(false);
+  });
+
+  test('a non-empty system prompt is still sent first, unchanged', () => {
+    const history = [{ role: 'user', content: 'hi' }];
+    const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'off');
+    expect(requestBody.messages[0]).toEqual({ role: 'system', content: SYSTEM });
+    expect(requestBody.messages).toHaveLength(2);
+  });
+
+  test('non-Gemma custom model keeps its own sampling (only num_ctx is sent)', () => {
+    const { requestBody } = _buildRequestBody(null, [], '', 'cyber-consultant', VISION, 'off', 40960);
+    expect(requestBody.options).toEqual({ num_ctx: 40960 });
+  });
+
   test('history entry with image gets images field', () => {
     const history = [{ role: 'user', content: 'look at this', imageBase64: 'img64' }];
     const { requestBody } = _buildRequestBody(null, history, SYSTEM, MODEL, VISION, 'off');

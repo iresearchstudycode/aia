@@ -822,11 +822,12 @@ body {
 .history-group-icon {
   flex: none;
   display: inline-flex;
+  color: var(--color-sidebar-text);
 }
 
 .history-group-icon svg {
-  width: 13px;
-  height: 13px;
+  width: 20px;
+  height: 20px;
 }
 
 .history-group-label {
@@ -893,6 +894,14 @@ body {
 }
 
 
+.history-card-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.history-card-rename,
 .history-card-delete {
   flex: none;
   padding: 2px 6px;
@@ -907,14 +916,63 @@ body {
   transition: opacity 0.12s;
 }
 
+.history-card:hover .history-card-rename,
 .history-card:hover .history-card-delete,
+.history-card-rename:focus-visible,
 .history-card-delete:focus-visible {
   opacity: 1;
+}
+
+.history-card-rename:hover {
+  background: var(--color-sidebar-hover);
+  color: var(--color-sidebar-text);
 }
 
 .history-card-delete:hover {
   background: var(--color-danger-tint-15);
   color: var(--color-danger-border);
+}
+
+/* Touch screens have no hover — keep the card actions reachable. */
+@media (hover: none) {
+  .history-card-rename,
+  .history-card-delete {
+    opacity: 0.7;
+  }
+}
+
+.history-card-rename svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
+.history-card.is-renaming {
+  cursor: default;
+}
+
+.history-card.is-renaming .history-card-actions {
+  display: none;
+}
+
+.history-card-main-editing {
+  flex: 1 1 auto;
+}
+
+.history-card-rename-input {
+  width: 100%;
+  padding: 3px 6px;
+  background: var(--color-sidebar-hover);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  color: var(--color-sidebar-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.history-card-rename-input:focus {
+  outline: none;
 }
 
 #historyEmpty,

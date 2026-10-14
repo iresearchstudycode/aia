@@ -35,12 +35,13 @@ logger = logging.getLogger("settings_service")
 
 _DEFAULT_DB_PATH = "/data/settings.db"
 
-# The 10 persona keys — must match ``src/aia/scripts/config.js`` ``systemPrompts``
+# The 11 persona keys — must match ``src/aia/scripts/config.js`` ``systemPrompts``
 # minus ``englishEditorExplained``.
 _PERSONA_KEYS: tuple[str, ...] = (
     "assistant",
     "casual",
     "creative",
+    "cybersecurity",
     "englishEditor",
     "legal",
     "medical",
@@ -73,6 +74,9 @@ _PERSONA_ICONS: dict[str, str] = {
     "creative": _ICON_HEAD
     + '<path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/>'
     + '<line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>',
+    "cybersecurity": _ICON_HEAD
+    + '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'
+    + '<polyline points="9 12 11 14 15 10"/></svg>',
     "englishEditor": _ICON_HEAD
     + '<path d="m6 16 6-12 6 12"/><path d="M8.5 12h7"/>'
     + '<path d="m15 20 2 2 4-4"/></svg>',
@@ -112,6 +116,7 @@ _PERSONA_OVERRIDE_KEYS: tuple[str, ...] = (
     "thinking_enabled",
     "thinking_depth",
     "tts_engine",
+    "chat_model",
 )
 
 _TTS_ENGINES: tuple[str, ...] = ("piper", "voicebox")
@@ -162,6 +167,21 @@ def _env_defaults() -> dict[str, Any]:
         "theme": os.environ.get("VPAL_DEFAULT_THEME", "system"),
         "active_persona": "englishEditor",
     }
+
+
+def _persona_chat_model_defaults() -> dict[str, str]:
+    """Return the house-default chat model for personas that pin one.
+
+    A persona listed here resolves its ``chat_model`` override to this model
+    until the user stores their own (or resets it); every other persona
+    inherits the global ``chat_model``. ``cybersecurity`` pins the custom
+    ``cyber-consultant`` Ollama model, whose Modelfile carries the persona's
+    system prompt. Setting ``VPAL_DEFAULT_CYBER_CHAT_MODEL`` to an empty string
+    un-pins it (the persona then inherits the global model).
+    """
+    raw = os.environ.get("VPAL_DEFAULT_CYBER_CHAT_MODEL")
+    cyber = "cyber-consultant" if raw is None else raw.strip()
+    return {"cybersecurity": cyber} if cyber else {}
 
 
 def _persona_defaults() -> dict[str, Any]:
@@ -266,11 +286,14 @@ def _resolved_global(conn: sqlite3.Connection, username: str) -> dict[str, Any]:
 def _resolved_persona(conn: sqlite3.Connection, username: str, persona_key: str) -> dict[str, Any]:
     """Return the persona override block: every override key present.
 
-    Unset override keys are ``null``; ``editor_mode`` appears (and defaults to
+    Unset override keys are ``null`` (inherit the global value), except
+    ``chat_model`` for a persona with a house-default model (see
+    ``_persona_chat_model_defaults``); ``editor_mode`` appears (and defaults to
     ``"clean"``) only for ``englishEditor``; ``default_analysis_view`` appears
     (and defaults to ``"structured"``) only for ``professional``.
     """
     entry: dict[str, Any] = {key: None for key in _PERSONA_OVERRIDE_KEYS}
+    entry["chat_model"] = _persona_chat_model_defaults().get(persona_key)
     if persona_key == "englishEditor":
         entry["editor_mode"] = "clean"
     if persona_key == "professional":
@@ -359,6 +382,8 @@ def _validate_persona(persona_key: str, key: str, value: Any) -> Any:
         raise ValidationError(f"unknown persona setting: {key}")
     if value is None:
         return None
+    if key == "chat_model":
+        return _require_non_empty_str(key, value)
     if key == "thinking_enabled":
         return _require_bool(key, value)
     if key == "thinking_depth":
@@ -459,6 +484,7 @@ async def get_settings(username: str = Depends(require_user)) -> JSONResponse:
             "defaults": {
                 "global": _env_defaults(),
                 "persona": _persona_defaults(),
+                "persona_chat_model": _persona_chat_model_defaults(),
             },
         }
     )

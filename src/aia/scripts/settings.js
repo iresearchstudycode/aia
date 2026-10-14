@@ -196,6 +196,7 @@ var SETTINGS_PERSONA_LABELS = {
   assistant: 'Assistant',
   casual: 'Casual Friend',
   creative: 'Creative Writer',
+  cybersecurity: 'Cybersecurity Consultant',
   englishEditor: 'English Editor (Australian)',
   legal: 'Legal Assistant',
   medical: 'Medical Expert',
@@ -209,6 +210,7 @@ var SETTINGS_PERSONA_KEYS = [
   'assistant',
   'casual',
   'creative',
+  'cybersecurity',
   'englishEditor',
   'legal',
   'medical',
@@ -995,6 +997,9 @@ function _settingsRenderPersonasCategory(snapshot) {
 }
 
 var SETTINGS_OVERRIDE_DEFS = [
+  // `options` are built at render time from the installed Ollama models
+  // (`_settingsPersonaModelOptions`), so this def carries none.
+  { key: 'chat_model', label: 'Chat model', modelSelect: true },
   {
     key: 'thinking_enabled',
     label: 'Thinking',
@@ -1044,6 +1049,12 @@ function _settingsPersonaOverrideValue(key, snapshot) {
 }
 
 function _settingsPersonaOverrideDefault(key, snapshot) {
+  if (key === 'chat_model') {
+    // Per-persona house default (e.g. cybersecurity → cyber-consultant); null
+    // for every persona that simply inherits the global chat model.
+    var pinned = (snapshot.defaults && snapshot.defaults.persona_chat_model) || {};
+    return pinned[_settingsEditPersona] || null;
+  }
   var d = (snapshot.defaults && snapshot.defaults.persona) || {};
   return Object.prototype.hasOwnProperty.call(d, key) ? d[key] : null;
 }
@@ -1119,18 +1130,57 @@ function _settingsRenderPersonaOverrideFields(snapshot) {
       ])
     );
 
-    var sel = _settingsSelect(def.options, token, { id: 'settings-o-' + def.key });
-    sel.addEventListener('change', function () {
-      var next = def.noInherit ? sel.value : _settingsTokenToOverride(def.key, sel.value);
+    var selId = 'settings-o-' + def.key;
+    var onChange = function (ctl) {
+      var next = def.noInherit ? ctl.value : _settingsTokenToOverride(def.key, ctl.value);
       _settingsOnPersonaOverrideEdit(def, next, snapshot, row);
+    };
+    var sel = _settingsSelect(
+      def.modelSelect ? _settingsPersonaModelOptions(value, key, snapshot) : def.options,
+      token,
+      { id: selId }
+    );
+    sel.addEventListener('change', function () {
+      onChange(sel);
     });
     row.appendChild(sel);
+    if (def.modelSelect) {
+      // Swap in the full installed-model list once it arrives (same pattern as
+      // the global model selects); the edited value is preserved across the swap.
+      _settingsEnsureModelNames(function (names) {
+        if (!names || !names.length || !sel.parentNode) return;
+        var current = _settingsPersonaOverrideValue(def.key, snapshot);
+        var fresh = _settingsSelect(
+          _settingsPersonaModelOptions(current, key, snapshot),
+          _settingsOverrideToken(def.key, current),
+          { id: selId }
+        );
+        fresh.addEventListener('change', function () {
+          onChange(fresh);
+        });
+        sel.parentNode.replaceChild(fresh, sel);
+        sel = fresh;
+      });
+      row.appendChild(
+        _settingsEl('div', {
+          class: 'settings-field-hint',
+          text: 'The Ollama model this persona uses. Inherit falls back to the global chat model.'
+        })
+      );
+    }
     group.appendChild(row);
   });
 
   // Read-only system prompt.
   var prompt =
     typeof systemPrompts !== 'undefined' && systemPrompts[key] ? systemPrompts[key] : '';
+  if (!prompt) {
+    // A persona with no VPAL-side prompt (cybersecurity) sends none — the model's
+    // own Modelfile prompt applies; say so rather than show an empty box.
+    prompt =
+      'VPAL sends no system prompt for this persona. It relies on the built-in ' +
+      'system prompt of its chat model (see Chat model above).';
+  }
   var details = _settingsEl('details', { class: 'settings-prompt-details' }, [
     _settingsEl('summary', { text: 'View system prompt' }),
     _settingsEl('div', { class: 'settings-prompt-view', text: prompt })
@@ -1138,6 +1188,42 @@ function _settingsRenderPersonaOverrideFields(snapshot) {
   group.appendChild(details);
 
   return group;
+}
+
+/**
+ * `<select>` options for a persona's chat-model override: a first "inherit"
+ * entry (token `__inherit` → `null`), then every installed Ollama model, plus
+ * the current value flagged "(not installed)" when Ollama doesn't list it. The
+ * inherit label names the persona's pinned house-default model when it has one
+ * (the server resolves "inherit" to that default), else the global model.
+ *
+ * @param {?string} value - the persona's current override (null = inherit)
+ * @param {string} personaKey
+ * @param {object} snapshot
+ * @returns {Array<[string, string]>}
+ */
+function _settingsPersonaModelOptions(value, personaKey, snapshot) {
+  var pinned = ((snapshot.defaults && snapshot.defaults.persona_chat_model) || {})[personaKey];
+  var opts = [['__inherit', pinned ? 'Persona default (' + pinned + ')' : 'Inherit (global chat model)']];
+  var names = _settingsModelNames || [];
+  // Ollama lists an untagged model as `<name>:latest` but accepts the bare name
+  // (the house default is the bare `cyber-consultant`). Keep the stored string as
+  // the option value — so it stays selected and round-trips unchanged — and show
+  // the installed name as its label, instead of wrongly flagging "not installed".
+  var installed = !value;
+  names.forEach(function (n) {
+    if (value && n === value) installed = true;
+    if (value && n === value + ':latest') {
+      installed = true;
+      opts.push([value, n]);
+    } else {
+      opts.push([n, n]);
+    }
+  });
+  if (!installed) {
+    opts.push([value, value + (names.length ? ' (not installed)' : '')]);
+  }
+  return opts;
 }
 
 function _settingsOverrideEqualsDefault(def, value, defaultValue) {
@@ -1610,7 +1696,8 @@ function applyResolvedSettings() {
   var s = _settingsSnapshot();
   var active = _settingsActivePersona(s);
 
-  var chatModel = resolveSetting('chat_model', null, s);
+  // Persona override (e.g. cybersecurity → cyber-consultant) → global chat model.
+  var chatModel = resolveSetting('chat_model', active, s);
   var visionModel = resolveSetting('vision_model', null, s);
   var ttsEngine = resolveTtsEngine(active, s);
   var thinkingMode = resolveThinkingMode(active, s);
@@ -1784,6 +1871,10 @@ if (typeof module !== 'undefined') {
     diffSettings: diffSettings,
     buildMigrationPayload: buildMigrationPayload,
     setActivePersona: setActivePersona,
-    _applyTheme: _applyTheme
+    _applyTheme: _applyTheme,
+    SETTINGS_PERSONA_KEYS: SETTINGS_PERSONA_KEYS,
+    SETTINGS_PERSONA_LABELS: SETTINGS_PERSONA_LABELS,
+    _settingsPersonaModelOptions: _settingsPersonaModelOptions,
+    openSettings: openSettings
   };
 }
