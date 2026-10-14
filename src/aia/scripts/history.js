@@ -298,6 +298,44 @@ var _hcRefreshTimer = null;
 // refresh stands down so a turn finishing mid-edit can't wipe the input.
 var _hcRenaming = false;
 
+// The "history isn't being saved" warning is shown once per page load.
+var _hcStaleWarned = false;
+
+/**
+ * Shown (once) when the conversations service rejects an auto-save. The client only
+ * sends records it has validated itself, so a 422 means the backend image is older
+ * than this frontend — typically a persona it doesn't know yet — and history is
+ * silently not being saved. Recreating the container is not enough; it must be rebuilt.
+ */
+var HISTORY_STALE_MESSAGE =
+  "Chat history isn't being saved — the conversations service is out of date. " +
+  'Rebuild it: docker-compose build --no-cache conversations-service, ' +
+  'then recreate it together with web-server.';
+
+/**
+ * Whether an auto-save HTTP status means a stale conversations-service image.
+ *
+ * @param {*} status
+ * @returns {boolean}
+ */
+function isStaleHistoryStatus(status) {
+  return status === 422;
+}
+
+/**
+ * Warn once if a save came back rejected for a stale-backend reason. Never throws and
+ * never blocks chat; other failures stay silent (retried on the next turn).
+ *
+ * @param {?{ok: boolean, status: number}} res - the fetch Response (or undefined)
+ * @returns {void}
+ */
+function _hcNoteSaveFailure(res) {
+  if (!res || res.ok !== false || !isStaleHistoryStatus(res.status) || _hcStaleWarned) return;
+  _hcStaleWarned = true;
+  if (typeof console !== 'undefined') console.error('history: conversations service looks stale', res.status);
+  if (typeof showToast === 'function') showToast(HISTORY_STALE_MESSAGE, 12000);
+}
+
 // hcTouchCurrent coalescing.
 var _hcTouchTimer = null;
 var _hcTouchInFlight = false;
@@ -417,7 +455,7 @@ async function hcArchiveCurrent() {
     var id = hcCurrentId();
     if (!id || !_hcHasHistory()) return;
     var record = conversationRecordFrom(id, conversationHistory, _hcActivePersona());
-    await _hcPut(id, record);
+    _hcNoteSaveFailure(await _hcPut(id, record));
   } catch (err) {
     if (typeof console !== 'undefined') console.error('history: archive failed', err);
   }
@@ -440,7 +478,8 @@ async function _hcDoTouch() {
   _hcTouchInFlight = true;
   try {
     var record = conversationRecordFrom(id, conversationHistory, _hcActivePersona());
-    await _hcPut(id, record);
+    var saved = await _hcPut(id, record);
+    _hcNoteSaveFailure(saved);
     // A completed turn just landed — refresh the sidebar so a new conversation
     // appears (and its title / relative-time updates).
     hcRefreshSidebar();
@@ -1213,6 +1252,9 @@ if (typeof module !== 'undefined') {
     _hcModifiedMs: _hcModifiedMs,
     normalizeConversationTitle: normalizeConversationTitle,
     _hcPersonaLabel: _hcPersonaLabel,
+    HISTORY_STALE_MESSAGE: HISTORY_STALE_MESSAGE,
+    isStaleHistoryStatus: isStaleHistoryStatus,
+    _hcNoteSaveFailure: _hcNoteSaveFailure,
     HISTORY_PERSONA_LABELS: HISTORY_PERSONA_LABELS,
     _hcBuildCard: _hcBuildCard,
     _hcRenderList: _hcRenderList,

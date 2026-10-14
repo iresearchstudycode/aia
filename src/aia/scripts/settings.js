@@ -84,6 +84,36 @@ function resolveTtsEngine(personaKey, vpalSettings) {
 }
 
 /**
+ * Shown when the settings service rejects a value this frontend legitimately sends,
+ * i.e. the backend image is older than the frontend (the UI only offers values its
+ * own allowlists accept). `--force-recreate` alone does not fix this — the image
+ * has to be rebuilt — which is the mistake the message exists to head off.
+ */
+var SETTINGS_STALE_MESSAGE =
+  'The settings service is out of date — rebuild it: docker-compose build --no-cache ' +
+  'settings-service conversations-service, then recreate them together with web-server.';
+
+/**
+ * Decide whether a failed settings request looks like a **stale backend image**
+ * rather than a user mistake. The UI only sends values it has validated itself, so
+ * an enum rejection ("… must be one of …"), an unknown key, or an unknown persona
+ * means the service predates this frontend (e.g. a persona or setting added since
+ * it was built). A free-text validation error — such as a malformed `stt_lang` tag —
+ * is deliberately *not* treated as stale: that one the user can fix.
+ *
+ * @param {?object} resp - parsed JSON body, with the HTTP status as `__status`
+ * @returns {boolean}
+ */
+function isStaleServiceResponse(resp) {
+  if (!resp || typeof resp !== 'object') return false;
+  if (resp.__status !== 422 && resp.__status !== 404) return false;
+  var text = typeof resp.error === 'string' ? resp.error : '';
+  return /must be one of|unknown (global |persona )?(setting|persona)|is only valid for/i.test(
+    text
+  );
+}
+
+/**
  * Compare a form's current values against the values they were resolved from
  * and return only the changed subset. Strict equality, so booleans and `null`
  * are handled directly; keys absent from `formValues` are never emitted.
@@ -1341,7 +1371,7 @@ function _settingsSavePersonas(snapshot) {
         _settingsPut(_settingsApi('/global'), {
           active_persona: _settingsEdits.personas.active_persona
         }).then(function (resp) {
-          if (!resp || resp.ok !== true) throw new Error((resp && resp.error) || '');
+          if (!resp || resp.ok !== true) throw _settingsRespError(resp);
           window.vpalSettings = _settingsMergeGlobal(_settingsSnapshot(), resp.global);
         })
       );
@@ -1357,7 +1387,7 @@ function _settingsSavePersonas(snapshot) {
     var pKey = oEdits.personaKey;
     tasks.push(
       _settingsPut(_settingsApi('/persona/' + pKey), body).then(function (resp) {
-        if (!resp || resp.ok !== true) throw new Error((resp && resp.error) || '');
+        if (!resp || resp.ok !== true) throw _settingsRespError(resp);
         var s = _settingsSnapshot();
         s.personas = s.personas || {};
         s.personas[pKey] = resp.persona;
@@ -1377,7 +1407,9 @@ function _settingsSavePersonas(snapshot) {
       _settingsRenderPanel();
     })
     .catch(function (e) {
-      _settingsSaveErrorToast(e && e.message ? { error: e.message } : null);
+      _settingsSaveErrorToast(
+        e && e.resp ? e.resp : e && e.message ? { error: e.message } : null
+      );
     });
 }
 
@@ -1410,7 +1442,12 @@ function setActivePersona(personaKey) {
 
   return _settingsPut(_settingsApi('/global'), { active_persona: personaKey })
     .then(function (resp) {
-      if (!resp || resp.ok !== true) throw new Error('persona save failed');
+      if (!resp || resp.ok !== true) {
+        // A rejected persona is usually a stale settings-service image (the persona
+        // list predates this frontend) — say so instead of a bare "could not switch".
+        _settingsFailureToast(resp, 'Could not switch persona');
+        return false;
+      }
       window.vpalSettings = _settingsMergeGlobal(_settingsSnapshot(), resp.global);
       if (typeof applyResolvedSettings === 'function') applyResolvedSettings();
       // Keep the (possibly open) Personas panel in sync.
@@ -1609,9 +1646,49 @@ function _settingsReloadSnapshot() {
 // image without a newly-added key ("unknown global setting: theme"), is
 // diagnosable instead of a bare "Could not save settings".
 function _settingsSaveErrorToast(resp) {
+  _settingsFailureToast(resp, 'Could not save settings');
+}
+
+/**
+ * Toast for a failed settings request. A stale-backend rejection gets the rebuild
+ * hint (shown longer, and logged with the raw response for diagnosis); anything
+ * else keeps `prefix` plus the server's own message when it sent one.
+ *
+ * @param {?object} resp
+ * @param {string} prefix - e.g. 'Could not save settings'
+ * @returns {void}
+ */
+function _settingsFailureToast(resp, prefix) {
   if (typeof showToast !== 'function') return;
+  if (isStaleServiceResponse(resp)) {
+    if (typeof console !== 'undefined') console.error('settings: service looks stale', resp);
+    showToast(SETTINGS_STALE_MESSAGE, 12000);
+    return;
+  }
   var detail = resp && typeof resp.error === 'string' && resp.error ? ' — ' + resp.error : '';
-  showToast('Could not save settings' + detail);
+  showToast(prefix + detail);
+}
+
+/** An Error that keeps the failed response (and its HTTP status) for the catch handler. */
+function _settingsRespError(resp) {
+  var err = new Error((resp && resp.error) || '');
+  err.resp = resp || null;
+  return err;
+}
+
+/** Parse a fetch Response as JSON, keeping the HTTP status as `__status`. */
+function _settingsJson(r) {
+  var status = r.status;
+  return r.json().then(
+    function (body) {
+      var out = body && typeof body === 'object' ? Object.assign({}, body) : { ok: false };
+      out.__status = status;
+      return out;
+    },
+    function () {
+      return { ok: false, __status: status };
+    }
+  );
 }
 
 function _settingsPut(url, body) {
@@ -1620,11 +1697,7 @@ function _settingsPut(url, body) {
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
-  }).then(function (r) {
-    return r.json().catch(function () {
-      return { ok: false };
-    });
-  });
+  }).then(_settingsJson);
 }
 
 function _settingsPost(url, body) {
@@ -1633,11 +1706,7 @@ function _settingsPost(url, body) {
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
-  }).then(function (r) {
-    return r.json().catch(function () {
-      return { ok: false };
-    });
-  });
+  }).then(_settingsJson);
 }
 
 // -- Focus trap + keyboard ------------------------------------------
@@ -1873,6 +1942,8 @@ if (typeof module !== 'undefined') {
     setActivePersona: setActivePersona,
     _applyTheme: _applyTheme,
     SETTINGS_PERSONA_KEYS: SETTINGS_PERSONA_KEYS,
+    SETTINGS_STALE_MESSAGE: SETTINGS_STALE_MESSAGE,
+    isStaleServiceResponse: isStaleServiceResponse,
     SETTINGS_PERSONA_LABELS: SETTINGS_PERSONA_LABELS,
     _settingsPersonaModelOptions: _settingsPersonaModelOptions,
     openSettings: openSettings
