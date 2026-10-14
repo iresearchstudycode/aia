@@ -60,6 +60,10 @@ class ValidationError(Exception):
     """Raised for a bad request body — mapped to 422 ``{"ok": false, ...}``."""
 
 
+class PayloadTooLargeError(ValidationError):
+    """Raised when a request body exceeds the size cap — mapped to 413."""
+
+
 def _db_path() -> str:
     """Return the SQLite file path (read dynamically so tests can override it)."""
     return os.environ.get("CONVERSATIONS_DB_PATH", _DEFAULT_DB_PATH)
@@ -199,7 +203,7 @@ def _validate_body(raw: Any) -> list[Any]:
     # Validate it serializes to within 1 MiB
     serialized = json.dumps(raw)
     if len(serialized.encode("utf-8")) > _MAX_BODY_BYTES:
-        raise ValidationError("body exceeds 1 MiB when serialized")
+        raise PayloadTooLargeError("body exceeds 1 MiB when serialized")
     return raw
 
 
@@ -265,6 +269,11 @@ async def _http_exception_handler(_: Request, exc: HTTPException) -> JSONRespons
 @app.exception_handler(ValidationError)
 async def _validation_exception_handler(_: Request, exc: ValidationError) -> JSONResponse:
     return _error(str(exc), 422)
+
+
+@app.exception_handler(PayloadTooLargeError)
+async def _payload_too_large_handler(_: Request, exc: PayloadTooLargeError) -> JSONResponse:
+    return _error(str(exc), 413)
 
 
 @app.get("/health")
@@ -371,10 +380,7 @@ async def search_conversations(
 @app.get("/conversations/{conv_id}")
 async def get_conversation(conv_id: str, username: str = Depends(require_user)) -> JSONResponse:
     """Get a full conversation by id (includes body)."""
-    try:
-        _validate_id(conv_id)
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+    _validate_id(conv_id)  # ValidationError -> 422 via the app-level handler
 
     with _db() as conn:
         row = conn.execute(
@@ -397,24 +403,16 @@ async def put_conversation(
     username: str = Depends(require_user),
 ) -> JSONResponse:
     """Upsert a conversation. On insert, evict oldest if at cap."""
-    try:
-        _validate_id(conv_id)
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+    _validate_id(conv_id)  # ValidationError -> 422 via the app-level handler
 
     body = await _json_object(request)
 
-    # Validate required fields
-    try:
-        title = _validate_title(body.get("title", ""))
-        persona_key = _validate_persona_key(body.get("persona_key", ""))
-        message_count = _validate_message_count(body.get("message_count", 0))
-        hist = _validate_body(body.get("body", []))
-    except ValidationError as exc:
-        # Check if this is a body size error and return 413
-        if "1 MiB" in str(exc):
-            return _error(str(exc), 413)
-        raise
+    # Validate required fields. ValidationError -> 422, and the oversize-body
+    # PayloadTooLargeError -> 413, both via the app-level handlers.
+    title = _validate_title(body.get("title", ""))
+    persona_key = _validate_persona_key(body.get("persona_key", ""))
+    message_count = _validate_message_count(body.get("message_count", 0))
+    hist = _validate_body(body.get("body", []))
 
     # Check for unknown top-level keys
     allowed = {"title", "persona_key", "message_count", "body"}
@@ -507,10 +505,7 @@ async def rename_conversation(
     reorder the list, and ``persona_key`` is untouched so the persona grouping
     is unaffected. 404 (never 403) for an unknown or another user's id.
     """
-    try:
-        _validate_id(conv_id)
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+    _validate_id(conv_id)  # ValidationError -> 422 via the app-level handler
 
     body = await _json_object(request)
     for key in body.keys():

@@ -114,7 +114,7 @@ npm run lint:html
 npx jest --testPathPatterns="tests/js"
 ```
 
-CI runs eight jobs automatically on every push and PR to `master` (`.github/workflows/ci.yml`):
+CI runs eight jobs automatically on every push and PR to `master` **and `dev`** (`.github/workflows/ci.yml`; the workflow is least-privilege — `permissions: contents: read` at workflow level, as is `chainguard-digest-check.yml`; CodeQL's "Analyze" checks have only been seen on PRs to `master`):
 - `auth-lint-test` — black + flake8 + pytest for `auth/`
 - `voicebox-proxy-lint-test` — black + flake8 + pytest for `voicebox-proxy/`
 - `doc-extract-lint-test` — black + flake8 + pytest for `doc-extract/`
@@ -126,7 +126,7 @@ CI runs eight jobs automatically on every push and PR to `master` (`.github/work
 
 ## Branching & Release Workflow
 
-Two long-lived branches: **`dev`** (integration) and **`master`** (released — the default branch; CI's `push`/`pull_request` triggers fire only here, and `auth-lint-test`, `frontend-lint`, and `nginx-config-check` are required status checks).
+Two long-lived branches: **`dev`** (integration) and **`master`** (released — the default branch; CI's `push`/`pull_request` triggers fire here and on `dev`, and `auth-lint-test`, `frontend-lint`, and `nginx-config-check` are required status checks).
 
 - **All PRs target `dev`** — feature work and Dependabot version updates alike (`.github/dependabot.yml` sets `target-branch: dev`). `master` then only ever moves through a release PR, so `dev` stays strictly ahead of it.
 - **A release is one PR `dev` → `master`, merged with "Create a merge commit"** — never *Squash* or *Rebase*. Those rewrite the commits, orphaning `dev`'s history so that `dev` has to be `git reset --hard origin/master`'d after every release (this is what happened with [#17]). A merge commit leaves `dev`'s commits reachable from `master` and lets the next step be a fast-forward.
@@ -242,6 +242,9 @@ Wired in the single `document.addEventListener('keydown', ...)` block in `main.j
 The `Ctrl`/`Cmd` combos fire even while `#userInput` is focused; the bare `Escape` path never disrupts typing. Tab is trapped inside the account menu / overflow menu / attach menu while open (`_trapFocus`).
 
 ## Security Invariants
+
+- **Error responses never echo an exception's own text.** `doc-extract` and `piper-tts` pick a fixed client-facing message by exception *type* (`EncryptedPdfError` → `_MSG_ENCRYPTED`, any other `ExtractionError` → `_MSG_UNREADABLE`; `SynthesisError` → `_MSG_SYNTHESIS_FAILED`) — the exception text is only logged. `conversations-service` has no `except … as exc: … str(exc)` in routes: `ValidationError` (422) and `PayloadTooLargeError` (413, a subclass — replaces the old `"1 MiB" in str(exc)` string match) propagate to app-level handlers that return the fixed `{ok:false,error}` shape. Keep it that way: a future wrapped library error must not be able to reach a response body (CodeQL `py/stack-trace-exposure`).
+- **Cookie values built from the username are percent-encoded.** `auth/main.py` `_set_session_cookie` sets `vpal_user` to `quote(username, safe="")` and signs `quote(username, safe="")` into the `vpal_session` token (`_session_username` `unquote`s it). A configured name containing `;` `,` spaces, quotes or CR/LF therefore can't inject cookie attributes or a second cookie, nor crash login with a `CookieError` (CodeQL `py/cookie-injection`). Plain names are unchanged by `quote()`, so sessions issued before this change still verify. The front end already `decodeURIComponent`s `vpal_user` (`_getCookie`).
 
 - All AI response content — both the final answer and thinking block content — passes through `renderMarkdownToHtml()` (`marked.parse()` → `DOMPurify.sanitize()`) before being set as `innerHTML` — in `api.js` (streaming and final rebuild) and `chat.js` (`renderConversationHistory`).
 - User-supplied message text is inserted via `.textContent` (`addUserMessage`, `renderConversationHistory`'s user branch) — never parsed as HTML or Markdown, so it needs no separate escaping. `escapeHtml()` is used elsewhere for values interpolated into an HTML *template string* before it becomes `innerHTML` — timestamps and the error-message path in `api.js`.

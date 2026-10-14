@@ -13,6 +13,7 @@ import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import Annotated, AsyncIterator
+from urllib.parse import quote, unquote
 
 import pyotp
 import segno
@@ -122,7 +123,11 @@ def _make_csrf_token(session_token: str) -> str:
 
 
 def _set_session_cookie(response: Response, username: str) -> None:
-    token: str = _signer.sign(username).decode()
+    # The username is percent-encoded *before* signing, so the token (the
+    # ``vpal_session`` cookie value) can only contain URL-safe characters whatever
+    # the configured name holds. A plain name is unchanged by quote(), so sessions
+    # issued before this change still verify and decode to the same username.
+    token: str = _signer.sign(quote(username, safe="")).decode()
     csrf_token: str = _make_csrf_token(token)
     response.set_cookie(
         "vpal_session",
@@ -144,10 +149,13 @@ def _set_session_cookie(response: Response, username: str) -> None:
     )
     # vpal_user is NOT HttpOnly so JS can read the username for the profile
     # widget without an extra fetch.  The username is not a secret; this cookie
-    # carries no authentication capability.
+    # carries no authentication capability.  The value is percent-encoded so a
+    # configured name containing ``;`` ``,`` spaces, quotes or control characters
+    # can never inject cookie attributes or a second cookie; the front end
+    # (``_getCookie`` in main.js) decodes it with ``decodeURIComponent``.
     response.set_cookie(
         "vpal_user",
-        username,
+        quote(username, safe=""),
         httponly=False,
         secure=True,
         samesite="strict",
@@ -169,7 +177,7 @@ def _session_username(request: Request) -> str | None:
     if not token:
         return None
     try:
-        return _signer.unsign(token, max_age=_SESSION_TTL_SECONDS).decode()
+        return unquote(_signer.unsign(token, max_age=_SESSION_TTL_SECONDS).decode())
     except (BadSignature, SignatureExpired):
         return None
 

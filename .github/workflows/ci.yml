@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [master, dev]
 
+# Least privilege: these jobs only read the repo (checkout) and run linters/tests;
+# nothing here writes to the repository, issues, packages or PRs.
+permissions:
+  contents: read
+
 jobs:
   auth-lint-test:
     name: Auth service — format, lint & test

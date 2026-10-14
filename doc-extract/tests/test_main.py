@@ -176,7 +176,43 @@ class TestExtractRoute:
             files={"file": ("notes.pdf", b"%PDF-fake-bytes", "application/pdf")},
         )
         assert response.status_code == 422
-        assert response.json() == {"ok": False, "error": "Could not read this PDF."}
+        assert response.json() == {"ok": False, "error": main._MSG_UNREADABLE}
+
+    def test_extraction_error_text_is_never_echoed(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The client gets a fixed message chosen by exception type, not whatever
+        # text the exception happens to carry (paths, library internals, ...).
+        monkeypatch.setattr(
+            main,
+            "_extract_text",
+            MagicMock(side_effect=ExtractionError("/app/secret/path.py line 42 boom")),
+        )
+        response = client.post(
+            "/doc-extract/extract",
+            files={"file": ("notes.pdf", b"%PDF-fake-bytes", "application/pdf")},
+        )
+        assert response.status_code == 422
+        assert "secret" not in response.text and "boom" not in response.text
+        assert response.json()["error"] == main._MSG_UNREADABLE
+
+    def test_encrypted_pdf_gets_its_own_fixed_message(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            main,
+            "_extract_text",
+            MagicMock(side_effect=main.EncryptedPdfError("internal detail")),
+        )
+        response = client.post(
+            "/doc-extract/extract",
+            files={"file": ("locked.pdf", b"%PDF-fake-bytes", "application/pdf")},
+        )
+        assert response.status_code == 422
+        assert response.json() == {"ok": False, "error": main._MSG_ENCRYPTED}
+
+    def test_encrypted_error_is_an_extraction_error(self) -> None:
+        assert issubclass(main.EncryptedPdfError, ExtractionError)
 
     def test_truncates_text_over_max_chars(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch

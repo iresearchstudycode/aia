@@ -6,6 +6,11 @@ on:
     - cron: '0 9 1 * *'
   workflow_dispatch:
 
+# Least privilege: this job only reads the repo (checkout) and pulls public images to
+# compare digests; nothing here writes to the repository, issues, packages or PRs.
+permissions:
+  contents: read
+
 jobs:
   check-digests:
     name: Compare pinned vs current Chainguard digests
