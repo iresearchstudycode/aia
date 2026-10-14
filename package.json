@@ -14,5 +14,12 @@
     "htmlhint": "^1.1.4",
     "jest": "^30.5.2",
     "jest-environment-jsdom": "^30.5.2"
+  },
+  "overrides": {
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": {
+        "argparse": "^2.0.1"
+      }
+    }
   }
 }

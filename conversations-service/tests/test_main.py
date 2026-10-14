@@ -880,3 +880,50 @@ class TestTitleCustomMigration:
         with main._db() as conn:
             columns = [r["name"] for r in conn.execute("PRAGMA table_info(conversations)")]
         assert columns.count("title_custom") == 1
+
+
+# ---------------------------------------------------------------------------
+# Error responses — fixed shape, no internals
+# ---------------------------------------------------------------------------
+
+
+class TestErrorResponses:
+    def test_oversize_body_is_413_with_the_standard_shape(self, client: TestClient) -> None:
+        big = [{"role": "user", "content": "x" * 1024} for _ in range(1100)]
+        response = client.put(
+            "/conversations/c-big",
+            headers=_HEADERS,
+            json={"title": "t", "persona_key": "", "message_count": 1, "body": big},
+        )
+        assert response.status_code == 413
+        assert response.json() == {"ok": False, "error": "body exceeds 1 MiB when serialized"}
+
+    def test_payload_too_large_is_a_validation_error(self) -> None:
+        assert issubclass(main.PayloadTooLargeError, main.ValidationError)
+
+    def test_invalid_id_is_422_on_get_and_put(self, client: TestClient) -> None:
+        expected = {"ok": False, "error": "id must match ^[A-Za-z0-9_-]{1,64}$"}
+        got = client.get("/conversations/bad.id", headers=_HEADERS)
+        assert got.status_code == 422 and got.json() == expected
+        put = client.put(
+            "/conversations/bad.id",
+            headers=_HEADERS,
+            json={"title": "t", "persona_key": "", "message_count": 0, "body": []},
+        )
+        assert put.status_code == 422 and put.json() == expected
+
+    def test_malformed_json_gives_a_plain_message(self, client: TestClient) -> None:
+        response = client.put("/conversations/c-1", headers=_HEADERS, content=b"{not json")
+        assert response.status_code == 422
+        assert response.json() == {"ok": False, "error": "request body must be valid JSON"}
+
+    @pytest.mark.parametrize(
+        "method,path",
+        [("get", "/conversations/bad.id"), ("put", "/conversations/c-1/title")],
+    )
+    def test_error_bodies_never_contain_a_traceback(
+        self, client: TestClient, method: str, path: str
+    ) -> None:
+        response = getattr(client, method)(path, headers=_HEADERS)
+        text = response.text
+        assert "Traceback" not in text and ".py" not in text

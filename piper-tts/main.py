@@ -60,6 +60,10 @@ _CONTROL_CHARS = {chr(c) for c in list(range(0x20)) + [0x7F]} - _ALLOWED_CONTROL
 _CONTROL_TRANSLATION = {ord(ch): None for ch in _CONTROL_CHARS}
 
 
+# Fixed, client-facing message — the route never echoes the exception's own text.
+_MSG_SYNTHESIS_FAILED = "Speech synthesis failed."
+
+
 class SynthesisError(Exception):
     """Raised when the Piper voice fails to synthesise the given text."""
 
@@ -128,7 +132,7 @@ def _synthesize(text: str) -> bytes:
     except Exception as exc:
         # Any failure in the ONNX/espeak pipeline becomes a 500 for the caller.
         logger.warning("Piper synthesis failed: %s", exc)
-        raise SynthesisError("Speech synthesis failed.") from exc
+        raise SynthesisError(_MSG_SYNTHESIS_FAILED) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +184,7 @@ def speak(request: SpeakRequest) -> Response:
 
     try:
         wav_bytes = _synthesize(text)
-    except SynthesisError as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+    except SynthesisError:
+        return JSONResponse({"ok": False, "error": _MSG_SYNTHESIS_FAILED}, status_code=500)
 
     return Response(content=wav_bytes, media_type="audio/wav")

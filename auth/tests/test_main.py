@@ -10,6 +10,7 @@ Coverage:
   /auth/logout, /auth/setup, /auth/me
 """
 
+import re
 import time
 
 import pyotp
@@ -592,3 +593,81 @@ class TestSetup:
         monkeypatch.setattr(main, "_SETUP_TOKEN", "correct-token")
         resp = client.get("/auth/setup?token=correct-token")
         assert "<svg" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# vpal_user cookie — value is percent-encoded (cookie-injection hardening)
+# ---------------------------------------------------------------------------
+
+_HOSTILE_USERNAMES = [
+    "evil; Path=/; Domain=attacker.example",
+    "a,b",
+    'quo"te',
+    "John Smith",
+    "back\\slash",
+    "caf\u00e9",
+    "x\r\nSet-Cookie: pwn=1",
+]
+
+
+class TestUserCookieEncoding:
+    """A configured username must never be able to inject cookie attributes."""
+
+    @staticmethod
+    def _login_as(client: TestClient, monkeypatch: pytest.MonkeyPatch, name: str):
+        secret = "KRSXG5CTMVRXEZLU"
+        monkeypatch.setenv("USER_2", name)
+        monkeypatch.setenv("TOTP_SECRET_2", secret)
+        return client.post(
+            "/auth/login",
+            data={"username": name, "code": pyotp.TOTP(secret).now()},
+            follow_redirects=False,
+        )
+
+    @pytest.mark.parametrize("name", _HOSTILE_USERNAMES)
+    def test_value_is_encoded_and_cannot_inject(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, name: str
+    ) -> None:
+        from urllib.parse import unquote
+
+        resp = self._login_as(client, monkeypatch, name)
+        assert resp.status_code == 302
+        headers = resp.headers.get_list("set-cookie")
+        user_headers = [h for h in headers if h.startswith("vpal_user=")]
+        assert len(user_headers) == 1
+        raw_value = user_headers[0].split(";", 1)[0].removeprefix("vpal_user=")
+        # Nothing that could end the value or start a new attribute/cookie.
+        assert not any(ch in raw_value for ch in ';, "\\\r\n')
+        assert unquote(raw_value) == name  # round-trips for the front end
+        # No injected attribute or extra cookie anywhere in the response: exactly the
+        # three expected cookies, and the two name-bearing values are URL-safe only
+        # (no quoting/escaping needed, nothing that could end the value).
+        assert sorted(h.split("=", 1)[0] for h in headers) == [
+            "vpal_csrf",
+            "vpal_session",
+            "vpal_user",
+        ]
+        safe = re.compile(r"[A-Za-z0-9%._~-]+")
+        for h in headers:
+            name, rest = h.split("=", 1)
+            if name in ("vpal_session", "vpal_user"):
+                assert safe.fullmatch(rest.split(";", 1)[0]), h
+            assert "Domain=" not in h
+
+    @pytest.mark.parametrize("name", _HOSTILE_USERNAMES)
+    def test_hostile_username_still_authenticates_end_to_end(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, name: str
+    ) -> None:
+        # Encoding the display cookie must not affect the signed session.
+        self._login_as(client, monkeypatch, name)
+        me = client.get("/auth/me")
+        assert me.status_code == 200
+        assert me.json() == {"username": name}
+
+    def test_plain_username_cookie_is_unchanged(self, client: TestClient) -> None:
+        resp = client.post(
+            "/auth/login",
+            data={"username": _TEST_USER, "code": _valid_code()},
+            follow_redirects=False,
+        )
+        assert resp.cookies["vpal_user"] == _TEST_USER
